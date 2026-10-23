@@ -67,6 +67,16 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 21 (24 Oct 2026) - chapter 1: photo textures, guides, fuller room
+- B, photo textures (CC0): raised-floor tiles, perforated aisle grates, painted wall panels, office ceiling tiles and brushed steel (trays, beams, ducts, insulated pipes). Small JPGs in `assets/tex/`; the hand-drawn version shows until each photo has loaded. `?photo=0` turns them off.
+- C, guides: teaching helpers (teleport rings, info spheres, CRAC fan icons and labels, coloured floor washes and lines) are hidden by default. The **Guides** button in MOVE & VIEW, the VR menu or the G key shows them. Rack names are smaller grey plates; the dark row plinths are gone.
+- D, fuller room:
+  - Each rack row is continuous: 56 extra cabinets fill the gaps. They are scenery only and add no draw calls.
+  - Power room: modular UPS line-up (Vertiv Trinergy Cube), switchgear as the ATS, a steel electrical cabinet as the utility incomer, and an enclosed diesel generator. The status lights, labels and click targets used by the drills are kept.
+  - Props: fire extinguishers and a hand truck.
+- Switches for testing on the Quest: `?fill=0` (no fill-in racks), `?power=0` (old power-room shapes), `?props=0`, `?photo=0`, `?look=0`, `?models=0`.
+- About 377k triangles at the entrance view, within Meta's Quest 2 guidance of 750k-1M. Frame rate still needs checking on the headset.
+
 ## 3D model credits (Creative Commons Attribution 4.0)
 - `assets/industrial_switchgear.glb`: "Industrial Switchgear" by MADMOVIESINC (https://sketchfab.com/MADMOVIESINC), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/industrial-switchgear-9ad62dc3bd694bf880be78e43530008e. Changes: texture downscaled to 1024 px. Scaled and positioned in the scene.
 - `assets/kipor_kde_7000_sta_generator.glb`: "Kipor KDE 7000 STA generator" by Yevgen Avramenko (https://sketchfab.com/naprimerjenya), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/kipor-kde-7000-sta-generator-0a5f7001925744c4b335f16212c1c606. Changes: materials converted from spec/gloss to metal/roughness. Scaled and positioned in the scene.
@@ -75,3 +85,8 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - `assets/old_soviet_transformer_low-poly.glb`: "Old Soviet Transformer Low-Poly" by MrUnity (https://sketchfab.com/MrUnityCreations), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/old-soviet-transformer-low-poly-13124cf4ef264a2eabe79b92679d6d49. Changes: textures downscaled to 512 px. Scaled and positioned in the scene.
 - `assets/server_v2_console.glb`: "Server V2 +console" by FlevasGR (https://sketchfab.com/FlevasGR), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/server-v2-console-f24594ece9634cec9c1210c041838371. File unchanged. Scaled and positioned in the scene.
 - `assets/server_rack_plain.glb`: derived from "Server V2 +console" by FlevasGR (https://sketchfab.com/FlevasGR), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Changes: console node and the protruding front rail removed.
+
+## Textures and props (CC0, public domain, no credit required)
+- Textures from ambientCG (https://ambientcg.com): OfficeCeiling001, SheetMetal002, Tiles043, PaintedPlaster017, Metal009. They are toned and cut to size in `assets/tex/`.
+- Props from Poly Haven (https://polyhaven.com): `korean_fire_extinguisher_01`, `hand_truck`. They are packed into single GLBs with only the colour textures, at 512 px.
+

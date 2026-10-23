@@ -469,6 +469,10 @@ window.doorGo = function (href) {
       <span id="btn-walk-label">Walk - ON</span>
       <small>WASD / arrows or thumb stick</small>
     </button>
+    <button id="btn-guides" class="btn" type="button" aria-pressed="false">
+      <span id="btn-guides-label">Guides · OFF</span>
+      <small>Teleport rings, info spheres, fan icons (G)</small>
+    </button>
   </div>
 
   <div id="hint" class="card tabpanel" data-tab="help">
@@ -476,6 +480,7 @@ window.doorGo = function (href) {
       <span id="btn-tour-label">Tour · How it works</span>
       <small>8 guided steps, machines highlighted</small>
     </button>
+    <b>Guides</b> (G or MOVE &amp; VIEW) show the teleport rings and info spheres ·
     <b>Drag</b> to look · <b>tap a glowing ring</b> to teleport · <b>tap a cyan sphere</b>
     for a concept card · <b>click any machine</b> for what it does · <b>walk</b>
     with WASD / arrows or the thumb stick
@@ -611,6 +616,10 @@ document.addEventListener('DOMContentLoaded', function () {
     <a-entity id="vm-reset" class="clickable" position="0.86 0.0 0.01">
       <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
       <a-text value="reset" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-guides" class="clickable" position="-0.86 -0.28 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text id="vm-guides-label" value="guides off" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
     <a-entity id="vm-exit" class="clickable" position="0 -0.28 0.01">
       <a-plane geometry="width: 1.1; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
@@ -3217,7 +3226,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 20</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 21</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3267,8 +3276,22 @@ function canvasPainter(w, h) {
     var withConsole = DC.refs.racks.filter(function (g) { return /-0?8$/.test(unitOf(g)); });
     var plain = DC.refs.racks.filter(function (g) { return withConsole.indexOf(g) === -1; });
     var RACKFIT = { height: 2.0, width: 0.6, depth: 1.0, yaw: -90, fitSrc: 'assets/server_rack_plain.glb' };  /* server face = model +x */
+    /* build 21 (D): fill the 2.4 m gaps so each row is a continuous line of
+       cabinets (4 per gap, 56 in total). They join the plain-rack batch, so
+       they add no draw calls; they are scenery only (not clickable). */
+    var fillers = [];
+    if (!/[?&]fill=0/.test(location.search)) [-2, 2].forEach(function (x) {
+      var ref = DC.refs.racks.filter(function (g) { return (g.object3D.position.x < 0) === (x < 0); })[0];
+      if (!ref) { return; }
+      for (var i = 0; i < 7; i++) { for (var k = 1; k <= 4; k++) {
+        var o = new THREE.Object3D();
+        o.position.set(x, 0, -10.5 + i * 3 + k * 0.6); o.rotation.copy(ref.object3D.rotation);
+        world.object3D.add(o); fillers.push({ object3D: o });
+      } }
+    });
+    DC_PERF.fillerRacks = fillers.length;
     var pRacks = Promise.all([
-      XRQ.instanceModel('assets/server_rack_plain.glb', world, plain, RACKFIT),
+      XRQ.instanceModel('assets/server_rack_plain.glb', world, plain.concat(fillers), RACKFIT),
       XRQ.instanceModel('assets/server_v2_console.glb', world, withConsole, RACKFIT)
     ]).then(function (r) {
       DC_PERF.rackParts = r[0].parts + r[1].parts;
@@ -3295,7 +3318,75 @@ function canvasPainter(w, h) {
         });
       });
     }).catch(function (e) { console.warn('cracs: keeping simple shapes', e && e.message); });
-    return Promise.all([pRacks, pCracs]);
+    var off = function (k) { return new RegExp('[?&]' + k + '=0').test(location.search); };   /* debug switches */
+    return Promise.all([pRacks, pCracs, off('power') ? null : powerRoom(), off('props') ? null : props()]);
+  }
+
+  /* build 21 (D): power-room models. Click targets and the status lights /
+     labels the drills use are kept; the plain shapes they replace are hidden. */
+  function spot (x, z, ry) {
+    var o = new THREE.Object3D(); o.position.set(x, 0, z); o.rotation.y = (ry || 0) * Math.PI / 180;
+    world.object3D.add(o); return { object3D: o };
+  }
+  function toFront (g, sel, dx) {
+    each(g.querySelectorAll(sel), function (el) { el.object3D.position.x = dx; });
+  }
+  function powerRoom () {
+    var q = function (id) { return document.getElementById(id); };
+    var warn = function (what) { return function (e) { console.warn(what + ': keeping simple shapes', e && e.message); }; };
+    var jobs = [];
+    /* UPS-A + UPS-B: one modular UPS line-up (Vertiv Liebert Trinergy Cube) */
+    jobs.push(XRQ.instanceModel('assets/liebert_trinergytm_cube.glb', world, [spot(10.75, 2.875)], { height: 2.0, depth: 4.1, yaw: -90 })
+      .then(function (r) {
+        /* the file leaves metalness unset (= fully metallic), which renders black
+           without a reflection map: make it painted steel */
+        r.holder.traverse(function (o) { if (o.material) { o.material.metalness = 0.25; o.material.roughness = 0.55; } });
+        ['upsA', 'upsB'].forEach(function (id) {
+          var g = q(id); if (!g) { return; }
+          noDraw(g.querySelector('[data-unit]'));
+          each(g.querySelectorAll('a-box[position="0 2 0"], .ups-face'), hide);
+        });
+      }, warn('ups')));
+    /* ATS: industrial switchgear, panel side towards the hall */
+    var ats = q('ats');
+    if (ats) {
+      jobs.push(XRQ.instanceModel('assets/industrial_switchgear.glb', world, [ats], { height: 1.8, yaw: 180 })
+        .then(function (r) {
+          noDraw(ats.querySelector('[data-unit]')); hide(ats.querySelector('.ats-face'));
+          toFront(ats, '.ats-beacon, a-text', -(r.size.x / 2 + 0.04));
+        }, warn('ats')));
+    }
+    /* utility incomer: steel electrical cabinet, doors towards the hall */
+    var util = q('util-in');
+    if (util) {
+      jobs.push(XRQ.instanceModel('assets/old_soviet_transformer_low-poly.glb', world, [util], { height: 1.95, yaw: -90 })
+        .then(function (r) {
+          noDraw(util.querySelector('[data-unit]')); hide(util.querySelector('.util-face'));
+          toFront(util, '.util-beacon, a-text', -(r.size.x / 2 + 0.04));
+        }, warn('util')));
+    }
+    /* standby generator: enclosed diesel set, control panel towards the hall */
+    var gen = q('gen');
+    if (gen) {
+      jobs.push(XRQ.instanceModel('assets/kipor_kde_7000_sta_generator.glb', world, [gen], { height: 1.45, yaw: -90 })
+        .then(function (r) {
+          each(gen.querySelectorAll('[data-unit]'), noDraw);
+          each(gen.querySelectorAll('.gen-alternator, .gen-fan, .gen-fan-housing, a-box[position="-0.4 1.44 0"], a-box[position="0.62 0.84 0"]'), hide);
+          var b = gen.querySelector('.gen-beacon'); if (b) { b.object3D.position.set(0, r.size.y + 0.1, 0); }
+        }, warn('gen')));
+    }
+    return Promise.all(jobs);
+  }
+
+  /* build 21 (D): a few CC0 props (Poly Haven) so the room looks used */
+  function props () {
+    var jobs = [];
+    var put = function (src, spots, opts) {
+      jobs.push(XRQ.instanceModel(src, world, spots, opts || {}).catch(function (e) { console.warn(src, e && e.message); }));
+    };
+    put('assets/korean_fire_extinguisher_01.glb', [spot(-1.75, 14.7, 180), spot(11.7, -4.4, -90), spot(-11.7, -2.0, 90)]);
+    put('assets/hand_truck.glb', [spot(9.4, 14.3, 200)]);
+    return Promise.all(jobs);
   }
 
   /* Status LEDs + hot-side heat panels: hall-state writes only `.m.color` on
@@ -3518,15 +3609,26 @@ function canvasPainter(w, h) {
   })();
 
   var MAT = {};
+  /* build 21: photo textures (CC0, assets/tex/). The hand-painted canvas stays
+     as an instant placeholder and is swapped in place when the photo arrives,
+     so nothing waits on the network and the shader never changes. */
+  var PHOTO = !/[?&]photo=0/.test(location.search);
+  function photo (tex, url) {
+    if (!PHOTO) { return tex; }
+    new THREE.ImageLoader().load(url, function (img) { tex.dispose(); tex.image = img; tex.needsUpdate = true; });  /* new size: re-allocate */
+    return tex;
+  }
   function looks () {
     if (MAT.floor) { return MAT; }
-    MAT.floor = new THREE.MeshLambertMaterial({ map: texOf(paintFloor(), true) });
-    MAT.perf = new THREE.MeshLambertMaterial({ map: texOf(paintPerf()) });
-    MAT.wall = new THREE.MeshLambertMaterial({ map: texOf(paintWall(), true) });
-    MAT.ceil = new THREE.MeshLambertMaterial({ map: texOf(paintCeil(), true) });
-    MAT.beam = new THREE.MeshLambertMaterial({ color: '#3b4047' });
+    var steel = photo(texOf(canvas(4, 4), true), 'assets/tex/brushed_steel.jpg');
+    MAT.floor = new THREE.MeshLambertMaterial({ map: photo(texOf(paintFloor(), true), 'assets/tex/floor_tiles.jpg') });
+    MAT.perf = new THREE.MeshLambertMaterial({ map: photo(texOf(paintPerf()), 'assets/tex/perf_tiles.jpg') });
+    MAT.wall = new THREE.MeshLambertMaterial({ map: photo(texOf(paintWall(), true), 'assets/tex/wall_panels.jpg') });
+    MAT.ceil = new THREE.MeshLambertMaterial({ map: photo(texOf(paintCeil(), true), 'assets/tex/ceiling_tiles.jpg') });
+    MAT.beam = new THREE.MeshLambertMaterial({ color: '#6b7178', map: steel });
     MAT.plinth = new THREE.MeshLambertMaterial({ color: '#4b5056' });
-    MAT.tray = new THREE.MeshLambertMaterial({ color: '#8f969d' });
+    MAT.tray = new THREE.MeshLambertMaterial({ color: '#c3c8cd', map: steel });
+    MAT.duct = new THREE.MeshLambertMaterial({ color: '#b3b8be', map: steel });
     MAT.fixture = new THREE.MeshLambertMaterial({ color: '#c9ced4' });
     MAT.emit = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
     MAT.cable = ['#2f5f8f', '#2a2d31', '#b8962e'].map(function (c) { return new THREE.MeshLambertMaterial({ color: c }); });
@@ -3564,7 +3666,7 @@ function canvasPainter(w, h) {
     var M = looks();
     setMat('.hall-floor', M.floor); setMat('.hall-wall', M.wall); setMat('.hall-ceiling', M.ceil);
     setMat('.ceil-beam', M.beam); setMat('.perf-tile', M.perf);
-    each(document.querySelectorAll('#racks > a-box'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.plinth; } });
+    each(document.querySelectorAll('#racks > a-box'), function (el) { hide(el); });   /* racks stand on the tiled floor */
     each(document.querySelectorAll('#lights-rig a-box'), function (el) {
       var o = el.getObject3D('mesh'); if (!o) { return; }
       o.material = o.material.transparent ? M.emit : M.fixture;
@@ -3597,6 +3699,9 @@ function canvasPainter(w, h) {
       o.material = m2; lit.n = (lit.n || 0) + 1;
     });
     DC_PERF.litShapes = lit.n || 0;
+    each(document.querySelectorAll('#cooling > a-box'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.duct; } });
+    /* chilled-water pipes: insulated (silver) instead of teal / orange stripes */
+    each(document.querySelectorAll('#cooling > a-cylinder'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.duct; } });
   }
   /* world-space UVs so tiles and panels keep their real size after merging */
   function worldUV (mesh, su, sv, wall) {
@@ -3635,7 +3740,7 @@ function canvasPainter(w, h) {
   /* after merging: real-size UVs, contact shadows, light pools */
   function afterMerge () {
     each(document.querySelectorAll('.merged-static.hall-floor'), function (h) { worldUV(h.getObject3D('mesh'), 2.4, 2.4); });
-    each(document.querySelectorAll('.merged-static.hall-ceiling'), function (h) { worldUV(h.getObject3D('mesh'), 2.4, 2.4); });
+    each(document.querySelectorAll('.merged-static.hall-ceiling'), function (h) { worldUV(h.getObject3D('mesh'), PHOTO ? 3.85 : 2.4, PHOTO ? 3.85 : 2.4); });
     each(document.querySelectorAll('.merged-static.hall-wall'), function (h) { worldUV(h.getObject3D('mesh'), 3.0, 4.6, true); });
     /* contact shadows under every floor-standing unit + along the wall bases */
     var q = [], box = new THREE.Box3(), b2 = new THREE.Box3(), inv = new THREE.Matrix4().copy(world.object3D.matrixWorld).invert();
@@ -3669,7 +3774,47 @@ function canvasPainter(w, h) {
     addMesh(quadGeo(pq, 0.02), pool, 'look-pool lights-rig', 2);
   }
 
+  /* ===================== build 21: GUIDES (part C) ==========================
+     Teaching helpers (teleport rings, info spheres, fan icons, coloured floor
+     washes and lines, CRAC labels) are hidden by default so the hall reads as
+     a real room; "Guides" in MOVE & VIEW, the VR menu or the G key shows them.
+     Hidden things are not clickable (raycaster patch skips hidden objects). */
+  var GUIDES = '.hs, .wp, .crac-fan, .crac-louvre, .crac-intake, .crac-label, #hotzone-w, #hotzone-e, .guide-mark';
+  function markGuides () {
+    each(document.querySelectorAll('#floor-markings > *, #shell > *'), function (el) {
+      var m = el.getAttribute && el.getAttribute('material');
+      if (m && m.color && m.color.toLowerCase() === '#22d3ee') { el.classList.add('guide-mark'); }
+    });
+    /* rack names: small grey plates instead of big glowing text */
+    each(document.querySelectorAll('.rack > a-text'), function (t) {
+      t.setAttribute('width', 0.22); t.setAttribute('color', '#b8c0c8');
+    });
+  }
+  DC.guidesOn = false;
+  DC.setGuides = function (on) {
+    DC.guidesOn = !!on;
+    each(document.querySelectorAll(GUIDES), function (el) { el.object3D.visible = DC.guidesOn; });
+    var lbl = document.getElementById('btn-guides-label');
+    if (lbl) { lbl.textContent = 'Guides · ' + (DC.guidesOn ? 'ON' : 'OFF'); }
+    var b = document.getElementById('btn-guides');
+    if (b) { b.setAttribute('aria-pressed', DC.guidesOn ? 'true' : 'false'); }
+    var vl = document.getElementById('vm-guides-label');
+    if (vl) { vl.setAttribute('value', DC.guidesOn ? 'guides on' : 'guides off'); }
+  };
+  function wireGuides () {
+    var b = document.getElementById('btn-guides');
+    if (b) { b.addEventListener('click', function () { DC.setGuides(!DC.guidesOn); }); }
+    var v = document.getElementById('vm-guides');
+    if (v) { v.addEventListener('click', function () { DC.setGuides(!DC.guidesOn); }); }
+    window.addEventListener('keydown', function (e) {
+      if ((e.key === 'g' || e.key === 'G') && !(XRQ.typing && XRQ.typing(e))) { DC.setGuides(!DC.guidesOn); }
+    });
+    markGuides();
+    DC.setGuides(/[?&]guides=1/.test(location.search));
+  }
+
   function run () {
+    wireGuides();
     var ready = MODELS ? (lights(), models()) : Promise.resolve();
     if (LOOK && LK.indexOf('scene') > -1) { lookScene(); }
     power();
