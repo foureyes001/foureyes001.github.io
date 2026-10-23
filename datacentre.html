@@ -557,7 +557,8 @@ document.addEventListener('DOMContentLoaded', function () {
          fog="type: linear; color: #10151c; near: 12; far: 44"
          renderer="colorManagement: true; antialias: true"
          xr-mode-ui="enabled: true; XRMode: xr"
-  quest-ar="hide: #shell, #lights-rig"
+  quest-ar="hide: .hall-wall, .hall-ceiling, .ceil-beam, .sprinkler, #lights-rig"
+  ar-model="mode: model; root: #world; scale: 0.045"
          loading-screen="enabled: false"
          cursor="rayOrigin: mouse; fuse: false"
          raycaster="objects: .clickable; far: 60; interval: 50"
@@ -618,6 +619,8 @@ document.addEventListener('DOMContentLoaded', function () {
     <a-text id="vm-status" value="" position="0 -0.52 0.01" align="center" color="#9fb0cc" width="4.6" material="shader: flat"></a-text>
   </a-entity>
 
+  <!-- build 13: everything below is one group so AR can show it as a table-size model -->
+  <a-entity id="world">
   <!-- ============================ ROOM SHELL =================================
        Hall: 24 m wide (x -12..12) x 30 m deep (z -15..15) x 4.6 m high.
        A short vestibule (z 15..18) holds waypoint W1 "Entrance".           -->
@@ -1038,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', function () {
   <a-entity id="airflow"   airflow="count: 48"></a-entity>
   <a-entity id="hall"      hall-state></a-entity>
 
+  </a-entity><!-- /#world -->
 </a-scene>
 
 <script>
@@ -1273,7 +1277,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-/* thumbstick-locomotion now lives in xr-quest.js (build 12) */
+/* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
 
 AFRAME.registerComponent('billboard', {
     init: function () { this._v = new THREE.Vector3(); },
@@ -3211,7 +3215,22 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<style>.a-enter-ar{display:none!important}</style>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 12</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 13</div>
+<script>
+/* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
+   is called by Escape and by the old app's Back button, and never existed. */
+(function () {
+  var sc = document.querySelector('a-scene');
+  if (!sc || !window.DC) { return; }
+  DC.arOn = false;
+  DC.setAR = function (on) { if (!on && sc.is('ar-mode')) { sc.exitVR(); } };
+  sc.addEventListener('enter-vr', function () {
+    if (!sc.is('ar-mode')) { return; }
+    DC.arOn = true;
+    if (DC.tourOn && DC.tourEnd) { DC.tourEnd(); }
+  });
+  sc.addEventListener('exit-vr', function () { DC.arOn = false; });
+})();
+</script>
 </body>
 </html>

@@ -175,7 +175,7 @@ AFRAME.registerComponent('rig-walk', {
     rig.position.y = 0;
   }
 });
-/* thumbstick-locomotion now lives in xr-quest.js (build 12) */
+/* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
 AFRAME.registerComponent('billboard', {
   init: function () { this._v = new THREE.Vector3(); },
   tick: function () {
@@ -398,7 +398,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 12</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 13</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -426,6 +426,9 @@ window.doorGo = function (href) {
     <button id="btnBigger">Size +</button>
     <button id="btnFront">Put it in front of me</button>
     <button id="btnReplace">Re-place</button>
+    <button class="xrq-go" data-go="index.html">Lobby</button>
+    <button class="xrq-go" data-go="datacentre.html">Ch 1</button>
+    <button class="xrq-go" data-go="loadbalancer.html">Ch 2</button>
   </div>
   <div id="status">loading</div>
 </div>
@@ -436,6 +439,7 @@ window.doorGo = function (href) {
   renderer="antialias: true; colorManagement: true"
   xr-mode-ui="XRMode: xr"
   quest-ar="hide: #room; env: false"
+  ar-model="mode: custom; tap: false"
   webxr="requiredFeatures: local-floor;
          optionalFeatures: hit-test, anchors, dom-overlay;
          overlayElement: #overlay"
@@ -572,7 +576,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 12\n' +
+    'build 13\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -1332,6 +1336,15 @@ function setArScale (k) {
 }
 window.__setArScale = setArScale;   /* pinch in AR resizes the placed globe */
 
+/* build 13: buttons on the shared 3D AR panel (Quest) drive the globe */
+window.XRQ_HOOKS = {
+  bigger: function () { setArScale(arScale * 1.3); },
+  smaller: function () { setArScale(arScale / 1.3); },
+  turnLeft: function () { var o = globeRoot.components['globe-orbit']; if (o) { o.rotY -= Math.PI / 6; } },
+  turnRight: function () { var o = globeRoot.components['globe-orbit']; if (o) { o.rotY += Math.PI / 6; } },
+  here: function () { placeInFront(); }
+};
+
 function byCity (name) {
   return USERS.filter(function (x) { return x.name === name; })[0] || null;
 }
@@ -1495,6 +1508,12 @@ scene.addEventListener('ar-hit-test-select', function (evt) {
 document.getElementById('btnSmaller').addEventListener('click', function () { setArScale(arScale / 1.3); });
 document.getElementById('btnBigger').addEventListener('click', function () { setArScale(arScale * 1.3); });
 document.getElementById('btnFront').addEventListener('click', placeInFront);
+/* build 13: chapter buttons in the phone AR bar; taps on this bar must not
+   also count as a tap on the scene (WebXR DOM overlay fires both otherwise). */
+Array.prototype.forEach.call(document.querySelectorAll('.xrq-go'), function (b) {
+  b.addEventListener('click', function () { XRQ.goChapter(b.getAttribute('data-go')); });
+});
+arRow.addEventListener('beforexrselect', function (e) { e.preventDefault(); });
 document.getElementById('btnReplace').addEventListener('click', function () {
   placed = false;
   stopArHover();
@@ -1830,6 +1849,5 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<style>.a-enter-ar{display:none!important}</style>
 </body>
 </html>

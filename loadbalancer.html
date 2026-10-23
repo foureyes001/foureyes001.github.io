@@ -112,7 +112,7 @@ AFRAME.registerComponent('rig-walk', {
     rig.position.y = 0;
   }
 });
-/* thumbstick-locomotion now lives in xr-quest.js (build 12) */
+/* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
 </script>
 <style>
   html, body { margin: 0; padding: 0; background: #10151c; overflow: hidden; }
@@ -249,7 +249,8 @@ window.doorGo = function (href) {
   fog="type: linear; color: #10151c; near: 12; far: 44"
   renderer="antialias: true; colorManagement: true"
   xr-mode-ui="enabled: true; XRMode: xr"
-  quest-ar="hide: #shell, .ar-hide" lbsim>
+  quest-ar="hide: #shell > a-box:not(:first-child)"
+  ar-model="mode: model; root: #world; scale: 0.045" lbsim>
 
   <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.75"></a-entity>
   <a-entity light="type: directional; color: #fff4e0; intensity: 0.55" position="-2 4 3"></a-entity>
@@ -268,7 +269,7 @@ window.doorGo = function (href) {
   </a-entity>
 
   <a-entity id="world">
-    <a-plane class="ar-hide" rotation="-90 0 0" geometry="width: 24; height: 24"
+    <a-plane rotation="-90 0 0" geometry="width: 24; height: 24"
              material="color: #363c44; shader: flat; roughness: .95"></a-plane>
 
     <a-entity id="shell">
@@ -1403,7 +1404,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<style>.a-enter-ar{display:none!important}</style>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 12</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 13</div>
 </body>
 </html>

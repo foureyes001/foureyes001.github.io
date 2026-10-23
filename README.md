@@ -25,3 +25,12 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - **Quest Browser 2D view:** the on-screen stick is shown (there is no keyboard).
 - Every page shows a build number (bottom-right, or the header in ch3).
 - New file: `xr-quest.js` (shared by all four pages - upload it too).
+
+## Build 13 (23 Oct 2026) - interactive AR in every chapter
+- **AR buttons were hidden on all four pages** by a leftover `.a-enter-ar{display:none!important}` style from the merge. Removed, so AR is reachable.
+- **Chapters 1 and 2 in AR = a table-size model**, like the CDN globe: it appears 1.4 m in front of you at table height (0.7 m). Walls and ceiling hide; the floor stays. Everything on the model is still clickable (controller laser on the Quest, a tap on a phone).
+- **AR panel** (to your right): SIZE -/+, TURN </>, BRING HERE, chapter buttons (LOBBY, CH1, CH2, CH3) and EXIT AR. On the Quest the right stick also turns the model. The chapter's own control wall appears behind the model.
+- **Lobby in AR:** three chapter cards.
+- **Switching chapter in AR:** the next page shows "Continue in AR" - one click and you are back in AR (a new page always ends the XR session).
+- **Chapter 3:** the panel's size/turn/here buttons drive the globe; on a phone the AR bar has Lobby / Ch 1 / Ch 2 buttons.
+- In AR the tour and teleport in chapter 1 pause (`DC.arOn`), and walking with the left stick is off - walk for real.

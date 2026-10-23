@@ -1,25 +1,44 @@
-/* xr-quest.js - shared Meta Quest helpers for "Inside the Cloud" (build 12).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 13).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
-   1. thumbstick-locomotion  left stick walks, right stick snap-turns 30 deg.
-      Works in VR AND passthrough AR. Reads the raw WebXR gamepads first, so it
-      works with any controller model; falls back to A-Frame's thumbstickmoved.
-      (The old per-page version called scene.camera.object3D, which does not
-      exist - scene.camera is the raw three.js camera - so it threw a TypeError
-      on the first stick push. That was the "can't move in VR" bug.)
-   2. quest-ar               on the scene: in AR, clears the background and fog
-      and hides the room shell so the real room shows through.
-   3. XRQ.faceUser(el,d,y)   puts an in-VR menu d metres in front of the head.
-   4. On the Quest Browser's flat 2D view the on-screen stick is shown, since
-      there is no keyboard. */
+   1. thumbstick-locomotion  VR: left stick walks, right stick snap-turns 30 deg.
+      AR model mode: walking is off (walk for real); right stick turns the model.
+      Reads raw WebXR gamepads first, falls back to A-Frame's thumbstickmoved.
+   2. quest-ar               scene: in AR clears background + fog and hides the
+                             room parts listed in `hide`.
+   3. ar-model               scene: makes AR interactive like the CDN chapter.
+        mode: model  - the chapter's root group becomes a table-size model in
+                       front of you; panel = size, turn, bring here, chapters.
+        mode: lobby  - the lobby hides and three chapter cards appear.
+        mode: custom - the page places its own model (cdn.html) and supplies
+                       window.XRQ_HOOKS for the panel's size/turn/here buttons.
+   4. Chapter switching in AR (option A): a chapter button saves a flag, the
+      next page shows "Continue in AR" - one click re-enters AR. (Loading a new
+      page always ends an XR session; a click is required to start a new one.)
+   5. Phone AR: a screen tap is ray-cast into the scene and clicks whatever
+      .clickable it hits (the Quest uses the controller laser instead).
+   6. XRQ.faceUser(el, dist, y, side) puts a panel in front of the user.
+   7. Quest Browser flat 2D view: the on-screen stick is shown (no keyboard). */
 (function () {
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var XRQ = window.XRQ = { isQuest: IS_QUEST, source: 'none',
+  var BUILD = 'build 13';
+  var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
+
+  var CHAPTERS = [
+    { href: 'index.html',        short: 'LOBBY',       title: 'ENTRANCE HALL',   sub: 'start here' },
+    { href: 'datacentre.html',   short: 'CH1 DATA CTR', title: 'CH 1  DATA CENTRE', sub: 'where the cloud lives' },
+    { href: 'loadbalancer.html', short: 'CH2 LOAD BAL', title: 'CH 2  LOAD BALANCING', sub: 'coping with demand' },
+    { href: 'cdn.html',          short: 'CH3 CDN',      title: 'CH 3  CDN + EDGE', sub: 'reaching the user' }
+  ];
+  function currentPage () {
+    var p = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
+    return p || 'index.html';
+  }
 
   function sessionOf (sc) {
     if (sc.xrSession) { return sc.xrSession; }
@@ -34,6 +53,293 @@
     return IS_QUEST;
   };
 
+  /* ---------- chapter switching (option A) -------------------------------- */
+  var RESUME_KEY = 'xrq-resume';
+  function setResume () { try { sessionStorage.setItem(RESUME_KEY, 'ar'); } catch (e) {} }
+  function takeResume () {
+    try { var v = sessionStorage.getItem(RESUME_KEY); sessionStorage.removeItem(RESUME_KEY); return v; }
+    catch (e) { return null; }
+  }
+  XRQ.goChapter = function (href) {
+    var sc = document.querySelector('a-scene');
+    if (sc && sc.is('ar-mode')) { setResume(); }
+    if (typeof window.doorGo === 'function') { window.doorGo(href); }
+    else { location.href = href; }
+  };
+  /* Doors clicked on the AR model also keep the "continue in AR" flag. */
+  window.addEventListener('load', function () {
+    var orig = window.doorGo;
+    if (typeof orig !== 'function' || orig.__xrq) { return; }
+    var wrapped = function (href) {
+      var sc = document.querySelector('a-scene');
+      if (sc && sc.is('ar-mode')) { setResume(); }
+      return orig.apply(this, arguments);
+    };
+    wrapped.__xrq = true;
+    window.doorGo = wrapped;
+  });
+
+  function showResumePrompt (sc) {
+    if (document.getElementById('xrq-resume')) { return; }
+    var box = document.createElement('div');
+    box.id = 'xrq-resume';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:300;display:flex;align-items:center;' +
+      'justify-content:center;background:rgba(11,16,32,.72);font-family:system-ui,sans-serif');
+    box.innerHTML =
+      '<div style="background:#131a2e;border:1px solid #22d3ee;border-radius:14px;padding:22px 26px;' +
+      'text-align:center;color:#e2e8f0;max-width:340px">' +
+      '<div style="font-weight:700;font-size:18px;margin-bottom:6px">You were in AR</div>' +
+      '<div style="font-size:13px;color:#94a3b8;margin-bottom:16px">Loading a new chapter ends the AR session. ' +
+      'One click puts you back.</div>' +
+      '<button id="xrq-resume-go" style="font:700 16px system-ui;padding:14px 22px;border-radius:10px;' +
+      'border:none;background:#22d3ee;color:#0b1020;cursor:pointer;width:100%">Continue in AR</button>' +
+      '<button id="xrq-resume-no" style="font:600 13px system-ui;margin-top:10px;padding:8px 14px;' +
+      'border-radius:8px;border:1px solid #475569;background:transparent;color:#cbd5e1;cursor:pointer">' +
+      'Stay in 2D</button></div>';
+    document.body.appendChild(box);
+    document.getElementById('xrq-resume-go').addEventListener('click', function () {
+      box.remove();
+      try {
+        var p = sc.enterAR();
+        if (p && p.catch) { p.catch(function (e) { console.warn('enterAR failed:', e && e.message); }); }
+      } catch (e) { console.warn('enterAR failed:', e && e.message); }
+    });
+    document.getElementById('xrq-resume-no').addEventListener('click', function () { box.remove(); });
+  }
+  XRQ.maybeResume = function (sc) {
+    if (takeResume() !== 'ar') { return; }
+    if (!navigator.xr || !navigator.xr.isSessionSupported) { return; }
+    navigator.xr.isSessionSupported('immersive-ar').then(function (ok) {
+      if (ok) { showResumePrompt(sc); }
+    }).catch(function () {});
+  };
+
+  /* ---------- clicking by ray (phone taps; also used by tests) ------------ */
+  function isShown (o) {
+    for (; o; o = o.parent) { if (!o.visible) { return false; } }
+    return true;
+  }
+  XRQ.clickRay = function (origin, dir) {
+    var targets = [];
+    Array.prototype.forEach.call(document.querySelectorAll('.clickable'), function (el) {
+      if (el.object3D && isShown(el.object3D)) { targets.push(el.object3D); }
+    });
+    var hits = new THREE.Raycaster(origin, dir.clone().normalize(), 0, 60).intersectObjects(targets, true);
+    for (var i = 0; i < hits.length; i++) {
+      if (!isShown(hits[i].object)) { continue; }
+      var o = hits[i].object;
+      while (o && !o.el) { o = o.parent; }
+      var el = o && o.el;
+      while (el && !(el.classList && el.classList.contains('clickable'))) { el = el.parentEl; }
+      if (el) { el.emit('click', { intersection: hits[i], cursorEl: null }); return el; }
+    }
+    return null;
+  };
+
+  /* ---------- small 3D UI kit (ASCII-only text) --------------------------- */
+  function btn (parent, label, x, y, w, h, color, onClick) {
+    var e = document.createElement('a-entity');
+    e.setAttribute('class', 'clickable');
+    e.setAttribute('position', x + ' ' + y + ' 0.01');
+    e.innerHTML =
+      '<a-plane width="' + w + '" height="' + h + '" material="color: ' + color + '; shader: flat"></a-plane>' +
+      '<a-text value="' + label + '" align="center" color="#e2e8f0" width="' + (w * 2.6).toFixed(2) +
+      '" wrap-count="' + Math.max(8, Math.round(w * 60)) + '" position="0 0 0.006" material="shader: flat"></a-text>';
+    e.addEventListener('click', function (ev) { if (ev && ev.stopPropagation) { ev.stopPropagation(); } onClick(); });
+    e.addEventListener('mouseenter', function () {
+      var p = e.querySelector('a-plane'); if (p) { p.setAttribute('material', 'color', '#2b4a6b'); }
+    });
+    e.addEventListener('mouseleave', function () {
+      var p = e.querySelector('a-plane'); if (p) { p.setAttribute('material', 'color', color); }
+    });
+    parent.appendChild(e);
+    return e;
+  }
+  function label (parent, text, x, y, width, color) {
+    var t = document.createElement('a-text');
+    t.setAttribute('value', text); t.setAttribute('align', 'center');
+    t.setAttribute('color', color || '#22d3ee'); t.setAttribute('width', width);
+    t.setAttribute('position', x + ' ' + y + ' 0.01'); t.setAttribute('material', 'shader: flat');
+    parent.appendChild(t);
+    return t;
+  }
+
+  /* ---------- AR model / lobby / custom ----------------------------------- */
+  AFRAME.registerComponent('ar-model', {
+    schema: {
+      mode: { default: 'model', oneOf: ['model', 'lobby', 'custom'] },
+      root: { default: '#world' },
+      scale: { default: 0.045 },     /* model size: 0.045 x 24 m hall = 1.1 m */
+      table: { default: 0.7 },       /* model floor height above the real floor (m) */
+      dist: { default: 1.4 },        /* model centre distance in front of you (m) */
+      tap: { default: true }         /* phone: ray-cast screen taps */
+    },
+    init: function () {
+      var self = this, sc = this.el;
+      this.active = false; this.k = 1; this.yaw = 0;
+      this.target = new THREE.Vector3(); this.centre = new THREE.Vector3(); this.minY = 0;
+      this.onSelect = this.onSelect.bind(this);
+      sc.addEventListener('enter-vr', function () { if (sc.is('ar-mode')) { self.start(); } });
+      sc.addEventListener('exit-vr', function () { self.stop(); });
+      var ready = function () { self.buildPanel(); XRQ.maybeResume(sc); };
+      if (sc.hasLoaded) { ready(); } else { sc.addEventListener('loaded', ready); }
+      XRQ.ar = this;
+    },
+
+    /* ---- panel ---- */
+    buildPanel: function () {
+      var self = this, sc = this.el, d = this.data, here = currentPage();
+      var P = this.panel = document.createElement('a-entity');
+      P.setAttribute('id', 'xrq-arpanel');
+      P.setAttribute('visible', 'false');
+      if (d.mode === 'lobby') {
+        P.innerHTML = '<a-plane width="1.5" height="0.82" material="color: #131a2e; shader: flat; opacity: 0.94"></a-plane>';
+        label(P, 'CHOOSE A CHAPTER', 0, 0.33, 1.6);
+        CHAPTERS.slice(1).forEach(function (c, i) {
+          var x = -0.48 + i * 0.48;
+          var card = btn(P, c.title, x, 0.06, 0.44, 0.36, '#1e2a44', function () { XRQ.goChapter(c.href); });
+          label(card, c.sub, 0, -0.12, 0.9, '#94a3b8');
+        });
+        btn(P, 'EXIT AR', 0, -0.3, 0.4, 0.1, '#5b1f2a', function () { sc.exitVR(); });
+      } else {
+        P.innerHTML = '<a-plane width="0.98" height="0.5" material="color: #131a2e; shader: flat; opacity: 0.94"></a-plane>';
+        label(P, 'AR MODEL', 0, 0.21, 1.1);
+        var row = [['SIZE -', function () { self.resize(1 / 1.25); }],
+                   ['SIZE +', function () { self.resize(1.25); }],
+                   ['TURN <', function () { self.rotate(1); }],
+                   ['TURN >', function () { self.rotate(-1); }],
+                   ['BRING HERE', function () { self.place(); }]];
+        row.forEach(function (r, i) { btn(P, r[0], -0.38 + i * 0.19, 0.1, 0.175, 0.08, '#1e2a44', r[1]); });
+        label(P, 'GO TO', 0, 0.015, 0.9, '#94a3b8');
+        CHAPTERS.forEach(function (c, i) {
+          var me = c.href === here;
+          btn(P, me ? c.short + ' *' : c.short, -0.36 + i * 0.24, -0.07, 0.225, 0.08,
+              me ? '#334155' : '#1e2a44', function () { if (!me) { XRQ.goChapter(c.href); } });
+        });
+        btn(P, 'EXIT AR', 0, -0.18, 0.3, 0.075, '#5b1f2a', function () { sc.exitVR(); });
+      }
+      sc.appendChild(P);
+    },
+
+    /* ---- session ---- */
+    start: function () {
+      var self = this, sc = this.el, d = this.data;
+      if (this.active) { return; }
+      this.active = true;
+      XRQ.arModel = true;
+      var root = this.root = document.querySelector(d.root);
+      if (d.mode === 'model' && root) {
+        var o = root.object3D;
+        this.saved = { p: o.position.clone(), r: o.rotation.clone(), s: o.scale.clone() };
+        /* model bounds in the root's own coordinates (root is at identity now) */
+        var box = new THREE.Box3().setFromObject(o);
+        box.getCenter(this.centre); this.minY = box.min.y;
+        this.k = 1;
+      }
+      if (d.mode === 'lobby' && root) { this.lobbyVis = root.object3D.visible; root.object3D.visible = false; }
+      /* chapter control walls that live inside the model come out to full size */
+      var vm = document.getElementById('vrmenu');
+      this.vmSaved = null; this.vmParent = null;
+      if (vm && d.mode !== 'lobby') {
+        this.vmSaved = { p: vm.object3D.position.clone(), r: vm.object3D.rotation.clone(), s: vm.object3D.scale.clone() };
+        if (vm.object3D.parent !== sc.object3D) { this.vmParent = vm.object3D.parent; sc.object3D.attach(vm.object3D); }
+        vm.object3D.scale.setScalar(0.7);   /* smaller in AR: less of the real room hidden */
+      }
+      if (d.tap) {
+        var s = sessionOf(sc);
+        if (s && !XRQ.headsetAR(sc) && s.addEventListener) { this.tapSession = s; s.addEventListener('select', this.onSelect); }
+      }
+      /* cdn.html (custom) places its own globe; on phones it keeps its HTML buttons */
+      var showPanel = !(d.mode === 'custom' && !XRQ.headsetAR(sc));
+      var go = function () {
+        if (!self.active) { return; }
+        if (d.mode === 'model') { self.place(); }
+        if (self.panel && showPanel) {
+          self.panel.object3D.visible = true;
+          if (d.mode === 'lobby') { XRQ.faceUser(self.panel, 1.5, 1.3, 0); }
+          else { self.panel.object3D.scale.setScalar(0.85); XRQ.faceUser(self.panel, 1.0, 1.0, 0.8); }
+        }
+        var vm2 = document.getElementById('vrmenu');
+        if (vm2 && d.mode !== 'lobby') { vm2.object3D.visible = true; XRQ.faceUser(vm2, 2.3, 1.7, -0.15); }
+      };
+      go();
+      setTimeout(go, 600);    /* head pose reaches the camera after the first XR frame */
+    },
+    stop: function () {
+      var sc = this.el, d = this.data;
+      if (!this.active) { return; }
+      this.active = false;
+      XRQ.arModel = false;
+      if (this.panel) { this.panel.object3D.visible = false; }
+      if (this.tapSession) { this.tapSession.removeEventListener('select', this.onSelect); this.tapSession = null; }
+      if (d.mode === 'model' && this.root && this.saved) {
+        var o = this.root.object3D;
+        o.position.copy(this.saved.p); o.rotation.copy(this.saved.r); o.scale.copy(this.saved.s);
+      }
+      if (d.mode === 'lobby' && this.root) { this.root.object3D.visible = this.lobbyVis !== false; }
+      var vm = document.getElementById('vrmenu');
+      if (vm && this.vmSaved) {
+        if (this.vmParent) { this.vmParent.add(vm.object3D); this.vmParent = null; }
+        vm.object3D.position.copy(this.vmSaved.p); vm.object3D.rotation.copy(this.vmSaved.r);
+        vm.object3D.scale.copy(this.vmSaved.s);
+        this.vmSaved = null;
+      }
+    },
+
+    /* ---- model placement ---- */
+    place: function () {
+      var d = this.data, cam = this.el.camera;
+      if (d.mode === 'custom') { var H = window.XRQ_HOOKS; if (H && H.here) { H.here(); } return; }
+      if (d.mode !== 'model' || !this.root || !cam) { return; }
+      var head = new THREE.Vector3(), f = new THREE.Vector3();
+      cam.getWorldPosition(head); cam.getWorldDirection(f);
+      f.y = 0; if (f.lengthSq() < 1e-6) { f.set(0, 0, -1); } f.normalize();
+      this.yaw = Math.atan2(-f.x, -f.z);          /* the model's far end points where you look */
+      this.target.set(head.x + f.x * d.dist, d.table, head.z + f.z * d.dist);
+      this.apply();
+    },
+    apply: function () {
+      var o = this.root.object3D, s = this.data.scale * this.k;
+      var c = new THREE.Vector3(this.centre.x * s, this.minY * s, this.centre.z * s)
+        .applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
+      o.scale.setScalar(s);
+      o.rotation.set(0, this.yaw, 0);
+      o.position.set(this.target.x - c.x, this.target.y - c.y, this.target.z - c.z);
+    },
+    resize: function (f) {
+      if (this.data.mode === 'custom') {
+        var H = window.XRQ_HOOKS; if (H) { (f > 1 ? H.bigger : H.smaller)(); } return;
+      }
+      if (this.data.mode !== 'model' || !this.root) { return; }
+      this.k = Math.min(4, Math.max(0.25, this.k * f));
+      this.apply();
+    },
+    rotate: function (sign) {
+      if (this.data.mode === 'custom') {
+        var H = window.XRQ_HOOKS; if (H) { (sign > 0 ? H.turnLeft : H.turnRight)(); } return;
+      }
+      if (this.data.mode !== 'model' || !this.root) { return; }
+      this.yaw += sign * Math.PI / 6;
+      this.apply();
+    },
+
+    /* ---- phone: screen tap -> ray -> click ---- */
+    onSelect: function (ev) {
+      var sc = this.el, xr = sc.renderer && sc.renderer.xr;
+      if (!ev || !ev.frame || !ev.inputSource || ev.inputSource.targetRayMode !== 'screen') { return; }
+      var ref = xr && xr.getReferenceSpace && xr.getReferenceSpace();
+      var pose = ref && ev.frame.getPose(ev.inputSource.targetRaySpace, ref);
+      if (!pose) { return; }
+      var m = new THREE.Matrix4().fromArray(pose.transform.matrix);
+      var parent = sc.camera && sc.camera.parent;
+      if (parent) { parent.updateMatrixWorld(true); m.premultiply(parent.matrixWorld); }
+      var o = new THREE.Vector3().setFromMatrixPosition(m);
+      var dir = new THREE.Vector3(0, 0, -1).transformDirection(m);
+      XRQ.clickRay(o, dir);
+    }
+  });
+
+  /* ---------- locomotion -------------------------------------------------- */
   function handOf (el) {
     var c = el && el.components;
     if (!c) { return null; }
@@ -72,7 +378,6 @@
         var h = src.handedness === 'left' ? 'left' : 'right';
         var a = gp.axes, ix = a.length >= 4 ? 2 : 0;
         var x = a[ix] || 0, y = a[ix + 1] || 0;
-        /* Some runtimes put the stick on axes 0,1 even with 4 axes. */
         if (a.length >= 4 && !x && !y) { x = a[0] || 0; y = a[1] || 0; }
         out[h] = { x: x, y: y }; found = true;
       }
@@ -87,6 +392,13 @@
       if (tp && tp.active) { return; }
       var cam = sc.camera; if (!cam) { return; }
       var st = this.read(); XRQ.stick = st;
+      var rx = st.right.x, flick = 0;
+      if (Math.abs(rx) > 0.7) { if (this.armed) { this.armed = false; flick = rx > 0 ? -1 : 1; } }
+      else if (Math.abs(rx) < 0.3) { this.armed = true; }
+      if (XRQ.arModel) {                 /* AR: walk for real; right stick turns the model */
+        if (flick && XRQ.ar) { XRQ.ar.rotate(flick); }
+        return;
+      }
       var d = Math.min(dt || 16, 100) / 1000, rig = this.el.object3D;
       var L = st.left, m = Math.hypot(L.x, L.y), dz = this.data.dead;
       if (m > dz) {
@@ -100,10 +412,7 @@
         rig.position.y = 0;
         this.clamp(rig.position);
       }
-      var rx = st.right.x;
-      if (Math.abs(rx) > 0.7) {
-        if (this.armed) { this.armed = false; this.snap(rx > 0 ? -1 : 1, cam); }
-      } else if (Math.abs(rx) < 0.3) { this.armed = true; }
+      if (flick) { this.snap(flick, cam); }
     },
     /* Rotate the rig about the HEAD, so a snap turn never shifts you sideways. */
     snap: function (sign, cam) {
@@ -115,8 +424,6 @@
       rig.rotation.y += a;
       this.clamp(p);
     },
-    /* Reuse each page's own walking limits (rig-walk bound / rbound).
-       Chapter 1 has rig-bounds, which clamps every frame by itself. */
     clamp: function (p) {
       var rw = this.el.components['rig-walk'];
       if (!rw) { return; }
@@ -129,6 +436,7 @@
     }
   });
 
+  /* ---------- AR environment ---------------------------------------------- */
   AFRAME.registerComponent('quest-ar', {
     schema: { hide: { default: '' }, env: { default: true } },
     init: function () {
@@ -167,10 +475,10 @@
     }
   });
 
-  /* Place an in-headset panel in front of where the user is LOOKING. Runs
-     again after 500 ms because the head pose only reaches the camera once
-     the first XR frame has rendered. */
-  XRQ.faceUser = function (el, dist, y) {
+  /* Place a panel in front of where the user is LOOKING (side > 0 = to the right).
+     Runs again after 500 ms: the head pose reaches the camera after the first XR frame. */
+  XRQ.faceUser = function (el, dist, y, side) {
+    side = side || 0;
     function put () {
       var sc = el.sceneEl, cam = sc && sc.camera;
       if (!cam) { return; }
@@ -180,7 +488,8 @@
       fwd.y = 0;
       if (fwd.lengthSq() < 1e-6) { fwd.set(0, 0, -1); }
       fwd.normalize();
-      el.object3D.position.copy(pos).addScaledVector(fwd, dist);
+      var right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+      el.object3D.position.copy(pos).addScaledVector(fwd, dist).addScaledVector(right, side);
       el.object3D.position.y = y;
       el.object3D.lookAt(pos.x, y, pos.z);
     }
