@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 13).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 14).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 13';
+  var BUILD = 'build 14';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -46,6 +46,14 @@
     return xr && xr.getSession ? xr.getSession() : null;
   }
   XRQ.inXR = function (sc) { return sc.is('vr-mode') || sc.is('ar-mode'); };
+  /* build 14: true while the user types in a text field (incl. inside shadow DOM,
+     e.g. the Immersive Web Emulator's panels) - page shortcuts must ignore it. */
+  XRQ.typing = function (e) {
+    var t = (e && e.composedPath && e.composedPath()[0]) || (e && e.target);
+    if (!t) { return false; }
+    var tag = (t.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!t.isContentEditable;
+  };
   /* Headset AR (world-space) vs phone AR (screen-space). */
   XRQ.headsetAR = function (sc) {
     var s = sessionOf(sc);

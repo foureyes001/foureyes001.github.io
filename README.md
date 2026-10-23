@@ -34,3 +34,6 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - **Switching chapter in AR:** the next page shows "Continue in AR" - one click and you are back in AR (a new page always ends the XR session).
 - **Chapter 3:** the panel's size/turn/here buttons drive the globe; on a phone the AR bar has Lobby / Ch 1 / Ch 2 buttons.
 - In AR the tour and teleport in chapter 1 pause (`DC.arOn`), and walking with the left stick is off - walk for real.
+
+## Build 14 (23 Oct 2026)
+- Keyboard shortcuts (1-5 teleport in ch1, WASD/arrows, H) are ignored while you type in a text field - e.g. the Immersive Web Emulator's Rot/Pos boxes. Before, typing "-15" there teleported you to stops 1 and 5 and the digits never appeared.
