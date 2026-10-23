@@ -3217,7 +3217,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 18</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 19</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3262,10 +3262,16 @@ function canvasPainter(w, h) {
 
   function models () {
     /* 16 racks -> one InstancedMesh per model part (was 2 draw calls per rack) */
-    var pRacks = XRQ.instanceModel('assets/server_v2_console.glb', world, DC.refs.racks,
-      { height: 2.0, width: 0.6, depth: 1.0, yaw: -90, hide: ['Object_2'] }   /* server face = model +x */
-    ).then(function (r) {
-      DC_PERF.rackParts = r.parts;
+    /* consoles only on the two racks nearest the entrance (A-8, B-8) */
+    var unitOf = function (g) { var u = g.querySelector('[data-unit]'); return u ? u.getAttribute('data-unit') : ''; };
+    var withConsole = DC.refs.racks.filter(function (g) { return /-0?8$/.test(unitOf(g)); });
+    var plain = DC.refs.racks.filter(function (g) { return withConsole.indexOf(g) === -1; });
+    var RACKFIT = { height: 2.0, width: 0.6, depth: 1.0, yaw: -90, fitSrc: 'assets/server_rack_plain.glb' };  /* server face = model +x */
+    var pRacks = Promise.all([
+      XRQ.instanceModel('assets/server_rack_plain.glb', world, plain, RACKFIT),
+      XRQ.instanceModel('assets/server_v2_console.glb', world, withConsole, RACKFIT)
+    ]).then(function (r) {
+      DC_PERF.rackParts = r[0].parts + r[1].parts;
       DC.refs.racks.forEach(function (g) {
         noDraw(g.querySelector('[data-unit]'));
         each(g.querySelectorAll('a-plane:not(.rack-rear), .rack-handle'), hide);
@@ -3345,8 +3351,10 @@ function canvasPainter(w, h) {
     var af = host && host.components && host.components.airflow;
     if (!af || !af.particles || !af.particles.length) { return; }
     var n = af.particles.length;
-    var im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.042, 8, 6),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 }), n);
+    /* arrows (cones) that point along each particle's direction of travel */
+    var im = new THREE.InstancedMesh(new THREE.ConeGeometry(0.034, 0.15, 6),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85 }), n);
+    var UP = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
     im.frustumCulled = false;                              /* particles roam the whole hall */
     af.particles.forEach(function (p) {
       if (p.el && p.el.parentNode) { p.el.parentNode.removeChild(p.el); }
@@ -3361,6 +3369,11 @@ function canvasPainter(w, h) {
       if (!host.object3D.visible) { return; }
       for (var i = 0; i < n; i++) {
         var p = af.particles[i];
+        var a = p.path && p.path[p.seg], b = p.path && (p.path[p.seg + 1] || p.path[p.seg]);
+        if (a && b) {
+          dir.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+          if (dir.lengthSq() > 1e-6) { p.obj.quaternion.setFromUnitVectors(UP, dir.normalize()); }
+        }
         p.obj.updateMatrix();
         im.setMatrixAt(i, p.obj.matrix);
         im.setColorAt(i, p.m.color);
@@ -3379,13 +3392,46 @@ function canvasPainter(w, h) {
     DC_PERF.merged = XRQ.mergeStatic(world, [
       { el: '#shell', keepClass: ['hall-wall', 'hall-ceiling', 'ceil-beam', 'sprinkler', 'hall-floor'] },
       { el: '#tiles' }, { el: '#trays' }, { el: '#lights-rig', addClass: 'lights-rig' },
-      { el: '#floor-markings', skip: '#hotzone-w, #hotzone-e' }
+      { el: '#floor-markings', skip: '#hotzone-w, #hotzone-e' }, { el: '#busway' }
     ]);
     DC_PERF.ready = true;
   }
 
+  /* The glowing power path is removed (drills still show failures on the
+     UPS/ATS/generator lights and in the HUD). In its place: a plain grey
+     overhead busway per rack row with tap-off boxes and 8 drops to the racks,
+     fed from the power room. Static, so it is merged into a few draw calls. */
+  function power () {
+    DC.refs.chain.forEach(function (seg) { hide(seg.el); });
+    var g = document.createElement('a-entity');
+    g.setAttribute('id', 'busway');
+    world.appendChild(g);
+    var HOUSING = 'shader: standard; color: #7d848c; metalness: 0.55; roughness: 0.45';
+    var BOX = 'shader: standard; color: #565c63; metalness: 0.4; roughness: 0.55';
+    var PIPE = 'shader: standard; color: #3b4148; metalness: 0.3; roughness: 0.6';
+    var add = function (tag, a) { var e = document.createElement(tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); g.appendChild(e); return e; };
+    var Y = 2.75;
+    [-2, 2].forEach(function (x) {
+      add('a-box', { position: x + ' ' + Y + ' 0', width: 0.16, height: 0.12, depth: 22.2, material: HOUSING });
+      [-10.5, -6.75, -3, 0.75, 4.5, 8.25].forEach(function (z) {            /* hanger rods */
+        add('a-box', { position: x + ' 3.69 ' + z, width: 0.025, height: 1.82, depth: 0.025, material: PIPE });
+      });
+      [-10.5, -4.5, 1.5, 7.5].forEach(function (z) {                           /* 4 drops per row */
+        add('a-box', { position: x + ' 2.6 ' + z, width: 0.2, height: 0.18, depth: 0.16, material: BOX });
+        add('a-cylinder', { position: x + ' 2.255 ' + z, radius: 0.018, height: 0.51, 'segments-radial': 8, material: PIPE });
+      });
+    });
+    /* feeder from the UPS pair (x 10.7, z 1.75 / 4) across the hall at z = 2.9 (between racks) */
+    add('a-box', { position: '4.35 ' + Y + ' 2.9', width: 12.86, height: 0.12, depth: 0.16, material: HOUSING });
+    add('a-box', { position: '10.7 ' + Y + ' 2.875', width: 0.16, height: 0.12, depth: 2.41, material: HOUSING });
+    [1.75, 4].forEach(function (z) {                                           /* risers down to UPS-B / UPS-A */
+      add('a-cylinder', { position: '10.7 2.32 ' + z, radius: 0.03, height: 0.74, 'segments-radial': 8, material: PIPE });
+    });
+  }
+
   function run () {
     var ready = MODELS ? (lights(), models()) : Promise.resolve();
+    power();
     airflowBatch();
     mergeWhenTextured(0);
     /* after the rack heat panels got their model-mode opacity */

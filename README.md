@@ -54,6 +54,11 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Chapter 1 racks and cooling units are real 3D models (see credits). The old shapes stay as invisible click targets; LEDs, heat glow, beacons, alarms and labels are unchanged. Add `?models=0` to the address for the old flat look.
 - Draw calls in chapter 1 cut from ~491 to ~243: racks, cooling units, LEDs, heat panels and airflow particles are instanced; static shell/tiles/trays/lights are merged. Multiview stereo is on for all pages.
 
+## Build 19 (24 Oct 2026) - chapter 1 clean-up
+- Server consoles only on A-8 and B-8 (nearest the entrance); the other 14 racks use a plain rack with no protruding front rail.
+- Glowing power path removed. Replaced by a plain grey overhead busway per row with 8 drops to rack tops, fed from the UPS pair. Drills still show power failures on the UPS/ATS/generator lights and HUD.
+- Airflow particles are now arrows that point along their direction of travel (cold aisle -> racks -> hot aisle -> CRAC).
+
 ## 3D model credits (Creative Commons Attribution 4.0)
 - `assets/industrial_switchgear.glb`: "Industrial Switchgear" by MADMOVIESINC (https://sketchfab.com/MADMOVIESINC), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/industrial-switchgear-9ad62dc3bd694bf880be78e43530008e. Changes: texture downscaled to 1024 px. Scaled and positioned in the scene.
 - `assets/kipor_kde_7000_sta_generator.glb`: "Kipor KDE 7000 STA generator" by Yevgen Avramenko (https://sketchfab.com/naprimerjenya), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/kipor-kde-7000-sta-generator-0a5f7001925744c4b335f16212c1c606. Changes: materials converted from spec/gloss to metal/roughness. Scaled and positioned in the scene.
@@ -61,3 +66,4 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - `assets/liebert_trinergytm_cube.glb`: "Liebert® Trinergy™ Cube" by Vertiv (https://sketchfab.com/vertiv), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/liebert-trinergytm-cube-58b145bac2884e658583d5aed1d8b3b8. File unchanged. Scaled and positioned in the scene.
 - `assets/old_soviet_transformer_low-poly.glb`: "Old Soviet Transformer Low-Poly" by MrUnity (https://sketchfab.com/MrUnityCreations), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/old-soviet-transformer-low-poly-13124cf4ef264a2eabe79b92679d6d49. Changes: textures downscaled to 512 px. Scaled and positioned in the scene.
 - `assets/server_v2_console.glb`: "Server V2 +console" by FlevasGR (https://sketchfab.com/FlevasGR), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/server-v2-console-f24594ece9634cec9c1210c041838371. File unchanged. Scaled and positioned in the scene.
+- `assets/server_rack_plain.glb`: derived from "Server V2 +console" by FlevasGR (https://sketchfab.com/FlevasGR), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Changes: console node and the protruding front rail removed.

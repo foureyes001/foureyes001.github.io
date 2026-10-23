@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 18).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 19).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 18';
+  var BUILD = 'build 19';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -651,7 +651,7 @@
        Shapes that never change after load are merged per material. Each merged
        mesh lives on a new entity that copies the source's class (hall-wall,
        hall-ceiling...), so AR mode's `hide` selectors still find it. */
-  function fitGroup (gltf, d) {
+  function fitGroup (gltf, d, boxGltf) {
     var inner = gltf.scene.clone(true);
     (d.hide || []).forEach(function (name) {
       var n = name && inner.getObjectByName(name);
@@ -659,7 +659,14 @@
     });
     inner.rotation.y = (d.yaw || 0) * Math.PI / 180;
     var turn = new THREE.Group(); turn.add(inner); turn.updateMatrixWorld(true);
-    var box = new THREE.Box3().setFromObject(turn), size = new THREE.Vector3(), c = new THREE.Vector3();
+    /* boxGltf: size this model by ANOTHER model's box (same source file family),
+       e.g. a rack with its console fitted exactly like the plain rack */
+    var ref = turn;
+    if (boxGltf) {
+      var ri = boxGltf.scene.clone(true); ri.rotation.y = inner.rotation.y;
+      ref = new THREE.Group(); ref.add(ri); ref.updateMatrixWorld(true);
+    }
+    var box = new THREE.Box3().setFromObject(ref), size = new THREE.Vector3(), c = new THREE.Vector3();
     box.getSize(size); box.getCenter(c);
     var k = d.height > 0 ? d.height / size.y : 1;
     var fit = new THREE.Group(); fit.add(turn);
@@ -669,8 +676,9 @@
     return { group: fit, size: new THREE.Vector3(size.x * fit.scale.x, size.y * k, size.z * fit.scale.z) };
   }
   XRQ.instanceModel = function (src, rootEl, targets, opts) {
-    return loadShared(src).then(function (gltf) {
-      var f = fitGroup(gltf, opts || {}), root = rootEl.object3D;
+    opts = opts || {};
+    return Promise.all([loadShared(src), opts.fitSrc ? loadShared(opts.fitSrc) : null]).then(function (r) {
+      var f = fitGroup(r[0], opts, r[1]), root = rootEl.object3D;
       root.updateMatrixWorld(true);
       var inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
       var rel = targets.map(function (t) {
