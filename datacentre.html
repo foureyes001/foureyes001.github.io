@@ -469,6 +469,10 @@ window.doorGo = function (href) {
       <span id="btn-walk-label">Walk - ON</span>
       <small>WASD / arrows or thumb stick</small>
     </button>
+    <button id="btn-guides" class="btn" type="button" aria-pressed="false">
+      <span id="btn-guides-label">Guides · OFF</span>
+      <small>Teleport rings, info spheres, fan icons (G)</small>
+    </button>
   </div>
 
   <div id="hint" class="card tabpanel" data-tab="help">
@@ -476,6 +480,7 @@ window.doorGo = function (href) {
       <span id="btn-tour-label">Tour · How it works</span>
       <small>8 guided steps, machines highlighted</small>
     </button>
+    <b>Guides</b> (G or MOVE &amp; VIEW) show the teleport rings and info spheres ·
     <b>Drag</b> to look · <b>tap a glowing ring</b> to teleport · <b>tap a cyan sphere</b>
     for a concept card · <b>click any machine</b> for what it does · <b>walk</b>
     with WASD / arrows or the thumb stick
@@ -611,6 +616,10 @@ document.addEventListener('DOMContentLoaded', function () {
     <a-entity id="vm-reset" class="clickable" position="0.86 0.0 0.01">
       <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
       <a-text value="reset" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-guides" class="clickable" position="-0.86 -0.28 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text id="vm-guides-label" value="guides off" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
     <a-entity id="vm-exit" class="clickable" position="0 -0.28 0.01">
       <a-plane geometry="width: 1.1; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
@@ -3609,6 +3618,8 @@ function canvasPainter(w, h) {
     });
     DC_PERF.litShapes = lit.n || 0;
     each(document.querySelectorAll('#cooling > a-box'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.duct; } });
+    /* chilled-water pipes: insulated (silver) instead of teal / orange stripes */
+    each(document.querySelectorAll('#cooling > a-cylinder'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.duct; } });
   }
   /* world-space UVs so tiles and panels keep their real size after merging */
   function worldUV (mesh, su, sv, wall) {
@@ -3681,7 +3692,47 @@ function canvasPainter(w, h) {
     addMesh(quadGeo(pq, 0.02), pool, 'look-pool lights-rig', 2);
   }
 
+  /* ===================== build 21: GUIDES (part C) ==========================
+     Teaching helpers (teleport rings, info spheres, fan icons, coloured floor
+     washes and lines, CRAC labels) are hidden by default so the hall reads as
+     a real room; "Guides" in MOVE & VIEW, the VR menu or the G key shows them.
+     Hidden things are not clickable (raycaster patch skips hidden objects). */
+  var GUIDES = '.hs, .wp, .crac-fan, .crac-louvre, .crac-intake, .crac-label, #hotzone-w, #hotzone-e, .guide-mark';
+  function markGuides () {
+    each(document.querySelectorAll('#floor-markings > *, #shell > *'), function (el) {
+      var m = el.getAttribute && el.getAttribute('material');
+      if (m && m.color && m.color.toLowerCase() === '#22d3ee') { el.classList.add('guide-mark'); }
+    });
+    /* rack names: small grey plates instead of big glowing text */
+    each(document.querySelectorAll('.rack > a-text'), function (t) {
+      t.setAttribute('width', 0.22); t.setAttribute('color', '#b8c0c8');
+    });
+  }
+  DC.guidesOn = false;
+  DC.setGuides = function (on) {
+    DC.guidesOn = !!on;
+    each(document.querySelectorAll(GUIDES), function (el) { el.object3D.visible = DC.guidesOn; });
+    var lbl = document.getElementById('btn-guides-label');
+    if (lbl) { lbl.textContent = 'Guides · ' + (DC.guidesOn ? 'ON' : 'OFF'); }
+    var b = document.getElementById('btn-guides');
+    if (b) { b.setAttribute('aria-pressed', DC.guidesOn ? 'true' : 'false'); }
+    var vl = document.getElementById('vm-guides-label');
+    if (vl) { vl.setAttribute('value', DC.guidesOn ? 'guides on' : 'guides off'); }
+  };
+  function wireGuides () {
+    var b = document.getElementById('btn-guides');
+    if (b) { b.addEventListener('click', function () { DC.setGuides(!DC.guidesOn); }); }
+    var v = document.getElementById('vm-guides');
+    if (v) { v.addEventListener('click', function () { DC.setGuides(!DC.guidesOn); }); }
+    window.addEventListener('keydown', function (e) {
+      if ((e.key === 'g' || e.key === 'G') && !(XRQ.typing && XRQ.typing(e))) { DC.setGuides(!DC.guidesOn); }
+    });
+    markGuides();
+    DC.setGuides(/[?&]guides=1/.test(location.search));
+  }
+
   function run () {
+    wireGuides();
     var ready = MODELS ? (lights(), models()) : Promise.resolve();
     if (LOOK && LK.indexOf('scene') > -1) { lookScene(); }
     power();
