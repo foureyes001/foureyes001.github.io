@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 15).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 16).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,10 +24,59 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 15';
+  var BUILD = 'build 16';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
+
+  /* ---------- build 16: make the laser / mouse cursor actually hit buttons ---
+     A-Frame 1.7.1's raycaster only tests the meshes that belong DIRECTLY to an
+     element matching `objects` (its object3DMap). Every button, door and
+     machine here is an empty `.clickable` group whose plane/box/text are CHILD
+     entities, so the controller laser passed straight through them: no hover,
+     no click. Fix: test each matched entity's whole subtree.
+     three.js raycasting also ignores `.visible`, so hidden panels would steal
+     hits; those intersections are dropped. */
+  function shownChain (o) {
+    for (; o; o = o.parent) { if (o.visible === false) { return false; } }
+    return true;
+  }
+  var RC = AFRAME.components.raycaster && AFRAME.components.raycaster.Component;
+  if (RC && !RC.prototype.__xrqPatched) {
+    RC.prototype.__xrqPatched = true;
+    RC.prototype.flattenObject3DMaps = function (els) {
+      var objects = this.objects, root = this.el.sceneEl.object3D, set = [], i, el, p;
+      objects.length = 0;
+      for (i = 0; i < els.length; i++) {
+        el = els[i];
+        if (el && el.isEntity && el.object3D) { set.push(el); }
+      }
+      outer:
+      for (i = 0; i < set.length; i++) {
+        el = set[i];
+        for (p = el.parentEl; p; p = p.parentEl) { if (set.indexOf(p) !== -1) { continue outer; } }
+        var o = el.object3D;
+        while (o.parent) { o = o.parent; }
+        if (o === root) { objects.push(el.object3D); }
+      }
+      return objects;
+    };
+    var rcInit = RC.prototype.init;
+    RC.prototype.init = function () {
+      rcInit.apply(this, arguments);
+      var ray = this.raycaster;
+      if (!ray || ray.__xrq) { return; }
+      ray.__xrq = true;
+      var orig = ray.intersectObjects.bind(ray);
+      ray.intersectObjects = function (objs, recursive, target) {
+        var out = orig(objs, recursive, target);
+        for (var k = out.length - 1; k >= 0; k--) {
+          if (!shownChain(out[k].object)) { out.splice(k, 1); }
+        }
+        return out;
+      };
+    };
+  }
 
   var CHAPTERS = [
     { href: 'index.html',        short: 'LOBBY',       title: 'ENTRANCE HALL',   sub: 'start here' },

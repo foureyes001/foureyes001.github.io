@@ -40,3 +40,7 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 
 ## Build 15 (23 Oct 2026)
 - In-VR control-wall buttons (all chapters) light up blue while the controller laser is on them, so you can see what a trigger pull will hit.
+
+## Build 16 (23 Oct 2026) - controller laser fixed
+- **The controller laser could not click any in-VR button.** A-Frame 1.7.1's raycaster only tests the shapes that belong directly to a `.clickable` element; every control-wall button, AR-panel button and door is an empty `.clickable` group whose plane/box/text are child entities, so the laser passed straight through (no highlight, no click; on ch2 it hit the board behind). `xr-quest.js` now makes the raycaster test each clickable's whole subtree, and ignores hidden objects (three.js raycasting does not check `.visible`).
+- Verified with A-Frame's own raycaster + cursor (not a stand-in): leave VR, fail CRAC, ch2 and ch3 control walls, AR panel SIZE + all highlight and click; hidden panels are not hit; ch1 rack clicks unchanged.
