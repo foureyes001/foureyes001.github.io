@@ -3217,7 +3217,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 19</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 20</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3337,7 +3337,11 @@ function canvasPainter(w, h) {
     var hallEl = document.getElementById('hall');
     var hs = hallEl && hallEl.components && hallEl.components['hall-state'];
     if (!hs || !hs.collected) { if (tries < 60) { setTimeout(function () { batchStatus(tries + 1); }, 100); } return; }
-    var syncLeds = batchColour(hs.leds);
+    /* rack-front LED strips floated off the new rack models and read as stray
+       green boxes, so they are removed; network-rack LEDs stay. */
+    var onRack = function (l) { return l.el && l.el.closest && l.el.closest('.rack'); };
+    hs.leds.filter(onRack).forEach(function (l) { hide(l.el); });
+    var syncLeds = batchColour(hs.leds.filter(function (l) { return !onRack(l); }));
     var syncRear = batchColour(DC.refs.rear);
     var orig = hs.tick;
     hs.tick = function (t, dt) { orig.call(hs, t, dt); syncLeds(); syncRear(); };
@@ -3389,11 +3393,15 @@ function canvasPainter(w, h) {
     var floor = document.querySelector('.hall-floor');
     var m = floor && floor.getObject3D('mesh') && floor.getObject3D('mesh').material;
     if (!(m && m.map) && tries < 40) { setTimeout(function () { mergeWhenTextured(tries + 1); }, 100); return; }
+    if (LOOK && LK.indexOf('restyle') > -1) { restyle(); }
     DC_PERF.merged = XRQ.mergeStatic(world, [
       { el: '#shell', keepClass: ['hall-wall', 'hall-ceiling', 'ceil-beam', 'sprinkler', 'hall-floor'] },
       { el: '#tiles' }, { el: '#trays' }, { el: '#lights-rig', addClass: 'lights-rig' },
       { el: '#floor-markings', skip: '#hotzone-w, #hotzone-e' }, { el: '#busway' }
     ]);
+    if (LOOK && LK.indexOf('after') > -1) { afterMerge(); }
+    /* compile every shader now, so entering VR/AR does not stall on first frames */
+    try { if (sc.renderer && sc.camera) { sc.renderer.compile(sc.object3D, sc.camera); } } catch (e) { /* optional */ }
     DC_PERF.ready = true;
   }
 
@@ -3406,8 +3414,8 @@ function canvasPainter(w, h) {
     var g = document.createElement('a-entity');
     g.setAttribute('id', 'busway');
     world.appendChild(g);
-    var HOUSING = 'shader: standard; color: #7d848c; metalness: 0.55; roughness: 0.45';
-    var BOX = 'shader: standard; color: #565c63; metalness: 0.4; roughness: 0.55';
+    var HOUSING = 'shader: standard; color: #7d848c; metalness: 0.15; roughness: 0.6';
+    var BOX = 'shader: standard; color: #565c63; metalness: 0.15; roughness: 0.6';
     var PIPE = 'shader: standard; color: #3b4148; metalness: 0.3; roughness: 0.6';
     var add = function (tag, a) { var e = document.createElement(tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); g.appendChild(e); return e; };
     var Y = 2.75;
@@ -3429,11 +3437,245 @@ function canvasPainter(w, h) {
     });
   }
 
+
+  /* ===================== build 20: LOOK PASS (VR) ==========================
+     Bigger, cheaper wins only: lit surfaces instead of flat colour, a light
+     neutral raised floor and walls, a reflection map for the metal models,
+     tone mapping, soft contact shadows and light pools (one draw call each).
+     ?look=0 shows the build 19 look. */
+  var LOOK = !/[?&]look=0/.test(location.search);
+  var LK = (location.search.match(/[?&]lk=([a-z,]+)/) || [0, 'scene,restyle,after'])[1];
+  function canvas (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function texOf (c, rep) {
+    var t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    return t;
+  }
+  function seeded (i) { var x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+  /* raised floor: 4 x 4 tiles of 600 mm per texture (2.4 m) */
+  function paintFloor () {
+    var c = canvas(512, 512), g = c.getContext('2d'), i, j, k = 128;
+    for (i = 0; i < 4; i++) { for (j = 0; j < 4; j++) {
+      var v = 128 + Math.round((seeded(i * 4 + j) - 0.5) * 10);
+      g.fillStyle = 'rgb(' + v + ',' + (v + 4) + ',' + (v + 9) + ')'; g.fillRect(i * k, j * k, k, k);
+      g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(i * k + 3, j * k + 3, k - 6, 2); g.fillRect(i * k + 3, j * k + 3, 2, k - 6);
+      g.fillStyle = 'rgba(0,0,0,.10)'; g.fillRect(i * k + 3, j * k + k - 5, k - 6, 2); g.fillRect(i * k + k - 5, j * k + 3, 2, k - 6);
+    } }
+    g.fillStyle = '#50555b';
+    for (i = 0; i <= 4; i++) { g.fillRect(i * k - 2, 0, 4, 512); g.fillRect(0, i * k - 2, 512, 4); }
+    for (i = 0; i < 2600; i++) {
+      g.fillStyle = seeded(i + 9) > 0.5 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)';
+      g.fillRect(seeded(i * 3.1) * 512, seeded(i * 7.7) * 512, 1.5, 1.5);
+    }
+    return c;
+  }
+  /* perforated cold-aisle tile pair (each plane is two 600 mm tiles) */
+  function paintPerf () {
+    var c = canvas(256, 160), g = c.getContext('2d'), x, y, t;
+    g.fillStyle = '#4a4f55'; g.fillRect(0, 0, 256, 160);
+    for (t = 0; t < 2; t++) {
+      var ox = t * 128;
+      g.fillStyle = '#8a9097'; g.fillRect(ox + 3, 3, 122, 154);
+      g.fillStyle = '#2b2f34';
+      for (y = 14; y < 148; y += 5) { for (x = ox + 12; x < ox + 118; x += 5) { g.fillRect(x, y, 2.4, 2.4); } }
+    }
+    return c;
+  }
+  /* wall panels: 1.5 m panels, dark skirting (texture = 3 m x 4.6 m) */
+  function paintWall () {
+    var c = canvas(256, 512), g = c.getContext('2d'), i;
+    var gr = g.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0, '#7a8088'); gr.addColorStop(0.75, '#8f959c'); gr.addColorStop(1, '#878d94');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 512);
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(0, 0, 2, 512); g.fillRect(127, 0, 2, 512);
+    g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(2, 0, 1, 512); g.fillRect(129, 0, 1, 512);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, 110, 256, 2);
+    g.fillStyle = '#3a3f45'; g.fillRect(0, 494, 256, 18);
+    for (i = 0; i < 900; i++) { g.fillStyle = 'rgba(0,0,0,.04)'; g.fillRect(seeded(i * 2.3) * 256, seeded(i * 5.9) * 512, 1.5, 1.5); }
+    return c;
+  }
+  /* ceiling grid (texture = 2.4 m) */
+  function paintCeil () {
+    var c = canvas(256, 256), g = c.getContext('2d'), i;
+    g.fillStyle = '#7c8289'; g.fillRect(0, 0, 256, 256);
+    g.fillStyle = '#5a6067';
+    for (i = 0; i <= 4; i++) { g.fillRect(i * 64 - 2, 0, 4, 256); g.fillRect(0, i * 64 - 2, 256, 4); }
+    return c;
+  }
+  /* soft rectangle for contact shadows (alpha only) */
+  var SHADOW_C = (function () {
+    var c = canvas(128, 128), g = c.getContext('2d');
+    g.filter = 'blur(13px)'; g.fillStyle = '#000'; g.fillRect(30, 30, 68, 68);
+    return c;
+  })();
+  /* soft band for light pools (bright centre across u) */
+  var POOL_C = (function () {
+    var c = canvas(128, 4), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 128, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 4);
+    return c;
+  })();
+
+  var MAT = {};
+  function looks () {
+    if (MAT.floor) { return MAT; }
+    MAT.floor = new THREE.MeshLambertMaterial({ map: texOf(paintFloor(), true) });
+    MAT.perf = new THREE.MeshLambertMaterial({ map: texOf(paintPerf()) });
+    MAT.wall = new THREE.MeshLambertMaterial({ map: texOf(paintWall(), true) });
+    MAT.ceil = new THREE.MeshLambertMaterial({ map: texOf(paintCeil(), true) });
+    MAT.beam = new THREE.MeshLambertMaterial({ color: '#3b4047' });
+    MAT.plinth = new THREE.MeshLambertMaterial({ color: '#4b5056' });
+    MAT.tray = new THREE.MeshLambertMaterial({ color: '#8f969d' });
+    MAT.fixture = new THREE.MeshLambertMaterial({ color: '#c9ced4' });
+    MAT.emit = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
+    MAT.cable = ['#2f5f8f', '#2a2d31', '#b8962e'].map(function (c) { return new THREE.MeshLambertMaterial({ color: c }); });
+    return MAT;
+  }
+  function setMat (sel, m, root) {
+    each((root || document).querySelectorAll(sel), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = m; } });
+  }
+  /* tone mapping, reflection map, lights, fog */
+  function lookScene () {
+    var r = sc.renderer;
+    r.toneMapping = THREE.NeutralToneMapping !== undefined ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
+    r.toneMappingExposure = 1.0;
+    /* no reflection map: it doubled the drawing cost for a subtle effect */
+    /* lighting: reuse the lights already in the scene (each light costs every
+       pixel on Quest): ambient + sky/ground + key + fill, no shadows */
+    var dirs = [];
+    each(document.querySelectorAll('a-scene > [light]'), function (el) {
+      var t = el.getAttribute('light').type;
+      if (t === 'ambient') { el.setAttribute('light', { color: '#dfe5ee', intensity: 0.7 }); }
+      else if (t === 'hemisphere') { el.setAttribute('light', { color: '#f4f7fb', groundColor: '#8a9098', intensity: 1.15 }); }
+      else if (t === 'directional') { dirs.push(el); }
+    });
+    [['3 7 10', 1.0, '#ffffff'], ['-4 5 -9', 0.55, '#dde6f2']].forEach(function (k, i) {   /* key + fill */
+      var d = dirs[i];
+      if (!d) { d = document.createElement('a-entity'); sc.appendChild(d); }
+      d.setAttribute('light', { type: 'directional', color: k[2], intensity: k[1] });
+      d.setAttribute('position', k[0]);
+    });
+    dirs.slice(2).forEach(function (el) { el.parentNode.removeChild(el); });
+    sc.setAttribute('fog', { type: 'linear', color: '#2a2e33', near: 26, far: 90 });
+  }
+  /* swap flat colour for lit materials on the big surfaces (before merging) */
+  function restyle () {
+    var M = looks();
+    setMat('.hall-floor', M.floor); setMat('.hall-wall', M.wall); setMat('.hall-ceiling', M.ceil);
+    setMat('.ceil-beam', M.beam); setMat('.perf-tile', M.perf);
+    each(document.querySelectorAll('#racks > a-box'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.plinth; } });
+    each(document.querySelectorAll('#lights-rig a-box'), function (el) {
+      var o = el.getObject3D('mesh'); if (!o) { return; }
+      o.material = o.material.transparent ? M.emit : M.fixture;
+    });
+    var cables = 0;
+    each(document.querySelectorAll('#trays > *'), function (el) {
+      var o = el.getObject3D('mesh'); if (!o) { return; }
+      if (el.tagName === 'A-CYLINDER' && o.geometry.parameters && o.geometry.parameters.height > 20) { o.material = M.cable[cables++ % 3]; }
+      else { o.material = M.tray; }
+    });
+    /* every other dull, solid shape (ducts, cabinets, pipes, frames) gets light
+       too; bright indicator colours, screens, labels and glows stay as they are */
+    var SKIP = /beacon|led|bar|louvre|fan|face|intake|alarm|ring|halo|focus|hot|wp|hotspot|sign|chain/;
+    var lit = {}, hsl = {};
+    world.object3D.traverse(function (o) {
+      if (!o.isMesh || o.isInstancedMesh || !o.el || Array.isArray(o.material)) { return; }
+      var m = o.material, el = o.el;
+      if (m.type !== 'MeshBasicMaterial' || m.map || m.transparent || m.visible === false || !m.color) { return; }
+      if (el.tagName === 'A-TEXT' || (el.components && el.components.text)) { return; }
+      if (el.closest('#lights-rig, #floor-markings, #airflow, #waypoints, #hotspots, #trays, .rack')) { return; }
+      if (SKIP.test(el.getAttribute('class') || '')) { return; }
+      m.color.getHSL(hsl);
+      var c = m.color, mx = Math.max(c.r, c.g, c.b), mn = Math.min(c.r, c.g, c.b);
+      if (mx - mn > 0.09 && mx > 0.45) { return; }                   /* indicator colour */
+      /* shapes that get merged share one material per colour; others get their
+         own, because drills recolour some of them one by one */
+      var key = m.color.getHexString() + '|' + m.side, shared = el.closest('#shell, #busway');
+      var m2 = shared ? (lit[key] = lit[key] || new THREE.MeshLambertMaterial({ color: m.color.clone(), side: m.side }))
+                      : new THREE.MeshLambertMaterial({ color: m.color.clone(), side: m.side });
+      o.material = m2; lit.n = (lit.n || 0) + 1;
+    });
+    DC_PERF.litShapes = lit.n || 0;
+  }
+  /* world-space UVs so tiles and panels keep their real size after merging */
+  function worldUV (mesh, su, sv, wall) {
+    var g = mesh.geometry, p = g.attributes.position, n = g.attributes.normal;
+    if (!p || !n) { return; }
+    var uv = new Float32Array(p.count * 2);
+    for (var i = 0; i < p.count; i++) {
+      var x = p.getX(i), y = p.getY(i), z = p.getZ(i), nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
+      if (wall && ny < 0.5) { uv[i * 2] = (nx > 0.5 ? z : x) / su; uv[i * 2 + 1] = y / sv; }
+      else { uv[i * 2] = x / su; uv[i * 2 + 1] = -z / sv; }
+    }
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  }
+  function quadGeo (quads, y) {
+    var pos = [], uv = [], nor = [];
+    quads.forEach(function (q) {
+      var x0 = q.x - q.w / 2, x1 = q.x + q.w / 2, z0 = q.z - q.d / 2, z1 = q.z + q.d / 2;
+      var u = q.u || [0, 1], v = q.v || [0, 1];
+      var P = [[x0, z1, u[0], v[0]], [x1, z1, u[1], v[0]], [x1, z0, u[1], v[1]], [x0, z1, u[0], v[0]], [x1, z0, u[1], v[1]], [x0, z0, u[0], v[1]]];
+      P.forEach(function (a) { pos.push(a[0], y, a[1]); uv.push(a[2], a[3]); nor.push(0, 1, 0); });
+    });
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    return g;
+  }
+  function addMesh (geo, mat, cls, order) {
+    var holder = document.createElement('a-entity');
+    holder.setAttribute('class', cls);
+    world.appendChild(holder);
+    var m = new THREE.Mesh(geo, mat); m.renderOrder = order || 0;
+    holder.setObject3D('mesh', m);
+    return holder;
+  }
+  /* after merging: real-size UVs, contact shadows, light pools */
+  function afterMerge () {
+    each(document.querySelectorAll('.merged-static.hall-floor'), function (h) { worldUV(h.getObject3D('mesh'), 2.4, 2.4); });
+    each(document.querySelectorAll('.merged-static.hall-ceiling'), function (h) { worldUV(h.getObject3D('mesh'), 2.4, 2.4); });
+    each(document.querySelectorAll('.merged-static.hall-wall'), function (h) { worldUV(h.getObject3D('mesh'), 3.0, 4.6, true); });
+    /* contact shadows under every floor-standing unit + along the wall bases */
+    var q = [], box = new THREE.Box3(), b2 = new THREE.Box3(), inv = new THREE.Matrix4().copy(world.object3D.matrixWorld).invert();
+    [-2, 2].forEach(function (x) { q.push({ x: x, z: 0, w: 1.6, d: 23.0 }); });
+    each(document.querySelectorAll('.crac, #util-in, #ats, #upsA, #upsB, #gen, .netrack'), function (el) {
+      box.makeEmpty();
+      el.object3D.updateMatrixWorld(true);
+      el.object3D.traverse(function (o) {
+        if (!o.isMesh || !o.geometry) { return; }
+        if (!o.geometry.boundingBox) { o.geometry.computeBoundingBox(); }
+        b2.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld).applyMatrix4(inv);
+        if (b2.min.y < 0.3) { box.union(b2); }
+      });
+      if (box.isEmpty()) { return; }
+      q.push({ x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2,
+               w: (box.max.x - box.min.x) * 1.45 + 0.35, d: (box.max.z - box.min.z) * 1.45 + 0.35 });
+    });
+    /* wall bases: use the fading edge of the soft rectangle */
+    var E = [0.30, 0.03];
+    q.push({ x: -11.6, z: 0, w: 0.8, d: 30, u: E, v: [0.5, 0.5] });
+    q.push({ x: 11.6, z: 0, w: 0.8, d: 30, u: [E[1], E[0]], v: [0.5, 0.5] });
+    q.push({ x: 0, z: -14.6, w: 24, d: 0.8, u: [0.5, 0.5], v: [E[1], E[0]] });
+    [-6.65, 6.65].forEach(function (x) { q.push({ x: x, z: 14.6, w: 10.7, d: 0.8, u: [0.5, 0.5], v: [E[0], E[1]] }); });
+    var sh = new THREE.MeshBasicMaterial({ color: '#000000', map: texOf(SHADOW_C), transparent: true, opacity: 0.62, depthWrite: false,
+                                           polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    addMesh(quadGeo(q, 0.003), sh, 'look-shadow', 1);
+    /* light pools under the three ceiling strips */
+    var pool = new THREE.MeshBasicMaterial({ color: '#cfe0ff', map: texOf(POOL_C), transparent: true, opacity: 0.10, depthWrite: false,
+                                             blending: THREE.AdditiveBlending, toneMapped: false });
+    var pq = [-4.6, 0, 4.6].map(function (x) { return { x: x, z: 0, w: 3.4, d: 26 }; });
+    addMesh(quadGeo(pq, 0.02), pool, 'look-pool lights-rig', 2);
+  }
+
   function run () {
     var ready = MODELS ? (lights(), models()) : Promise.resolve();
+    if (LOOK && LK.indexOf('scene') > -1) { lookScene(); }
     power();
     airflowBatch();
-    mergeWhenTextured(0);
+    /* merge + restyle only once the models have hidden the shapes they replace */
+    ready.then(function () { mergeWhenTextured(0); }, function () { mergeWhenTextured(0); });
     /* after the rack heat panels got their model-mode opacity */
     ready.then(function () { setTimeout(function () { batchStatus(0); }, 300); },
                function () { batchStatus(0); });

@@ -59,6 +59,14 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Glowing power path removed. Replaced by a plain grey overhead busway per row with 8 drops to rack tops, fed from the UPS pair. Drills still show power failures on the UPS/ATS/generator lights and HUD.
 - Airflow particles are now arrows that point along their direction of travel (cold aisle -> racks -> hot aisle -> CRAC).
 
+## Build 20 (24 Oct 2026) - chapter 1 lighting and colour (VR)
+- Stray green LED strips in front of the racks removed.
+- Big surfaces are now lit instead of flat colour: light-grey 600 mm raised floor and perforated tiles, light wall panels, lighter ceiling grid, real-size tiling.
+- Neutral tone mapping and balanced ambient + sky + key + fill light, reusing the existing lights (no extra lights, no reflection map: it doubled the drawing cost).
+- Soft contact shadows under racks, CRACs, UPS, ATS, generator and along wall bases; faint light pools under the ceiling strips (one draw call each).
+- Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
+- `?look=0` shows the build 19 look for comparison.
+
 ## 3D model credits (Creative Commons Attribution 4.0)
 - `assets/industrial_switchgear.glb`: "Industrial Switchgear" by MADMOVIESINC (https://sketchfab.com/MADMOVIESINC), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/industrial-switchgear-9ad62dc3bd694bf880be78e43530008e. Changes: texture downscaled to 1024 px. Scaled and positioned in the scene.
 - `assets/kipor_kde_7000_sta_generator.glb`: "Kipor KDE 7000 STA generator" by Yevgen Avramenko (https://sketchfab.com/naprimerjenya), licensed CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/). Source: https://sketchfab.com/3d-models/kipor-kde-7000-sta-generator-0a5f7001925744c4b335f16212c1c606. Changes: materials converted from spec/gloss to metal/roughness. Scaled and positioned in the scene.
