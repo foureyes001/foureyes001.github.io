@@ -398,7 +398,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 17</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 18</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -436,7 +436,7 @@ window.doorGo = function (href) {
 <a-scene
   background="color: #10151c"
   fog="type: linear; color: #10151c; near: 14; far: 40"
-  renderer="antialias: true; colorManagement: true"
+  renderer="antialias: true; colorManagement: true; multiviewStereo: true"
   xr-mode-ui="XRMode: xr"
   quest-ar="hide: #room; env: false"
   ar-model="mode: custom; tap: false"
@@ -576,7 +576,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 17\n' +
+    'build 18\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +

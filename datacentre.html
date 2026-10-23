@@ -555,9 +555,9 @@ document.addEventListener('DOMContentLoaded', function () {
 <a-scene id="scene"
          background="color: #10151c"
          fog="type: linear; color: #10151c; near: 12; far: 44"
-         renderer="colorManagement: true; antialias: true"
+         renderer="colorManagement: true; antialias: true; multiviewStereo: true"
          xr-mode-ui="enabled: true; XRMode: xr"
-  quest-ar="hide: .hall-wall, .hall-ceiling, .ceil-beam, .sprinkler, #lights-rig"
+  quest-ar="hide: .hall-wall, .hall-ceiling, .ceil-beam, .sprinkler, #lights-rig, .lights-rig"
   ar-model="mode: model; root: #world; scale: 0.045"
          loading-screen="enabled: false"
          cursor="rayOrigin: mouse; fuse: false"
@@ -3217,7 +3217,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 17</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 18</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3232,6 +3232,167 @@ function canvasPainter(w, h) {
     if (DC.tourOn && DC.tourEnd) { DC.tourEnd(); }
   });
   sc.addEventListener('exit-vr', function () { DC.arOn = false; });
+})();
+</script>
+<script>
+/* build 18: REAL MODELS + DRAW-CALL REDUCTION (models are CC-BY, credits in README).
+   The hall's simple shapes stay as invisible click targets and every LED,
+   beacon, alarm ring and label is kept, so drills, clicks and the tour behave
+   exactly as before. Add ?models=0 for the old flat look (Quest 2 fallback). */
+(function () {
+  var sc = document.querySelector('a-scene');
+  if (!sc || !window.DC || !window.XRQ) { return; }
+  var MODELS = !/[?&]models=0/.test(location.search);
+  var world = document.getElementById('world');
+  window.DC_PERF = { models: MODELS };
+  function hide (el) { if (el && el.object3D) { el.object3D.visible = false; } }
+  function noDraw (el) { if (el) { el.setAttribute('material', 'visible', false); } }
+  function each (list, fn) { Array.prototype.forEach.call(list, fn); }
+
+  function lights () {
+    /* real (PBR) materials need light; the old flat-shaded shapes ignore it */
+    var h = document.createElement('a-entity');
+    h.setAttribute('light', 'type: hemisphere; color: #e8f1ff; groundColor: #3a4048; intensity: 1.15');
+    sc.appendChild(h);
+    var d = document.createElement('a-entity');
+    d.setAttribute('light', 'type: directional; color: #ffffff; intensity: 0.9');
+    d.setAttribute('position', '-3 6 12');
+    sc.appendChild(d);
+  }
+
+  function models () {
+    /* 16 racks -> one InstancedMesh per model part (was 2 draw calls per rack) */
+    var pRacks = XRQ.instanceModel('assets/server_v2_console.glb', world, DC.refs.racks,
+      { height: 2.0, width: 0.6, depth: 1.0, yaw: -90, hide: ['Object_2'] }   /* server face = model +x */
+    ).then(function (r) {
+      DC_PERF.rackParts = r.parts;
+      DC.refs.racks.forEach(function (g) {
+        noDraw(g.querySelector('[data-unit]'));
+        each(g.querySelectorAll('a-plane:not(.rack-rear), .rack-handle'), hide);
+        var rear = g.querySelector('.rack-rear');          /* kept as the hot-side heat glow */
+        if (rear) { rear.setAttribute('material', { transparent: true, opacity: 0.4 }); }
+      });
+    }).catch(function (e) { console.warn('racks: keeping simple shapes', e && e.message); });
+
+    /* 3 CRACs: Vertiv Liebert PEX precision cooling, real proportions */
+    var cracs = [1, 2, 3].map(function (n) { return document.getElementById('crac' + n); }).filter(Boolean);
+    var pCracs = XRQ.instanceModel('assets/liebert_pex_p2070ua.glb', world, cracs, { height: 2.2, yaw: 90 })
+    .then(function (r) {
+      DC_PERF.cracParts = r.parts;
+      var front = r.size.x / 2 + 0.02;                     /* status parts move onto the new front */
+      cracs.forEach(function (g) {
+        noDraw(g.querySelector('[data-unit]'));
+        each(g.querySelectorAll('a-box[position="0 2.32 0"], .crac-face, a-cylinder[position="0.44 1.44 0"]'), hide);
+        ['.crac-louvre', '.crac-beacon', '.crac-fan'].forEach(function (sel) {
+          var el = g.querySelector(sel);
+          if (el) { el.object3D.position.x = front + (sel === '.crac-louvre' ? 0 : 0.03); }
+        });
+      });
+    }).catch(function (e) { console.warn('cracs: keeping simple shapes', e && e.message); });
+    return Promise.all([pRacks, pCracs]);
+  }
+
+  /* Status LEDs + hot-side heat panels: hall-state writes only `.m.color` on
+     them every frame. Each gets a colour stand-in and one InstancedMesh per
+     shape draws them all (64 draw calls -> 3). */
+  function batchColour (entries) {
+    var groups = {}, M = new THREE.Matrix4();
+    world.object3D.updateMatrixWorld(true);
+    var inv = new THREE.Matrix4().copy(world.object3D.matrixWorld).invert();
+    entries.forEach(function (e) {
+      var mesh = e.el && e.el.getObject3D('mesh');
+      if (!mesh || !e.m || !e.m.color) { return; }
+      var g = groups[mesh.geometry.uuid] || (groups[mesh.geometry.uuid] = { geo: mesh.geometry, mat: mesh.material, list: [] });
+      g.list.push({ e: e, mesh: mesh });
+    });
+    var syncs = [];
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k], mat = g.mat.clone();
+      mat.color = new THREE.Color(1, 1, 1);
+      var im = new THREE.InstancedMesh(g.geo, mat, g.list.length);
+      g.list.forEach(function (x, i) {
+        x.mesh.updateMatrixWorld(true);
+        im.setMatrixAt(i, M.multiplyMatrices(inv, x.mesh.matrixWorld));
+        x.e.m = { color: x.e.m.color.clone() };               /* hall-state now colours this */
+        im.setColorAt(i, x.e.m.color);
+        x.mesh.visible = false;
+      });
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      world.object3D.add(im);
+      syncs.push(function () {
+        for (var i = 0; i < g.list.length; i++) { im.setColorAt(i, g.list[i].e.m.color); }
+        im.instanceColor.needsUpdate = true;
+      });
+    });
+    return function () { for (var i = 0; i < syncs.length; i++) { syncs[i](); } };
+  }
+  function batchStatus (tries) {
+    var hallEl = document.getElementById('hall');
+    var hs = hallEl && hallEl.components && hallEl.components['hall-state'];
+    if (!hs || !hs.collected) { if (tries < 60) { setTimeout(function () { batchStatus(tries + 1); }, 100); } return; }
+    var syncLeds = batchColour(hs.leds);
+    var syncRear = batchColour(DC.refs.rear);
+    var orig = hs.tick;
+    hs.tick = function (t, dt) { orig.call(hs, t, dt); syncLeds(); syncRear(); };
+    DC_PERF.statusBatched = hs.leds.length + DC.refs.rear.length;
+  }
+
+  /* 48 airflow particles -> one InstancedMesh. The particle logic is untouched:
+     each particle now moves an invisible proxy, and the batch copies it. */
+  function airflowBatch () {
+    var host = document.getElementById('airflow');
+    var af = host && host.components && host.components.airflow;
+    if (!af || !af.particles || !af.particles.length) { return; }
+    var n = af.particles.length;
+    var im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.042, 8, 6),
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.8 }), n);
+    im.frustumCulled = false;                              /* particles roam the whole hall */
+    af.particles.forEach(function (p) {
+      if (p.el && p.el.parentNode) { p.el.parentNode.removeChild(p.el); }
+      p.el = null;
+      p.obj = new THREE.Object3D();
+      p.m = { color: new THREE.Color('#22d3ee') };
+    });
+    host.object3D.add(im);
+    var orig = af.tick;
+    af.tick = function (t, dt) {
+      orig.call(af, t, dt);
+      if (!host.object3D.visible) { return; }
+      for (var i = 0; i < n; i++) {
+        var p = af.particles[i];
+        p.obj.updateMatrix();
+        im.setMatrixAt(i, p.obj.matrix);
+        im.setColorAt(i, p.m.color);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) { im.instanceColor.needsUpdate = true; }
+    };
+    DC_PERF.airflow = n;
+  }
+
+  /* static shapes merged per material, after the painted textures are on */
+  function mergeWhenTextured (tries) {
+    var floor = document.querySelector('.hall-floor');
+    var m = floor && floor.getObject3D('mesh') && floor.getObject3D('mesh').material;
+    if (!(m && m.map) && tries < 40) { setTimeout(function () { mergeWhenTextured(tries + 1); }, 100); return; }
+    DC_PERF.merged = XRQ.mergeStatic(world, [
+      { el: '#shell', keepClass: ['hall-wall', 'hall-ceiling', 'ceil-beam', 'sprinkler', 'hall-floor'] },
+      { el: '#tiles' }, { el: '#trays' }, { el: '#lights-rig', addClass: 'lights-rig' },
+      { el: '#floor-markings', skip: '#hotzone-w, #hotzone-e' }
+    ]);
+    DC_PERF.ready = true;
+  }
+
+  function run () {
+    var ready = MODELS ? (lights(), models()) : Promise.resolve();
+    airflowBatch();
+    mergeWhenTextured(0);
+    /* after the rack heat panels got their model-mode opacity */
+    ready.then(function () { setTimeout(function () { batchStatus(0); }, 300); },
+               function () { batchStatus(0); });
+  }
+  if (sc.hasLoaded) { run(); } else { sc.addEventListener('loaded', run); }
 })();
 </script>
 </body>

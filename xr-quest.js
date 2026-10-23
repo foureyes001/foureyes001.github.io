@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 17).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 18).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 17';
+  var BUILD = 'build 18';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -585,5 +585,178 @@
     }
     put();
     setTimeout(put, 500);
+  };
+
+  /* ---------- build 18: model-fit - realistic glTF props, loaded once -------
+     <a-entity model-fit="src: assets/x.glb; height: 2; width: 0.6; depth: 1;
+                          yaw: 90; hide: Object_2">
+     - every entity with the same src shares ONE download and ONE copy of the
+       geometry/materials (scene.clone), so 16 racks cost what 1 rack costs
+     - sized to `height` (uniform) or to an exact width x height x depth box
+       (width/depth > 0 stretch those axes), base on y = 0, centred on x/z
+     - `yaw` turns the model before fitting, `hide` lists node names to drop */
+  var MODEL_CACHE = {};
+  function loadShared (src) {
+    if (!MODEL_CACHE[src]) {
+      MODEL_CACHE[src] = new Promise(function (resolve, reject) {
+        new THREE.GLTFLoader().load(src, resolve, undefined, reject);
+      });
+    }
+    return MODEL_CACHE[src];
+  }
+  XRQ.loadModel = loadShared;
+  AFRAME.registerComponent('model-fit', {
+    schema: {
+      src: { type: 'string' },
+      height: { default: 0 }, width: { default: 0 }, depth: { default: 0 },
+      yaw: { default: 0 },
+      hide: { type: 'array', default: [] }
+    },
+    init: function () {
+      var self = this, d = this.data;
+      loadShared(d.src).then(function (gltf) {
+        if (!self.el.parentNode) { return; }
+        var inner = gltf.scene.clone(true);
+        d.hide.forEach(function (name) {
+          var n = name && inner.getObjectByName(name);
+          if (n) { n.visible = false; n.parent.remove(n); }
+        });
+        inner.rotation.y = d.yaw * Math.PI / 180;
+        var turn = new THREE.Group(); turn.add(inner); turn.updateMatrixWorld(true);
+        var box = new THREE.Box3().setFromObject(turn), size = new THREE.Vector3(), c = new THREE.Vector3();
+        box.getSize(size); box.getCenter(c);
+        var k = d.height > 0 ? d.height / size.y : 1;
+        var sx = d.width > 0 ? d.width / size.x : k, sz = d.depth > 0 ? d.depth / size.z : k;
+        var fit = new THREE.Group();
+        fit.add(turn);
+        turn.position.set(-c.x, -box.min.y, -c.z);
+        fit.scale.set(sx, k, sz);
+        self.el.setObject3D('mesh', fit);
+        self.size = new THREE.Vector3(size.x * sx, size.y * k, size.z * sz);
+        self.el.emit('model-fit-loaded', { size: self.size });
+      }).catch(function (e) {
+        console.warn('model-fit: could not load ' + d.src + ' - keeping the simple shapes', e && e.message);
+        self.el.emit('model-fit-error', { src: d.src });
+      });
+    },
+    remove: function () { this.el.removeObject3D('mesh'); }
+  });
+
+  /* ---------- build 18: draw-call reduction (Quest 2: Meta suggests ~200-300) --
+     XRQ.instanceModel(src, rootEl, targets, opts) -> Promise
+       One glTF placed at many entities (e.g. 16 racks) becomes ONE InstancedMesh
+       per model part. Matrices are stored relative to rootEl (#world), so the AR
+       table-top model still moves and scales everything together.
+     XRQ.mergeStatic(rootEl, groups) -> number of meshes merged
+       Shapes that never change after load are merged per material. Each merged
+       mesh lives on a new entity that copies the source's class (hall-wall,
+       hall-ceiling...), so AR mode's `hide` selectors still find it. */
+  function fitGroup (gltf, d) {
+    var inner = gltf.scene.clone(true);
+    (d.hide || []).forEach(function (name) {
+      var n = name && inner.getObjectByName(name);
+      if (n && n.parent) { n.parent.remove(n); }
+    });
+    inner.rotation.y = (d.yaw || 0) * Math.PI / 180;
+    var turn = new THREE.Group(); turn.add(inner); turn.updateMatrixWorld(true);
+    var box = new THREE.Box3().setFromObject(turn), size = new THREE.Vector3(), c = new THREE.Vector3();
+    box.getSize(size); box.getCenter(c);
+    var k = d.height > 0 ? d.height / size.y : 1;
+    var fit = new THREE.Group(); fit.add(turn);
+    turn.position.set(-c.x, -box.min.y, -c.z);
+    fit.scale.set(d.width > 0 ? d.width / size.x : k, k, d.depth > 0 ? d.depth / size.z : k);
+    fit.updateMatrixWorld(true);
+    return { group: fit, size: new THREE.Vector3(size.x * fit.scale.x, size.y * k, size.z * fit.scale.z) };
+  }
+  XRQ.instanceModel = function (src, rootEl, targets, opts) {
+    return loadShared(src).then(function (gltf) {
+      var f = fitGroup(gltf, opts || {}), root = rootEl.object3D;
+      root.updateMatrixWorld(true);
+      var inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+      var rel = targets.map(function (t) {
+        t.object3D.updateMatrixWorld(true);
+        return new THREE.Matrix4().multiplyMatrices(inv, t.object3D.matrixWorld);
+      });
+      var holder = new THREE.Group(); holder.name = 'xrq-instances:' + src;
+      var m = new THREE.Matrix4(), parts = 0;
+      f.group.traverse(function (o) {
+        if (!o.isMesh) { return; }
+        var im = new THREE.InstancedMesh(o.geometry, o.material, rel.length);
+        rel.forEach(function (r, i) { im.setMatrixAt(i, m.multiplyMatrices(r, o.matrixWorld)); });
+        im.instanceMatrix.needsUpdate = true;
+        im.computeBoundingBox(); im.computeBoundingSphere();
+        holder.add(im); parts++;
+      });
+      root.add(holder);
+      return { size: f.size, parts: parts, holder: holder };
+    });
+  };
+
+  var IMG_IDS = new WeakMap(), imgSeq = 0;
+  function texKey (t) {
+    if (!t) { return ''; }
+    var img = t.image || (t.source && t.source.data);
+    if (img && typeof img === 'object') {                 /* same picture = same texture, even if A-Frame made copies */
+      if (!IMG_IDS.has(img)) { IMG_IDS.set(img, ++imgSeq); }
+      return 'img' + IMG_IDS.get(img) + '@' + t.repeat.x + ',' + t.repeat.y + ',' + t.offset.x + ',' + t.offset.y + ',' + t.wrapS + t.wrapT;
+    }
+    return t.uuid;
+  }
+  function matKey (m) {
+    var k = [m.type, m.color ? m.color.getHexString() : '', texKey(m.map),
+             m.transparent ? 1 : 0, (+m.opacity).toFixed(3), m.side, m.depthWrite ? 1 : 0];
+    if (m.emissive) { k.push(m.emissive.getHexString(), (+m.emissiveIntensity).toFixed(2)); }
+    if (m.roughness !== undefined) { k.push(m.roughness, m.metalness); }
+    return k.join('|');
+  }
+  XRQ.mergeStatic = function (rootEl, groups) {
+    var root = rootEl.object3D, merged = 0;
+    var BGU = THREE.BufferGeometryUtils;
+    if (!BGU || !BGU.mergeGeometries) { return 0; }
+    root.updateMatrixWorld(true);
+    var inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+    groups.forEach(function (g) {
+      var src = typeof g.el === 'string' ? document.querySelector(g.el) : g.el;
+      if (!src) { return; }
+      var skip = g.skip ? Array.prototype.slice.call(src.querySelectorAll(g.skip)) : [];
+      var buckets = {};
+      src.object3D.traverse(function (o) {
+        if (!o.isMesh || o.isInstancedMesh || !o.geometry || !o.material || Array.isArray(o.material)) { return; }
+        var el = o.el;
+        if (!el || el.tagName === 'A-TEXT' || (el.components && el.components.text)) { return; }
+        if (o.material.visible === false) { return; }
+        for (var p = o; p; p = p.parent) { if (!p.visible) { return; } }
+        for (var e = el; e && e !== src.parentEl; e = e.parentEl) { if (skip.indexOf(e) !== -1) { return; } }
+        var cls = (g.keepClass || []).filter(function (c) {
+          for (var e2 = el; e2 && e2 !== src.parentEl; e2 = e2.parentEl) { if (e2.classList && e2.classList.contains(c)) { return true; } }
+          return false;
+        })[0] || '';
+        var key = cls + '#' + matKey(o.material);
+        (buckets[key] = buckets[key] || { cls: cls, mat: o.material, meshes: [] }).meshes.push(o);
+      });
+      Object.keys(buckets).forEach(function (key) {
+        var b = buckets[key];
+        if (b.meshes.length < 2) { return; }
+        var geoms = b.meshes.map(function (o) {
+          var gm = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+          ['position', 'normal', 'uv'].forEach(function (a) { if (!gm.attributes[a]) { gm.deleteAttribute && gm.deleteAttribute(a); } });
+          Object.keys(gm.attributes).forEach(function (a) { if (['position', 'normal', 'uv'].indexOf(a) === -1) { gm.deleteAttribute(a); } });
+          gm.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+          return gm;
+        });
+        var hasUV = geoms.every(function (gm) { return gm.attributes.uv; });
+        var hasN = geoms.every(function (gm) { return gm.attributes.normal; });
+        geoms.forEach(function (gm) { if (!hasUV) { gm.deleteAttribute('uv'); } if (!hasN) { gm.deleteAttribute('normal'); } });
+        var one = BGU.mergeGeometries(geoms, false);
+        if (!one) { return; }
+        var holder = document.createElement('a-entity');
+        holder.setAttribute('class', ('merged-static ' + b.cls + ' ' + (g.addClass || '')).trim());
+        rootEl.appendChild(holder);
+        holder.setObject3D('mesh', new THREE.Mesh(one, b.mat));
+        b.meshes.forEach(function (o) { o.visible = false; });
+        merged += b.meshes.length;
+      });
+    });
+    return merged;
   };
 })();
