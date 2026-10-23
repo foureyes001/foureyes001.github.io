@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 14).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 15).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 14';
+  var BUILD = 'build 15';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -442,6 +442,33 @@
         if (len > r) { p.x *= r / len; p.z *= r / len; }
       }
     }
+  });
+
+  /* ---------- build 15: laser hover highlight on every control-wall button ---
+     The laser cursor emits mouseenter/mouseleave; before this, the in-VR
+     buttons never changed, so you could not tell what you were pointing at. */
+  function addHover (btnEl) {
+    if (btnEl.__xrqHover) { return; }
+    var plane = btnEl.querySelector('a-plane');
+    if (!plane) { return; }
+    btnEl.__xrqHover = true;
+    var orig = null;
+    btnEl.addEventListener('mouseenter', function () {
+      var m = plane.getAttribute('material') || {};
+      if (orig === null) { orig = m.color || '#1e2a44'; }
+      plane.setAttribute('material', 'color', '#3b6ea8');
+    });
+    btnEl.addEventListener('mouseleave', function () {
+      if (orig !== null) { plane.setAttribute('material', 'color', orig); }
+    });
+  }
+  function hoverAll () {
+    Array.prototype.forEach.call(document.querySelectorAll('#vrmenu .clickable'), addHover);
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    var sc = document.querySelector('a-scene');
+    if (!sc) { return; }
+    if (sc.hasLoaded) { hoverAll(); } else { sc.addEventListener('loaded', hoverAll); }
   });
 
   /* ---------- AR environment ---------------------------------------------- */

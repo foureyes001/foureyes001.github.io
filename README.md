@@ -37,3 +37,6 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 
 ## Build 14 (23 Oct 2026)
 - Keyboard shortcuts (1-5 teleport in ch1, WASD/arrows, H) are ignored while you type in a text field - e.g. the Immersive Web Emulator's Rot/Pos boxes. Before, typing "-15" there teleported you to stops 1 and 5 and the digits never appeared.
+
+## Build 15 (23 Oct 2026)
+- In-VR control-wall buttons (all chapters) light up blue while the controller laser is on them, so you can see what a trigger pull will hit.
