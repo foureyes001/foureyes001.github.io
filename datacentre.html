@@ -3518,15 +3518,26 @@ function canvasPainter(w, h) {
   })();
 
   var MAT = {};
+  /* build 21: photo textures (CC0, assets/tex/). The hand-painted canvas stays
+     as an instant placeholder and is swapped in place when the photo arrives,
+     so nothing waits on the network and the shader never changes. */
+  var PHOTO = !/[?&]photo=0/.test(location.search);
+  function photo (tex, url) {
+    if (!PHOTO) { return tex; }
+    new THREE.ImageLoader().load(url, function (img) { tex.dispose(); tex.image = img; tex.needsUpdate = true; });  /* new size: re-allocate */
+    return tex;
+  }
   function looks () {
     if (MAT.floor) { return MAT; }
-    MAT.floor = new THREE.MeshLambertMaterial({ map: texOf(paintFloor(), true) });
-    MAT.perf = new THREE.MeshLambertMaterial({ map: texOf(paintPerf()) });
-    MAT.wall = new THREE.MeshLambertMaterial({ map: texOf(paintWall(), true) });
-    MAT.ceil = new THREE.MeshLambertMaterial({ map: texOf(paintCeil(), true) });
-    MAT.beam = new THREE.MeshLambertMaterial({ color: '#3b4047' });
+    var steel = photo(texOf(canvas(4, 4), true), 'assets/tex/brushed_steel.jpg');
+    MAT.floor = new THREE.MeshLambertMaterial({ map: photo(texOf(paintFloor(), true), 'assets/tex/floor_tiles.jpg') });
+    MAT.perf = new THREE.MeshLambertMaterial({ map: photo(texOf(paintPerf()), 'assets/tex/perf_tiles.jpg') });
+    MAT.wall = new THREE.MeshLambertMaterial({ map: photo(texOf(paintWall(), true), 'assets/tex/wall_panels.jpg') });
+    MAT.ceil = new THREE.MeshLambertMaterial({ map: photo(texOf(paintCeil(), true), 'assets/tex/ceiling_tiles.jpg') });
+    MAT.beam = new THREE.MeshLambertMaterial({ color: '#6b7178', map: steel });
     MAT.plinth = new THREE.MeshLambertMaterial({ color: '#4b5056' });
-    MAT.tray = new THREE.MeshLambertMaterial({ color: '#8f969d' });
+    MAT.tray = new THREE.MeshLambertMaterial({ color: '#c3c8cd', map: steel });
+    MAT.duct = new THREE.MeshLambertMaterial({ color: '#b3b8be', map: steel });
     MAT.fixture = new THREE.MeshLambertMaterial({ color: '#c9ced4' });
     MAT.emit = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
     MAT.cable = ['#2f5f8f', '#2a2d31', '#b8962e'].map(function (c) { return new THREE.MeshLambertMaterial({ color: c }); });
@@ -3564,7 +3575,7 @@ function canvasPainter(w, h) {
     var M = looks();
     setMat('.hall-floor', M.floor); setMat('.hall-wall', M.wall); setMat('.hall-ceiling', M.ceil);
     setMat('.ceil-beam', M.beam); setMat('.perf-tile', M.perf);
-    each(document.querySelectorAll('#racks > a-box'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.plinth; } });
+    each(document.querySelectorAll('#racks > a-box'), function (el) { hide(el); });   /* racks stand on the tiled floor */
     each(document.querySelectorAll('#lights-rig a-box'), function (el) {
       var o = el.getObject3D('mesh'); if (!o) { return; }
       o.material = o.material.transparent ? M.emit : M.fixture;
@@ -3597,6 +3608,7 @@ function canvasPainter(w, h) {
       o.material = m2; lit.n = (lit.n || 0) + 1;
     });
     DC_PERF.litShapes = lit.n || 0;
+    each(document.querySelectorAll('#cooling > a-box'), function (el) { var o = el.getObject3D('mesh'); if (o) { o.material = M.duct; } });
   }
   /* world-space UVs so tiles and panels keep their real size after merging */
   function worldUV (mesh, su, sv, wall) {
@@ -3635,7 +3647,7 @@ function canvasPainter(w, h) {
   /* after merging: real-size UVs, contact shadows, light pools */
   function afterMerge () {
     each(document.querySelectorAll('.merged-static.hall-floor'), function (h) { worldUV(h.getObject3D('mesh'), 2.4, 2.4); });
-    each(document.querySelectorAll('.merged-static.hall-ceiling'), function (h) { worldUV(h.getObject3D('mesh'), 2.4, 2.4); });
+    each(document.querySelectorAll('.merged-static.hall-ceiling'), function (h) { worldUV(h.getObject3D('mesh'), PHOTO ? 3.85 : 2.4, PHOTO ? 3.85 : 2.4); });
     each(document.querySelectorAll('.merged-static.hall-wall'), function (h) { worldUV(h.getObject3D('mesh'), 3.0, 4.6, true); });
     /* contact shadows under every floor-standing unit + along the wall bases */
     var q = [], box = new THREE.Box3(), b2 = new THREE.Box3(), inv = new THREE.Matrix4().copy(world.object3D.matrixWorld).invert();
