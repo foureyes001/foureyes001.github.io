@@ -44,3 +44,7 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 ## Build 16 (23 Oct 2026) - controller laser fixed
 - **The controller laser could not click any in-VR button.** A-Frame 1.7.1's raycaster only tests the shapes that belong directly to a `.clickable` element; every control-wall button, AR-panel button and door is an empty `.clickable` group whose plane/box/text are child entities, so the laser passed straight through (no highlight, no click; on ch2 it hit the board behind). `xr-quest.js` now makes the raycaster test each clickable's whole subtree, and ignores hidden objects (three.js raycasting does not check `.visible`).
 - Verified with A-Frame's own raycaster + cursor (not a stand-in): leave VR, fail CRAC, ch2 and ch3 control walls, AR panel SIZE + all highlight and click; hidden panels are not hit; ch1 rack clicks unchanged.
+
+## Build 17 (23 Oct 2026)
+- AR panel and lobby cards: labels use a fixed letter size and wrap inside their button, instead of spilling into neighbouring buttons. The chapter you are in is greyed out.
+- `vendor/Roboto-msdf.json` + `.png` added (from A-Frame's official `aframevr/assets` repo), so 3D text no longer needs cdn.aframe.io (no more 404s; works offline).

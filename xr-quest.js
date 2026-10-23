@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 16).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 17).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 16';
+  var BUILD = 'build 17';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -194,14 +194,19 @@
   };
 
   /* ---------- small 3D UI kit (ASCII-only text) --------------------------- */
-  function btn (parent, label, x, y, w, h, color, onClick) {
+  /* build 17: fixed letter width `cw` (metres per character). The text block is
+     exactly as wide as the button minus a margin, so a long label wraps onto a
+     second line instead of spilling into its neighbours. */
+  function btn (parent, label, x, y, w, h, color, onClick, cw) {
+    cw = cw || 0.016;
+    var wrap = Math.max(4, Math.floor((w * 0.9) / cw));
     var e = document.createElement('a-entity');
     e.setAttribute('class', 'clickable');
     e.setAttribute('position', x + ' ' + y + ' 0.01');
     e.innerHTML =
       '<a-plane width="' + w + '" height="' + h + '" material="color: ' + color + '; shader: flat"></a-plane>' +
-      '<a-text value="' + label + '" align="center" color="#e2e8f0" width="' + (w * 2.6).toFixed(2) +
-      '" wrap-count="' + Math.max(8, Math.round(w * 60)) + '" position="0 0 0.006" material="shader: flat"></a-text>';
+      '<a-text value="' + label + '" align="center" color="#e2e8f0" width="' + (wrap * cw).toFixed(3) +
+      '" wrap-count="' + wrap + '" position="0 0 0.006" material="shader: flat"></a-text>';
     e.addEventListener('click', function (ev) { if (ev && ev.stopPropagation) { ev.stopPropagation(); } onClick(); });
     e.addEventListener('mouseenter', function () {
       var p = e.querySelector('a-plane'); if (p) { p.setAttribute('material', 'color', '#2b4a6b'); }
@@ -254,8 +259,8 @@
         label(P, 'CHOOSE A CHAPTER', 0, 0.33, 1.6);
         CHAPTERS.slice(1).forEach(function (c, i) {
           var x = -0.48 + i * 0.48;
-          var card = btn(P, c.title, x, 0.06, 0.44, 0.36, '#1e2a44', function () { XRQ.goChapter(c.href); });
-          label(card, c.sub, 0, -0.12, 0.9, '#94a3b8');
+          var card = btn(P, c.title, x, 0.08, 0.44, 0.36, '#1e2a44', function () { XRQ.goChapter(c.href); }, 0.026);
+          label(card, c.sub, 0, -0.11, 0.5, '#94a3b8');
         });
         btn(P, 'EXIT AR', 0, -0.3, 0.4, 0.1, '#5b1f2a', function () { sc.exitVR(); });
       } else {
@@ -270,7 +275,8 @@
         label(P, 'GO TO', 0, 0.015, 0.9, '#94a3b8');
         CHAPTERS.forEach(function (c, i) {
           var me = c.href === here;
-          btn(P, me ? c.short + ' *' : c.short, -0.36 + i * 0.24, -0.07, 0.225, 0.08,
+          /* the chapter you are in is greyed out instead of marked with text */
+          btn(P, c.short, -0.36 + i * 0.24, -0.07, 0.225, 0.08,
               me ? '#334155' : '#1e2a44', function () { if (!me) { XRQ.goChapter(c.href); } });
         });
         btn(P, 'EXIT AR', 0, -0.18, 0.3, 0.075, '#5b1f2a', function () { sc.exitVR(); });
@@ -314,7 +320,7 @@
         if (self.panel && showPanel) {
           self.panel.object3D.visible = true;
           if (d.mode === 'lobby') { XRQ.faceUser(self.panel, 1.5, 1.3, 0); }
-          else { self.panel.object3D.scale.setScalar(0.85); XRQ.faceUser(self.panel, 1.0, 1.0, 0.8); }
+          else { XRQ.faceUser(self.panel, 1.0, 1.0, 0.85); }
         }
         var vm2 = document.getElementById('vrmenu');
         if (vm2 && d.mode !== 'lobby') { vm2.object3D.visible = true; XRQ.faceUser(vm2, 2.3, 1.7, -0.15); }
