@@ -1,0 +1,3217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#10151c">
+<meta name="description" content="Inside a Data Centre - an interactive WebVR walkthrough of a 20 x 24 m server hall: 16 racks, N+1 cooling and a 2N power path, built with A-Frame primitives only.">
+<title>Inside a Data Centre · Interactive VR Walkthrough</title>
+
+<!-- =====================================================================
+     INSIDE A DATA CENTRE  ·  INTERACTIVE VR WALKTHROUGH
+     A 20 x 24 m server hall: 16 racks, N+1 cooling, 2N power path.
+     Compute, cooling and power explained machine by machine.
+
+     BUILD RULES (LOCKED)
+       · A-Frame 1.7.1 exactly, loaded from the official CDN.
+       · ONE self-contained .html file. All CSS + JS inline. No build step.
+       · NO 3D model files (.glb/.gltf/.obj/.fbx) and NO image textures.
+         Every mesh is an A-Frame primitive (a-box / a-cylinder / a-sphere /
+         a-plane / a-ring / a-text) with solid colours.
+       · Shadows disabled everywhere. One ambient + one directional light.
+       · Works on desktop (mouse drag look) and mobile magic-window / 3-DoF
+         (touch drag look). No keyboard required.
+     ===================================================================== -->
+
+<script src="vendor/aframe.min.js"></script>
+<script src="xr-quest.js"></script>
+<script>
+/* 3D text font. A-Frame fetches its default font from cdn.aframe.io, so all
+   a-text vanishes offline or on networks that block it. Prefer the bundled copy
+   in vendor/ when served over http(s); fall back to the CDN if it is missing. */
+(function () {
+  if (!window.AFRAME || !AFRAME.components.text) { return; }
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') { return; }
+  var LOCAL = 'vendor/Roboto-msdf.json';
+  var schema = AFRAME.components.text.schema;
+  schema.font.default = LOCAL;
+  function revert () {
+    schema.font.default = 'roboto';
+    document.querySelectorAll('[text], a-text').forEach(function (el) {
+      var t = el.getAttribute('text');
+      if (t && t.font === LOCAL) { el.setAttribute('text', 'font', 'roboto'); }
+    });
+  }
+  fetch(LOCAL, { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+    if (!r.ok) { throw new Error(String(r.status)); }
+  }).catch(function () {
+    window.__fontFallback = true;
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', revert); } else { revert(); }
+    var sc = document.querySelector('a-scene');
+    if (sc) { sc.addEventListener('loaded', revert); }
+    setTimeout(revert, 1500);
+  });
+})();
+</script>
+
+<style>
+  /* ------------------------------------------------------------------
+     Shared visual system (hexes, fog, lights, font stack)
+     ------------------------------------------------------------------ */
+  :root{
+    --bg:#10151c;        /* background / fog      */
+    --floor:#131a2e;     /* floor / panel surface */
+    --accent:#22d3ee;    /* cyan  - interactive   */
+    --ok:#34d399;        /* green - healthy       */
+    --warn:#fbbf24;      /* amber - degraded      */
+    --danger:#f87171;    /* red   - failure       */
+    --metal:#3a3f45;     /* slate - equipment     */
+    --metal-2:#565b60;   /* slate light           */
+    --text:#e2e8f0;      /* text                  */
+    --muted:#9aa2a9;
+    --line:rgba(217,165,20,.38);
+    --panel:rgba(23,26,31,.86);
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;padding:0;height:100%;width:100%;
+    background:var(--bg);color:var(--text);
+    font-family:var(--font);
+    overflow:hidden;overscroll-behavior:none;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-text-size-adjust:100%;
+  }
+  a-scene{position:fixed;inset:0;z-index:0}
+
+  /* ------------------------------------------------------------------
+     HUD overlay - all critical information is mirrored here in HTML so
+     the experience still reads correctly if the in-world font atlas
+     cannot be downloaded.
+     ------------------------------------------------------------------ */
+  #hud{position:fixed;inset:0;z-index:10;pointer-events:none}
+  #hud > *{pointer-events:auto}
+  .card{
+    position:absolute;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:12px 14px;
+    box-shadow:0 12px 34px rgba(0,0,0,.5);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  }
+
+  /* --- identity card (top-left) --- */
+  #brand{top:14px;left:14px;max-width:min(370px,46vw)}
+  #brand .eyebrow{
+    margin:0 0 6px;font-size:10px;font-weight:700;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent)
+  }
+  #brand h1{margin:0;font-size:19px;line-height:1.15;font-weight:750;letter-spacing:-.01em}
+  #brand .sub{margin:6px 0 0;font-size:11.5px;line-height:1.45;color:var(--muted)}
+  .legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:10.5px;color:#c7d3e6;
+    background:rgba(51,65,85,.34);
+    border:1px solid rgba(148,163,184,.18);
+    padding:3px 8px;border-radius:999px;white-space:nowrap
+  }
+  .chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+  /* --- live telemetry (top-right) : Module M1.3 read-out --- */
+  #readout{top:14px;right:14px;width:min(272px,44vw)}
+  .rt-title{
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+    font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:#8fa3c4;margin-bottom:8px
+  }
+  .rt-title .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 9px var(--ok)}
+  #readout dl{margin:0}
+  .rt-row{
+    display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+    padding:3.5px 0;border-top:1px solid rgba(148,163,184,.11);font-size:12px
+  }
+  .rt-row:first-of-type{border-top:0}
+  .rt-row dt{color:var(--muted);font-size:11px;letter-spacing:.01em}
+  .rt-row dd{
+    margin:0;text-align:right;font-family:var(--mono);font-size:12px;
+    color:var(--text);font-variant-numeric:tabular-nums;transition:color .3s
+  }
+  dd.hot{color:var(--warn)} dd.crit{color:var(--danger)} dd.good{color:var(--ok)}
+  #t-status{
+    margin-top:10px;padding:7px 8px;border-radius:9px;text-align:center;
+    font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    border:1px solid;transition:color .35s,border-color .35s,background .35s
+  }
+  #t-status.ok{color:var(--ok);border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.10)}
+  #t-status.warn{color:var(--warn);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.10)}
+  #t-status.bad{color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.10)}
+
+  /* --- control dock (bottom-centre) : drives M1.3 + M1.4 --- */
+  #dock{
+    left:50%;transform:translateX(-50%);bottom:16px;
+    display:flex;gap:8px;align-items:stretch;justify-content:center;flex-wrap:wrap;
+    padding:10px;max-width:min(760px,95vw)
+  }
+  .btn{
+    appearance:none;-webkit-appearance:none;
+    display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+    border:1px solid var(--line);
+    background:rgba(19,26,46,.92);color:var(--text);
+    font:600 12.5px/1.25 var(--font);
+    padding:9px 13px;border-radius:11px;cursor:pointer;
+    transition:transform .12s,border-color .2s,background .2s,box-shadow .2s,color .2s;
+    max-width:210px
+  }
+  .btn small{font-size:10px;font-weight:500;color:#8fa3c4;letter-spacing:.01em}
+  .btn:hover:not(:disabled){border-color:var(--accent);background:rgba(34,211,238,.13);box-shadow:0 6px 20px rgba(0,0,0,.45)}
+  .btn:active:not(:disabled){transform:translateY(1px)}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn:disabled{opacity:.42;cursor:not-allowed}
+  .btn[aria-pressed="true"]{border-color:var(--accent);background:rgba(34,211,238,.20);color:#fff}
+  .btn.scn{border-color:rgba(251,191,36,.42)}
+  .btn.scn:hover:not(:disabled){border-color:var(--warn);background:rgba(251,191,36,.14)}
+  .btn.scn[data-busy="true"]{border-color:var(--danger);background:rgba(248,113,113,.18);color:#fff}
+  .btn.scn[data-busy="true"] small{color:#ffd9d9}
+  .btn.ghost{border-color:rgba(148,163,184,.30)}
+
+  /* --- help hint (bottom-left) --- */
+  #hint{
+    left:14px;top:50%;bottom:auto;transform:translateY(-50%);
+    max-width:min(310px,44vw);
+    font-size:11px;line-height:1.55;color:#a9b8d2;
+    border-color:rgba(148,163,184,.22);
+    transition:opacity .6s
+  }
+  #hint b{color:var(--accent);font-weight:650}
+  #hint.faded{opacity:.34}
+  #hint:hover{opacity:1}
+
+  /* --- top-centre stack: 8 s scenario brief + click-a-machine info card --- */
+  #topcards{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    width:min(560px,calc(100vw - 28px));
+    display:flex;flex-direction:column;gap:10px;
+    z-index:12;pointer-events:none
+  }
+  #topcards > *{pointer-events:auto}
+  #topcards [hidden]{display:none}
+  #topcards .card{position:relative}
+  #brief-tag{
+    display:block;margin:0 0 5px;font-size:10px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--warn)
+  }
+  #brief-text{margin:0;font-size:12.5px;line-height:1.55;color:#dbe4f3}
+  #brief-bar{
+    height:3px;margin-top:10px;border-radius:2px;
+    background:rgba(148,163,184,.16);overflow:hidden
+  }
+  #brief-bar i{display:block;height:100%;width:100%;background:var(--warn);transform-origin:0 50%}
+  #brief-bar.run i{animation:briefdrain 8s linear forwards}
+  @keyframes briefdrain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+  #unitcard{border-color:rgba(34,211,238,.40);padding-right:46px}
+  #unit-role{
+    margin:0;font-size:10px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent)
+  }
+  #unit-name{margin:3px 0 6px;font-size:15.5px;font-weight:750;letter-spacing:-.01em;color:#fff}
+  #unit-does{margin:0;font-size:12.5px;line-height:1.55;color:#dbe4f3}
+  #unit-status{
+    display:inline-block;margin:9px 0 0;padding:5px 9px;border-radius:8px;
+    font:700 10.5px/1 var(--mono);letter-spacing:.09em;border:1px solid
+  }
+  #unit-status.ok{color:var(--ok);border-color:rgba(52,211,153,.45);background:rgba(52,211,153,.10)}
+  #unit-status.info{color:var(--accent);border-color:rgba(34,211,238,.45);background:rgba(34,211,238,.10)}
+  #unit-status.warn{color:var(--warn);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.10)}
+  #unit-status.bad{color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.10)}
+  #unit-close{
+    position:absolute;top:9px;right:9px;width:28px;height:28px;border-radius:9px;
+    border:1px solid var(--line);background:rgba(51,65,85,.45);color:var(--text);
+    font:400 17px/1 var(--font);cursor:pointer;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    transition:border-color .2s,color .2s,background .2s
+  }
+  #unit-close:hover{border-color:var(--danger);color:#fff;background:rgba(248,113,113,.18)}
+  #tourcard{border-color:rgba(251,191,36,.45)}
+  #tour-step{color:var(--warn)}
+  .tnav{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+  .tbtn{
+    appearance:none;-webkit-appearance:none;border:1px solid var(--line);
+    background:rgba(19,26,46,.92);color:var(--text);
+    font:600 11.5px/1 var(--font);padding:8px 12px;border-radius:9px;cursor:pointer;
+    transition:border-color .2s,background .2s,color .2s
+  }
+  .tbtn:hover{border-color:var(--accent);background:rgba(34,211,238,.13)}
+  .tbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .tbtn.primary{border-color:rgba(34,211,238,.5);background:rgba(34,211,238,.16);color:#fff}
+  .tbtn.ghost{border-color:rgba(148,163,184,.30)}
+  #unit-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* --- soft vignette: focusses the eye, hides flat fog edges ------------- */
+  #vignette{
+    position:fixed;inset:0;z-index:5;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 42%,
+      rgba(0,0,0,0) 52%, rgba(3,7,16,.40) 86%, rgba(2,5,12,.62) 100%)
+  }
+
+  /* --- centre reticle, highlights on hover --- */
+  #crosshair{
+    position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;
+    border-radius:50%;background:rgba(226,232,240,.55);
+    box-shadow:0 0 0 1px rgba(23,26,31,.65);
+    pointer-events:none;opacity:.5;
+    transition:transform .16s,background .16s,opacity .16s
+  }
+  #crosshair.hot{transform:scale(2.3);background:var(--accent);opacity:1}
+
+  /* --- free locomotion: thumb stick (touch devices only) --- */
+  #stick{
+    position:absolute;left:16px;bottom:16px;width:116px;height:116px;border-radius:50%;
+    background:rgba(23,26,31,.55);border:1px solid var(--line);
+    display:none;touch-action:none;pointer-events:auto;
+    -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)
+  }
+  #stick::after{content:"";position:absolute;inset:34px;border-radius:50%;
+    border:1px dashed rgba(34,211,238,.28)}
+  #stick-knob{
+    position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;
+    border-radius:50%;background:rgba(34,211,238,.85);
+    box-shadow:0 0 16px rgba(34,211,238,.55)
+  }
+  html.coarse.walk-on #stick{display:block}
+  /* (old dock-hug override removed: panels now live in centred tabs) */
+  html.coarse.walk-on .tabpanel{bottom:132px!important}
+  html.coarse.walk-on #stick{bottom:124px}
+  @media (max-width:700px){ html.coarse.walk-on .tabpanel{bottom:250px!important} }
+
+  /* --- boot / loading veil --- */
+  #loader{
+    position:fixed;inset:0;z-index:40;background:var(--bg);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:16px;padding:28px;text-align:center;transition:opacity .7s ease
+  }
+  #loader.done{opacity:0;pointer-events:none}
+  #loader .spin{
+    width:44px;height:44px;border-radius:50%;
+    border:2px solid rgba(34,211,238,.18);border-top-color:var(--accent);
+    animation:rot 1s linear infinite
+  }
+  @keyframes rot{to{transform:rotate(360deg)}}
+  #loader h2{margin:0;font-size:16px;font-weight:700;letter-spacing:.02em}
+  #loader p{margin:0;font-size:12px;color:var(--muted);max-width:44ch;line-height:1.55}
+  #loader .err{color:var(--danger)}
+
+  /* ------------------------------------------------------------------
+     Responsive: phone / magic-window
+     ------------------------------------------------------------------ */
+  @media (max-width:900px){
+    #brand{max-width:52vw;padding:10px 11px}
+    #brand h1{font-size:15px}
+    #brand .legend{display:none}
+    #readout{width:min(186px,38vw);padding:9px 10px}
+    .rt-row{padding:2.5px 0;font-size:11px}
+    .rt-row dd{font-size:11px}
+    #t-status{font-size:9.5px;letter-spacing:.06em}
+    #hint{font-size:10.5px}
+    #dock{bottom:10px;gap:6px;padding:8px;max-width:97vw}
+    .btn{padding:8px 10px;font-size:11.5px;max-width:none}
+    .btn small{display:none}
+    #topcards{top:10px;width:calc(100vw - 20px)}
+    #brief-text,#unit-does{font-size:12px;line-height:1.5}
+    #unit-name{font-size:14px}
+  }
+  /* landscape phones: telemetry wins over the title card */
+  @media (max-height:560px){
+    #brand{display:none}
+    #hint{font-size:10.5px}
+    #readout{top:10px;right:10px;width:min(212px,40vw)}
+    #dock{bottom:8px}
+    #topcards{top:8px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #loader .spin{animation-duration:3s}
+    .btn,#crosshair,#t-status{transition:none}
+    #brief-bar.run i{animation:none}
+  }
+
+  /* ---- tabbed HUD: every feature lives under a self-explanatory tab ---- */
+  #tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:10px;z-index:9;
+    display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:96vw}
+  .tab{font:inherit;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:#e2e8f0;
+    background:rgba(23,26,31,.9);border:1px solid rgba(217,165,20,.45);border-radius:999px;
+    padding:8px 13px;cursor:pointer}
+  .tab.on{background:#d9a514;color:#17191c;border-color:#d9a514}
+  .tabpanel{position:fixed!important;left:50%!important;right:auto!important;top:auto!important;
+    transform:translateX(-50%)!important;box-sizing:border-box;bottom:86px!important;width:min(720px,94vw)!important;max-width:94vw;
+    max-height:46vh;overflow:auto;display:none!important}
+  .tabpanel.open{display:block!important}
+  #tabbar small{display:none}
+  @media (max-width:700px){
+    #brand{max-width:60vw;padding:8px 10px}
+    #brand .sub,#brand .legend{display:none}
+    .tab{font-size:10.5px;padding:7px 10px}
+    #tabbar{display:grid;grid-template-columns:1fr 1fr;gap:5px;left:8px;right:8px;
+      transform:none;bottom:8px;max-width:none}
+    #tabbar .tab{text-align:center}
+    #tabbar #btn-hub{grid-column:1/-1}
+    .tabpanel{bottom:120px!important}
+  }
+</style>
+<link rel="prefetch" href="loadbalancer.html">
+</head>
+
+<body>
+<div id="doorfade"></div>
+<style>
+#doorfade{position:fixed;inset:0;background:#10151c;opacity:0;transition:opacity .16s ease;
+  pointer-events:none;z-index:98}
+#doorfade.on{opacity:1;pointer-events:all}
+#veil{position:fixed;inset:0;background:#10151c;z-index:99;display:flex;align-items:center;
+  justify-content:center;color:#e2e8f0;font:600 13px/1 system-ui,sans-serif;letter-spacing:.08em}
+#veil.gone{display:none}
+</style>
+<script>
+window.doorGo = function (href) {
+  if (window.__dooring) { return; }
+  window.__dooring = true;
+  var f = document.getElementById('doorfade');
+  if (f) { f.classList.add('on'); }
+  var l = document.createElement('link'); l.rel = 'prefetch'; l.href = href;
+  document.head.appendChild(l);
+  var sc = document.querySelector('a-scene');
+  if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
+  setTimeout(function () { location.href = href; }, 170);
+};
+(function () {
+  var v = document.getElementById('veil');
+  if (!v) { return; }
+  var kill = function () { v.classList.add('gone'); };
+  var hook = function () {
+    var sc = document.querySelector('a-scene');
+    if (sc) { sc.addEventListener('loaded', function () { setTimeout(kill, 250); }); }
+  };
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', hook); }
+  else { hook(); }
+  setTimeout(kill, 9000);
+})();
+</script>
+
+
+<div id="vignette" aria-hidden="true"></div>
+
+<!-- ============================ HUD OVERLAY ============================ -->
+<div id="hud">
+  <div id="tabbar" role="tablist" aria-label="HUD sections">
+    <button class="tab" data-tab="drills" id="tab-drills" type="button">FAILURE DRILLS</button>
+    <button class="tab" data-tab="stats" id="tab-stats" type="button">LIVE STATS</button>
+    <button class="tab" data-tab="move" id="tab-move" type="button">MOVE &amp; VIEW</button>
+    <button class="tab" data-tab="help" id="tab-help" type="button">HELP &amp; TOUR</button>
+    <button id="btn-hub" class="tab" type="button" disabled>
+      <span>Chapters</span>
+      <small>All three scenes of this project</small>
+    </button>
+  </div>
+
+  <div id="brand" class="card">
+    <p class="eyebrow">Data centre operations · Live hall tour</p>
+    <h1>Inside a Data Centre</h1>
+    <p class="sub">Where the cloud physically lives · 24 × 30 m hall · 16 racks<br>
+      N+1 cooling · 2N power · every critical system has a standby</p>
+    <div class="legend">
+      <span class="chip"><i style="background:#22d3ee;box-shadow:0 0 8px rgba(34,211,238,.85)"></i>Interactive / live</span>
+      <span class="chip"><i style="background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.85)"></i>Healthy</span>
+      <span class="chip"><i style="background:#fbbf24;box-shadow:0 0 8px rgba(251,191,36,.85)"></i>Degraded</span>
+      <span class="chip"><i style="background:#f87171;box-shadow:0 0 8px rgba(248,113,113,.85)"></i>Failed</span>
+    </div>
+  </div>
+
+  <div id="readout" class="card tabpanel" data-tab="stats" aria-live="polite">
+    <div class="rt-title"><span>Hall telemetry</span><span class="dot" id="t-dot"></span></div>
+    <dl>
+      <div class="rt-row"><dt>Cold aisle</dt><dd id="t-cold">21.5 °C</dd></div>
+      <div class="rt-row"><dt>Hot aisle</dt><dd id="t-hot">33.0 °C</dd></div>
+      <div class="rt-row"><dt>Cooling</dt><dd id="t-cool">2/3 CRAC · N+1</dd></div>
+      <div class="rt-row"><dt>Power path</dt><dd id="t-src">UTILITY · 2N</dd></div>
+      <div class="rt-row"><dt>UPS</dt><dd id="t-ups">34 % · batt 100 %</dd></div>
+      <div class="rt-row"><dt>IT load</dt><dd id="t-load">268 kW · 16 racks</dd></div>
+      <div class="rt-row"><dt>Downtime</dt><dd id="t-down" class="good">0 ms</dd></div>
+    </dl>
+    <div id="t-status" class="ok">System nominal</div>
+  </div>
+
+  <div id="dock" class="card tabpanel" data-tab="drills" role="group" aria-label="Failure drills">
+    <button id="btn-a" class="btn scn" type="button" disabled>
+      <span id="btn-a-label">Scenario A · Fail CRAC-2</span>
+      <small>Cooling N+1: standby unit absorbs the loss</small>
+    </button>
+    <button id="btn-b" class="btn scn" type="button" disabled>
+      <span id="btn-b-label">Scenario B · Fail utility power</span>
+      <small>2N UPS + diesel generator, zero downtime</small>
+    </button>
+    <button id="btn-c" class="btn scn" type="button" disabled>
+      <span id="btn-c-label">Scenario C · Traffic surge</span>
+      <small>Row A heat soak · CRACs ramp · load balances</small>
+    </button>
+    <button id="btn-reset" class="btn ghost" type="button" disabled>
+      <span>Reset hall</span>
+      <small>Restore every system to nominal</small>
+    </button>
+  </div>
+
+  <div id="dock-move" class="card tabpanel" data-tab="move" role="group" aria-label="Move and view">
+    <button id="btn-flow" class="btn" type="button" aria-pressed="true" disabled>
+      <span id="btn-flow-label">Airflow · ON</span>
+      <small>Cold aisle → rack → hot aisle → CRAC</small>
+    </button>
+    <button id="btn-walk" class="btn" type="button" aria-pressed="true" disabled>
+      <span id="btn-walk-label">Walk - ON</span>
+      <small>WASD / arrows or thumb stick</small>
+    </button>
+  </div>
+
+  <div id="hint" class="card tabpanel" data-tab="help">
+    <button id="btn-tour" class="btn" type="button" disabled>
+      <span id="btn-tour-label">Tour · How it works</span>
+      <small>8 guided steps, machines highlighted</small>
+    </button>
+    <b>Drag</b> to look · <b>tap a glowing ring</b> to teleport · <b>tap a cyan sphere</b>
+    for a concept card · <b>click any machine</b> for what it does · <b>walk</b>
+    with WASD / arrows or the thumb stick
+    (<b>Shift</b> = run).<br>
+    Keys: <b>1–5</b> jump · <b>C</b>/<b>P</b>/<b>H</b> scenarios · <b>F</b> airflow ·
+    <b>T</b> tour (<b>N</b> = next step) · <b>AR</b> button = tabletop model ·
+    <b>R</b> reset · <b>Esc</b> close.
+  </div>
+
+  <!-- top-centre stack: scenario brief (auto-hides after 8 s) + machine card -->
+  <div id="topcards">
+    <div id="brief" class="card" role="status" aria-live="polite" hidden>
+      <span id="brief-tag">SCENARIO</span>
+      <p id="brief-text"></p>
+      <div id="brief-bar" aria-hidden="true"><i></i></div>
+    </div>
+    <div id="tourcard" class="card" role="dialog" aria-label="Guided tour" hidden>
+      <p id="tour-step" class="unit-eyebrow">STEP 1 / 8</p>
+      <h2 id="tour-title">The hall</h2>
+      <p id="tour-body"></p>
+      <div class="tnav">
+        <button id="tour-back" class="tbtn" type="button">&#8592; Back</button>
+        <button id="tour-next" class="tbtn primary" type="button">Next &#8594;</button>
+        <button id="tour-exit" class="tbtn ghost" type="button">End tour</button>
+      </div>
+    </div>
+    <div id="unitcard" class="card" role="dialog" aria-label="What this machine does" hidden>
+      <button id="unit-close" type="button" aria-label="Close machine info" title="Close">&#215;</button>
+      <p id="unit-role">MACHINE</p>
+      <h2 id="unit-name">Unit</h2>
+      <p id="unit-does"></p>
+      <span id="unit-status" hidden></span>
+    </div>
+  </div>
+
+  <div id="stick" aria-hidden="true"><div id="stick-knob"></div></div>
+
+  <div id="crosshair"></div>
+
+  <div id="loader">
+    <div class="spin" aria-hidden="true"></div>
+    <h2>Entering Hall A…</h2>
+    <p id="loader-msg">Building 16 server racks, the cooling plant and the 2N power chain from primitives.</p>
+  </div>
+
+</div>
+
+<script>
+window.HUDTAB = {
+  open: function (n) {
+    document.querySelectorAll('.tabpanel').forEach(function (p) {
+      p.classList.toggle('open', p.getAttribute('data-tab') === n);
+    });
+    document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tab') === n);
+    });
+  },
+  closeAll: function () { this.open(null); },
+  toggle: function (n) {
+    var p = document.querySelector('.tabpanel[data-tab="' + n + '"]');
+    if (p && p.classList.contains('open')) { this.closeAll(); } else { this.open(n); }
+  }
+};
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
+    b.addEventListener('click', function () { window.HUDTAB.toggle(b.getAttribute('data-tab')); });
+  });
+});
+</script>
+
+<!-- ============================== A-FRAME SCENE ==============================
+     NOTE ON IN-WORLD TEXT: A-Frame's default MSDF font atlas (Roboto-msdf)
+     contains printable ASCII only (U+0020-U+007E). Every a-text value below is
+     therefore strict ASCII - no middle dots, degree signs or arrows. Those are
+     used freely in the HTML overlay, which renders with system fonts.
+     ======================================================================== -->
+<a-scene id="scene"
+         background="color: #10151c"
+         fog="type: linear; color: #10151c; near: 12; far: 44"
+         renderer="colorManagement: true; antialias: true"
+         xr-mode-ui="enabled: true; XRMode: xr"
+  quest-ar="hide: #shell, #lights-rig"
+         loading-screen="enabled: false"
+         cursor="rayOrigin: mouse; fuse: false"
+         raycaster="objects: .clickable; far: 60; interval: 50"
+         app-root>
+
+  <!-- ---------------- LIGHTING: 1 ambient + 1 directional, NO shadows ------- -->
+  <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.75; castShadow: false"></a-entity>
+  <a-entity light="type: directional; color: #fff4e0; intensity: 0.55; castShadow: false"
+            position="5 12 10"></a-entity>
+
+  <!-- ---------------- CAMERA RIG ---------------------------------------------
+       Locked pattern: #rig is moved for teleportation, the camera's own local
+       transform is never written to (avoids look-controls fighting / jitter). -->
+  <a-entity id="rig" position="0 0 16.4" teleport locomotion rig-bounds thumbstick-locomotion>
+    <a-entity id="cam" camera="fov: 72; near: 0.05; far: 120" position="0 1.6 0"
+              look-controls="pointerLockEnabled: false; magicWindowTrackingEnabled: true;
+                             reverseTouchDrag: true; mouseEnabled: true;
+                             touchEnabled: true"></a-entity>
+    <a-entity id="handR" laser-controls="hand: right" cursor="fuse: false"
+              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+    <a-entity id="handL" laser-controls="hand: left"
+              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+  </a-entity>
+
+  <!-- In-scene control wall: the HTML HUD cannot be seen inside a headset,
+       so every HUD action also exists here as a laser-clickable button. -->
+  <a-entity id="vrmenu" visible="false">
+    <a-plane geometry="width: 2.7; height: 1.35" material="color: #131a2e; shader: flat; opacity: 0.94"></a-plane>
+    <a-text value="HALL CONTROLS" position="0 0.55 0.01" align="center" color="#22d3ee" width="3.4" material="shader: flat"></a-text>
+    <a-entity id="vm-tour" class="clickable" position="-0.86 0.26 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="tour" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-a" class="clickable" position="-0.02 0.26 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="fail CRAC" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-b" class="clickable" position="0.86 0.26 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="fail UPS" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-c" class="clickable" position="-0.86 0.0 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="heat spike" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-flow" class="clickable" position="-0.02 0.0 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="airflow" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-reset" class="clickable" position="0.86 0.0 0.01">
+      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="reset" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-exit" class="clickable" position="0 -0.28 0.01">
+      <a-plane geometry="width: 1.1; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="leave VR" align="center" color="#f87171" width="2.6" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-text id="vm-status" value="" position="0 -0.52 0.01" align="center" color="#9fb0cc" width="4.6" material="shader: flat"></a-text>
+  </a-entity>
+
+  <!-- ============================ ROOM SHELL =================================
+       Hall: 24 m wide (x -12..12) x 30 m deep (z -15..15) x 4.6 m high.
+       A short vestibule (z 15..18) holds waypoint W1 "Entrance".           -->
+  <a-entity id="shell">
+    <!-- structural slab + floor -->
+    <a-box position="0 -0.1 0" width="24.6" height="0.20" depth="30.6"
+           material="color:#22262b; shader: flat; roughness:1; metalness:0; emissive:#22262b; emissiveIntensity:0.30"></a-box>
+    <a-plane class="hall-floor" rotation="-90 0 0" position="0 0.001 0" width="24" height="30"
+             material="color:#363c44; shader: flat; roughness:.95; metalness:.05; emissive:#363c44; emissiveIntensity:0.30"></a-plane>
+    <!-- vestibule -->
+    <a-plane class="hall-floor" rotation="-90 0 0" position="0 0.001 16.5" width="4.6" height="3.2"
+             material="color:#363c44; shader: flat; roughness:.95; metalness:.05; emissive:#363c44; emissiveIntensity:0.30"></a-plane>
+    <a-box class="hall-ceiling" position="0 4.7 16.5" width="4.9" height="0.16" depth="3.4"
+           material="color:#2b3038; shader: flat; roughness:1; emissive:#2b3038; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="-2.35 2 16.5" width="0.3" height="4.6" depth="3.4" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="2.35 2 16.5" width="0.3" height="4.6" depth="3.4" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="0 2 18.15" width="5" height="4.6" depth="0.3" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box position="0 0.02 18" width="2.4" height="0.05" depth="0.12"
+           material="color:#22d3ee; shader:flat; opacity:.5; transparent:true"></a-box>
+
+    <!-- hall walls (south wall carries a 2.6 x 2.7 m doorway) -->
+    <a-box class="hall-wall" position="0 2 -15.15" width="24.4" height="4.6" depth="0.3" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="-12.15 2 0" width="0.3" height="4.6" depth="30.4" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="12.15 2 0" width="0.3" height="4.6" depth="30.4" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="-6.72 2 15.15" width="10.85" height="4.6" depth="0.3" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="6.72 2 15.15" width="10.85" height="4.6" depth="0.3" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <a-box class="hall-wall" position="0 3.35 15.15" width="2.6" height="1.6" depth="0.3" material="color:#5a616b; shader: flat; roughness:.95; emissive:#5a616b; emissiveIntensity:0.30"></a-box>
+    <!-- doorway threshold light -->
+    <a-box position="0 2.72 15.02" width="2.66" height="0.05" depth="0.06"
+           material="color:#22d3ee; shader:flat; opacity:.75; transparent:true"></a-box>
+    <a-box position="0 0.02 15.02" width="2.5" height="0.04" depth="0.1"
+           material="color:#22d3ee; shader:flat; opacity:.45; transparent:true"></a-box>
+
+    <!-- ceiling -->
+    <a-box class="hall-ceiling" position="0 4.7 0" width="24.4" height="0.18" depth="30.4"
+           material="color:#2b3038; shader: flat; roughness:1; metalness:0; emissive:#2b3038; emissiveIntensity:0.30"></a-box>
+    <!-- roof beams + sprinkler mains: break the perfect-box silhouette -->
+    <a-box class="ceil-beam" position="0 4.52 -10" width="24" height="0.16" depth="0.28 material="color:#3d434b; shader: flat; roughness:1; emissive:#3d434b; emissiveIntensity:0.30"></a-box>
+    <a-box class="ceil-beam" position="0 4.52 -5" width="24" height="0.16" depth="0.28 material="color:#3d434b; shader: flat; roughness:1; emissive:#3d434b; emissiveIntensity:0.30"></a-box>
+    <a-box class="ceil-beam" position="0 4.52 0" width="24" height="0.16" depth="0.28 material="color:#3d434b; shader: flat; roughness:1; emissive:#3d434b; emissiveIntensity:0.30"></a-box>
+    <a-box class="ceil-beam" position="0 4.52 5" width="24" height="0.16" depth="0.28 material="color:#3d434b; shader: flat; roughness:1; emissive:#3d434b; emissiveIntensity:0.30"></a-box>
+    <a-box class="ceil-beam" position="0 4.52 10" width="24" height="0.16" depth="0.28 material="color:#3d434b; shader: flat; roughness:1; emissive:#3d434b; emissiveIntensity:0.30"></a-box>
+    <a-cylinder class="sprinkler" position="-4.5 4.4 0" rotation="90 0 0" radius="0.045" height="29.4" segments-radial="6" material="color:#6b1d24; shader: flat; roughness:.7; emissive:#6b1d24; emissiveIntensity:0.30"></a-cylinder>
+    <a-cylinder class="sprinkler" position="4.5 4.4 0" rotation="90 0 0" radius="0.045" height="29.4" segments-radial="6" material="color:#6b1d24; shader: flat; roughness:.7; emissive:#6b1d24; emissiveIntensity:0.30"></a-cylinder>
+    <a-sphere class="sprinkler" position="-4.5 4.3 -10" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="-4.5 4.3 -2.5" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="-4.5 4.3 5" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="-4.5 4.3 12.5" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="4.5 4.3 -10" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="4.5 4.3 -2.5" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="4.5 4.3 5" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <a-sphere class="sprinkler" position="4.5 4.3 12.5" radius="0.055" segments-width="8" segments-height="6" material="color:#8a2b30; shader: flat; roughness:.6; emissive:#8a2b30; emissiveIntensity:0.30"></a-sphere>
+    <!-- wall signage -->
+    <a-text class="sign" value="COLD AISLE" position="-11.96 2.7 2.5" rotation="0 90 0" align="center" width="5.5" color="#22d3ee" opacity="0.85"></a-text>
+    <a-text class="sign" value="COOLING PLANT" position="-11.96 2.7 -6.25" rotation="0 90 0" align="center" width="5.5" color="#8fa3c4" opacity="0.8"></a-text>
+    <a-text class="sign" value="POWER ROOM" position="11.96 2.7 -3.75" rotation="0 -90 0" align="center" width="5.5" color="#8fa3c4" opacity="0.8"></a-text>
+
+    <!-- wall trim lines (scale cues) -->
+    <a-box position="-11.99 4.22 0" width="0.03" height="0.05" depth="29.8" material="color:#454b54; shader: flat; roughness:1; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+    <a-box position="11.99 4.22 0" width="0.03" height="0.05" depth="29.8" material="color:#454b54; shader: flat; roughness:1; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+    <a-box position="-11.99 0.1 0" width="0.03" height="0.05" depth="29.8" material="color:#3a4048; shader: flat; roughness:1; emissive:#3a4048; emissiveIntensity:0.30"></a-box>
+    <a-box position="11.99 0.1 0" width="0.03" height="0.05" depth="29.8" material="color:#3a4048; shader: flat; roughness:1; emissive:#3a4048; emissiveIntensity:0.30"></a-box>
+  </a-entity>
+
+  <!-- ============================ CEILING LIGHTS ============================= -->
+  <a-entity id="lights-rig">
+    <a-entity position="-4.6 0 0">
+      <a-box position="0 4.58 0" width="0.36" height="0.10" depth="26.8" material="color:#454b54; shader: flat; roughness:.9; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-box position="0 4.52 0" width="0.24" height="0.05" depth="26.3"
+             material="color:#eaf6ff; shader:flat; opacity:.88; transparent:true"></a-box>
+    </a-entity>
+    <a-entity position="0 0 0">
+      <a-box position="0 4.58 0" width="0.36" height="0.10" depth="26.8" material="color:#454b54; shader: flat; roughness:.9; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-box position="0 4.52 0" width="0.24" height="0.05" depth="26.3"
+             material="color:#dff4ff; shader:flat; opacity:.78; transparent:true"></a-box>
+    </a-entity>
+    <a-entity position="4.6 0 0">
+      <a-box position="0 4.58 0" width="0.36" height="0.10" depth="26.8" material="color:#454b54; shader: flat; roughness:.9; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-box position="0 4.52 0" width="0.24" height="0.05" depth="26.3"
+             material="color:#eaf6ff; shader:flat; opacity:.88; transparent:true"></a-box>
+    </a-entity>
+  </a-entity>
+
+  <!-- ============================ FLOOR MARKINGS ============================= -->
+  <a-entity id="floor-markings">
+    <!-- cold aisle boundary lines -->
+    <a-box position="-1.55 0.006 0" width="0.06" height="0.012" depth="22.3"
+           material="color:#22d3ee; shader:flat; opacity:.38; transparent:true"></a-box>
+    <a-box position="1.55 0.006 0" width="0.06" height="0.012" depth="22.3"
+           material="color:#22d3ee; shader:flat; opacity:.38; transparent:true"></a-box>
+    <!-- hot aisle wash (outer corridors) -->
+    <a-plane id="hotzone-w" rotation="-90 0 0" position="-5.4 0.004 0" width="5.4" height="22.3"
+             material="color:#f87171; shader:flat; transparent:true; opacity:.055"></a-plane>
+    <a-plane id="hotzone-e" rotation="-90 0 0" position="5.5 0.004 0" width="5.4" height="22.3"
+             material="color:#f87171; shader:flat; transparent:true; opacity:.055"></a-plane>
+    <!-- generator hazard stripes -->
+    <a-box position="7 0.006 -9.438" width="3.4" height="0.012" depth="0.09"
+           material="color:#fbbf24; shader:flat; opacity:.45; transparent:true"></a-box>
+    <a-box position="7 0.006 -12.062" width="3.4" height="0.012" depth="0.09"
+           material="color:#fbbf24; shader:flat; opacity:.45; transparent:true"></a-box>
+    <a-box position="5.25 0.006 -10.75" width="0.09" height="0.012" depth="2.75"
+           material="color:#fbbf24; shader:flat; opacity:.45; transparent:true"></a-box>
+  </a-entity>
+
+  <!-- ============================ SIGNAGE ==================================== -->
+  <a-entity id="signage">
+    <!-- north wall -->
+    <a-text value="DATA CENTRE HALL A" position="0 4.25 -14.95" align="center"
+            width="9.0" color="#e2e8f0"></a-text>
+    <a-text value="WHERE THE CLOUD PHYSICALLY LIVES - COMPUTE, COOLING AND POWER IN ONE HALL"
+            position="0 3.95 -14.95" align="center" width="6.4" wrap-count="82"
+            color="#8fa3c4"></a-text>
+    <!-- above the doorway, read from the vestibule -->
+    <a-text value="HALL A" position="0 4.22 14.97" align="center" width="1.5" wrap-count="8"
+            color="#22d3ee"></a-text>
+    <a-text value="COLD AISLE CONTAINMENT" position="0 3.28 14.97" align="center"
+            width="2.2" wrap-count="30" color="#cfe9f5"></a-text>
+    <!-- vestibule outer wall -->
+    <a-text value="AUTHORIZED PERSONNEL ONLY" position="0 2.6 17.98" rotation="0 180 0"
+            align="center" width="2.4" wrap-count="26" color="#fbbf24"></a-text>
+    <a-text value="HALL A - 16 RACKS - N+1 COOLING - 2N POWER"
+            position="0 2.24 17.98" rotation="0 180 0" align="center"
+            width="3.0" wrap-count="60" color="#8fa3c4"></a-text>
+    <a-text value="CHAPTER 1 OF 3 - NEXT IN THE JOURNEY: LOAD BALANCING &amp; AUTO-SCALING, THEN CDN &amp; EDGE CACHING"
+            position="0 1.86 17.98" rotation="0 180 0" align="center"
+            width="3.4" wrap-count="70" color="#22d3ee" opacity="0.9"></a-text>
+    <!-- aisle ends -->
+    <a-text value="COLD AISLE | 21C SUPPLY" rotation="0 180 0" position="0 2.52 11.625" align="center"
+            width="2.2" wrap-count="30" color="#9fd8e8"></a-text>
+    <a-text value="COLD AISLE" position="0 2.52 -11.625" rotation="0 180 0" align="center"
+            width="1.6" wrap-count="20" color="#9fd8e8"></a-text>
+    <a-text value="HOT AISLE | EXHAUST" rotation="0 180 0" position="-3.9 2.52 11.25" align="center"
+            width="2.0" wrap-count="26" color="#f8a5a5"></a-text>
+    <a-text value="HOT AISLE | EXHAUST" rotation="0 180 0" position="3.9 2.52 11.25" align="center"
+            width="2.0" wrap-count="26" color="#f8a5a5"></a-text>
+    <!-- plant room signs -->
+    <a-text value="COOLING PLANT | N+1 CRAC" position="-11.94 2.92 -10.75" rotation="0 90 0"
+            align="center" width="2.6" wrap-count="32" color="#9fd8e8"></a-text>
+    <a-text value="POWER ROOM | 2N UPS + GENERATOR" position="11.94 2.92 -10.75" rotation="0 -90 0"
+            align="center" width="2.8" wrap-count="36" color="#9fd8e8"></a-text>
+  </a-entity>
+
+
+  <!-- ============ DOORWAY TO CHAPTER 2 (north wall centre) =================
+       Walk into the glow (or click / trigger it) to continue the journey. -->
+  <canvas id="tex-takeaways" width="1024" height="512" style="display:none"></canvas>
+    <a-entity id="takeaways" position="3.6 2.1 14.7" rotation="0 180 0">
+      <a-plane geometry="width: 4.4; height: 2.2" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
+    </a-entity>
+    <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html"
+            position="0 0 -14.9">
+    <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+           material="color:#d9a514; shader: flat; roughness:.6; metalness:.1; emissive:#8a6a0e; emissiveIntensity:.35"></a-box>
+    <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+           material="color:#d9a514; shader: flat; roughness:.6; metalness:.1; emissive:#8a6a0e; emissiveIntensity:.35"></a-box>
+    <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
+           material="color:#d9a514; shader: flat; roughness:.6; metalness:.1; emissive:#8a6a0e; emissiveIntensity:.35"></a-box>
+    <a-plane position="0 1.3 0.05" width="2.55" height="2.6"
+             material="color:#22d3ee; shader:flat; transparent:true; opacity:.22; side:double"></a-plane>
+    <a-plane position="0 0.02 0.6" rotation="-90 0 0" width="2.4" height="1.2"
+             material="color:#22d3ee; shader:flat; transparent:true; opacity:.35"></a-plane>
+    <a-text value="CHAPTER 2" position="0 3.45 0.1" align="center" width="4.2"
+            color="#fbbf24"></a-text>
+    <a-text value="LOAD BALANCING &amp; AUTO-SCALING - WALK IN TO CONTINUE"
+            position="0 3.16 0.1" align="center" width="4.6" wrap-count="60"
+            color="#e2e8f0"></a-text>
+  </a-entity>
+  <!-- ============================ COOLING PLANT (M1.3 A) =====================
+       Three CRAC units on the west wall: CRAC-1 and CRAC-2 on duty,
+       CRAC-3 on standby. That is N+1 - one spare absorbs a failure.      -->
+  <a-entity id="cooling">
+    <!-- return-air duct (high) and chilled-water supply duct (low) -->
+    <a-box position="-11.6 3.28 0" width="0.62" height="0.62" depth="26.8"
+           material="color:#454b54; shader: flat; roughness:.9; metalness:.1; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+    <a-box position="-11.6 0.34 0" width="0.50" height="0.50" depth="26.8"
+           material="color:#1d3a4a; shader: flat; roughness:.85; metalness:0.07; emissive:#1d3a4a; emissiveIntensity:0.45"></a-box>
+    <a-cylinder position="-11.3 2.86 0" radius="0.10" height="21.0" rotation="90 0 0"
+                segments-radial="10" material="color:#1d5a6e; shader: flat; roughness:.5; metalness:0.10; emissive:#1d5a6e; emissiveIntensity:0.45"></a-cylinder>
+    <a-cylinder position="-11.06 2.86 0" radius="0.10" height="21.0" rotation="90 0 0"
+                segments-radial="10" material="color:#6e4a1d; shader: flat; roughness:.5; metalness:0.10; emissive:#6e4a1d; emissiveIntensity:0.45"></a-cylinder>
+
+    <!-- ---------- CRAC-1 : DUTY ---------- -->
+    <a-entity class="crac" id="crac1" position="-10.9 0 7.5">
+      <a-cylinder class="crac-pipe" position="-0.34 1.1 -1.1" radius="0.06" height="2.20" segments-radial="8"
+                  material="color:#1f3a5f; shader: flat; roughness:.55; metalness:.20; emissive:#1f3a5f; emissiveIntensity:.35"></a-cylinder>
+      <a-cylinder class="crac-pipe" position="-0.16 1.1 -1.1" radius="0.06" height="2.20" segments-radial="8"
+                  material="color:#155e75; shader: flat; roughness:.55; metalness:.20; emissive:#155e75; emissiveIntensity:.35"></a-cylinder>
+      <a-box class="clickable" data-unit="crac1" position="0 1.1 0" width="0.95" height="2.20" depth="1.50" material="color:#c9ced4; shader: flat; roughness:.78; metalness:0.07; emissive:#8f959c; emissiveIntensity:0.30"></a-box>
+      <a-box position="0 2.32 0" width="0.99" height="0.24" depth="1.54" material="color:#9aa1a9; shader: flat; roughness:.7; metalness:0.08; emissive:#6b7178; emissiveIntensity:0.30"></a-box>
+      <a-box class="crac-intake" position="0 2.46 0" width="0.72" height="0.05" depth="1.20"
+             material="color:#fbbf24; shader:flat; opacity:.30; transparent:true"></a-box>
+      <a-box class="crac-face" position="0.478 1.1 0" width="0.03" height="1.98" depth="1.32"
+             material="color:#b4bac1; shader: flat; roughness:.6; metalness:0.08; emissive:#7d838a; emissiveIntensity:0.30"></a-box>
+      <a-box class="crac-louvre" position="0.495 0.34 0" width="0.035" height="0.40" depth="1.10"
+             material="color:#22d3ee; shader:flat; opacity:.55; transparent:true"></a-box>
+      <a-sphere class="crac-beacon" position="0.52 2.02 0" radius="0.075" segments-width="12"
+                segments-height="8" material="color:#34d399; shader:flat"></a-sphere>
+      <a-cylinder position="0.44 1.44 0" radius="0.44" height="0.10" rotation="0 0 90"
+                  segments-radial="20" material="color:#141619; shader: flat; roughness:.9; emissive:#141619; emissiveIntensity:0.45"></a-cylinder>
+      <a-entity class="crac-fan" position="0.52 1.44 0" spin="speed:300; axis:x; damp:1.1">
+        <a-cylinder radius="0.085" height="0.09" rotation="0 0 90" segments-radial="12"
+                    material="color:#22d3ee; shader:flat"></a-cylinder>
+        <a-entity rotation="0 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="72 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="144 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="216 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="288 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+      </a-entity>
+      <a-text class="crac-label" value="CRAC-1 | DUTY" position="0.53 1.9 0" rotation="0 90 0"
+              align="center" width="1.1" wrap-count="22" color="#cfe9f5"></a-text>
+    </a-entity>
+
+    <!-- ---------- CRAC-2 : DUTY (this is the unit Scenario A fails) ---------- -->
+    <a-entity class="crac" id="crac2" position="-10.9 0 1.25">
+      <a-cylinder class="crac-pipe" position="-0.34 1.1 -1.1" radius="0.06" height="2.20" segments-radial="8"
+                  material="color:#1f3a5f; shader: flat; roughness:.55; metalness:.20; emissive:#1f3a5f; emissiveIntensity:.35"></a-cylinder>
+      <a-cylinder class="crac-pipe" position="-0.16 1.1 -1.1" radius="0.06" height="2.20" segments-radial="8"
+                  material="color:#155e75; shader: flat; roughness:.55; metalness:.20; emissive:#155e75; emissiveIntensity:.35"></a-cylinder>
+      <a-box class="clickable" data-unit="crac2" position="0 1.1 0" width="0.95" height="2.20" depth="1.50" material="color:#c9ced4; shader: flat; roughness:.78; metalness:0.07; emissive:#8f959c; emissiveIntensity:0.30"></a-box>
+      <a-box position="0 2.32 0" width="0.99" height="0.24" depth="1.54" material="color:#9aa1a9; shader: flat; roughness:.7; metalness:0.08; emissive:#6b7178; emissiveIntensity:0.30"></a-box>
+      <a-box class="crac-intake" position="0 2.46 0" width="0.72" height="0.05" depth="1.20"
+             material="color:#fbbf24; shader:flat; opacity:.30; transparent:true"></a-box>
+      <a-box class="crac-face" position="0.478 1.1 0" width="0.03" height="1.98" depth="1.32"
+             material="color:#b4bac1; shader: flat; roughness:.6; metalness:0.08; emissive:#7d838a; emissiveIntensity:0.30"></a-box>
+      <a-box class="crac-louvre" position="0.495 0.34 0" width="0.035" height="0.40" depth="1.10"
+             material="color:#22d3ee; shader:flat; opacity:.55; transparent:true"></a-box>
+      <a-sphere class="crac-beacon" position="0.52 2.02 0" radius="0.075" segments-width="12"
+                segments-height="8" material="color:#34d399; shader:flat"></a-sphere>
+      <a-cylinder position="0.44 1.44 0" radius="0.44" height="0.10" rotation="0 0 90"
+                  segments-radial="20" material="color:#141619; shader: flat; roughness:.9; emissive:#141619; emissiveIntensity:0.45"></a-cylinder>
+      <a-entity class="crac-fan" position="0.52 1.44 0" spin="speed:300; axis:x; damp:1.1">
+        <a-cylinder radius="0.085" height="0.09" rotation="0 0 90" segments-radial="12"
+                    material="color:#22d3ee; shader:flat"></a-cylinder>
+        <a-entity rotation="0 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="72 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="144 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="216 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="288 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#94a3b8; shader: flat; roughness:.55; metalness:0.10; emissive:#94a3b8; emissiveIntensity:0.45"></a-box></a-entity>
+      </a-entity>
+      <a-text class="crac-label" value="CRAC-2 | DUTY" position="0.53 1.9 0" rotation="0 90 0"
+              align="center" width="1.1" wrap-count="22" color="#cfe9f5"></a-text>
+    </a-entity>
+
+    <!-- ---------- CRAC-3 : STANDBY (the +1 of N+1) ---------- -->
+    <a-entity class="crac" id="crac3" position="-10.9 0 -5">
+      <a-cylinder class="crac-pipe" position="-0.34 1.1 -1.1" radius="0.06" height="2.20" segments-radial="8"
+                  material="color:#1f3a5f; shader: flat; roughness:.55; metalness:.20; emissive:#1f3a5f; emissiveIntensity:.35"></a-cylinder>
+      <a-cylinder class="crac-pipe" position="-0.16 1.1 -1.1" radius="0.06" height="2.20" segments-radial="8"
+                  material="color:#155e75; shader: flat; roughness:.55; metalness:.20; emissive:#155e75; emissiveIntensity:.35"></a-cylinder>
+      <a-box class="clickable" data-unit="crac3" position="0 1.1 0" width="0.95" height="2.20" depth="1.50" material="color:#2f3b4f; shader: flat; roughness:.8; metalness:0.07; emissive:#2f3b4f; emissiveIntensity:0.45"></a-box>
+      <a-box position="0 2.32 0" width="0.99" height="0.24" depth="1.54" material="color:#414f66; shader: flat; roughness:.72; metalness:0.07; emissive:#414f66; emissiveIntensity:0.45"></a-box>
+      <a-box class="crac-intake" position="0 2.46 0" width="0.72" height="0.05" depth="1.20"
+             material="color:#8b9199; shader:flat; opacity:.30; transparent:true"></a-box>
+      <a-box class="crac-face" position="0.478 1.1 0" width="0.03" height="1.98" depth="1.32"
+             material="color:#39465c; shader: flat; roughness:.62; metalness:0.08; emissive:#39465c; emissiveIntensity:0.45"></a-box>
+      <a-box class="crac-louvre" position="0.495 0.34 0" width="0.035" height="0.40" depth="1.10"
+             material="color:#8b9199; shader:flat; opacity:.45; transparent:true"></a-box>
+      <a-sphere class="crac-beacon" position="0.52 2.02 0" radius="0.075" segments-width="12"
+                segments-height="8" material="color:#8b9199; shader:flat"></a-sphere>
+      <a-cylinder position="0.44 1.44 0" radius="0.44" height="0.10" rotation="0 0 90"
+                  segments-radial="20" material="color:#141619; shader: flat; roughness:.9; emissive:#141619; emissiveIntensity:0.45"></a-cylinder>
+      <a-entity class="crac-fan" position="0.52 1.44 0" spin="speed:0; axis:x; damp:1.1">
+        <a-cylinder radius="0.085" height="0.09" rotation="0 0 90" segments-radial="12"
+                    material="color:#8b9199; shader:flat"></a-cylinder>
+        <a-entity rotation="0 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#7b8aa3; shader: flat; roughness:.6; metalness:0.08; emissive:#7b8aa3; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="72 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#7b8aa3; shader: flat; roughness:.6; metalness:0.08; emissive:#7b8aa3; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="144 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#7b8aa3; shader: flat; roughness:.6; metalness:0.08; emissive:#7b8aa3; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="216 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#7b8aa3; shader: flat; roughness:.6; metalness:0.08; emissive:#7b8aa3; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="288 0 0"><a-box position="0 0.19 0" rotation="26 0 0" width="0.045" height="0.34" depth="0.11" material="color:#7b8aa3; shader: flat; roughness:.6; metalness:0.08; emissive:#7b8aa3; emissiveIntensity:0.45"></a-box></a-entity>
+      </a-entity>
+      <a-text class="crac-label" value="CRAC-3 | STANDBY" position="0.53 1.9 0" rotation="0 90 0"
+              align="center" width="1.2" wrap-count="24" color="#8fa3c4"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- ============================ POWER ROOM (M1.3 B) ========================
+       2N: two independent UPS systems (A and B), each able to carry the whole
+       hall. Utility feed -> ATS -> UPS A/B -> overhead busway -> rack PDUs.
+       A diesel generator sits on standby and feeds the same ATS.            -->
+  <a-entity id="power">
+    <!-- conduits climbing from each cabinet to the busway -->
+    <a-cylinder class="conduit" position="10.95 2.6 -8" radius="0.05" height="1.6" segments-radial="6" material="color:#22262a; shader: flat; roughness:.7; emissive:#22262a; emissiveIntensity:0.35"></a-cylinder>
+    <a-cylinder class="conduit" position="10.95 2.5 -1.25" radius="0.05" height="1.4" segments-radial="6" material="color:#22262a; shader: flat; roughness:.7; emissive:#22262a; emissiveIntensity:0.35"></a-cylinder>
+    <a-cylinder class="conduit" position="10.7 2.7 4" radius="0.05" height="1.6" segments-radial="6" material="color:#22262a; shader: flat; roughness:.7; emissive:#22262a; emissiveIntensity:0.35"></a-cylinder>
+    <a-cylinder class="conduit" position="10.7 2.7 1.75" radius="0.05" height="1.6" segments-radial="6" material="color:#22262a; shader: flat; roughness:.7; emissive:#22262a; emissiveIntensity:0.35"></a-cylinder>
+    <a-cylinder class="conduit" position="7 2.3 -10.75" radius="0.06" height="1.5" segments-radial="6" material="color:#22262a; shader: flat; roughness:.7; emissive:#22262a; emissiveIntensity:0.35"></a-cylinder>
+
+    <!-- utility feed entering through the east wall -->
+    <a-box position="12.02 3.1 -8" width="0.55" height="0.36" depth="0.36"
+           material="color:#8b9199; shader: flat; roughness:.8; metalness:0.08; emissive:#8b9199; emissiveIntensity:0.45"></a-box>
+
+    <!-- transformer / incomer cabinet -->
+    <a-entity id="util-in" position="10.95 0 -8">
+      <a-box class="clickable" data-unit="util-in" position="0 0.95 0" width="0.78" height="1.90" depth="0.95" material="color:#22262a; shader: flat; roughness:.8; metalness:0.08; emissive:#22262a; emissiveIntensity:0.45"></a-box>
+      <a-box class="util-face" position="-0.4 1.3 0" width="0.03" height="0.62" depth="0.68" material="color:#b4bac1; shader: flat; roughness:.6; metalness:0.08; emissive:#7d838a; emissiveIntensity:0.30"></a-box>
+      <a-sphere class="util-beacon" position="-0.44 1.74 0" radius="0.07" segments-width="12"
+                segments-height="8" material="color:#34d399; shader:flat"></a-sphere>
+      <a-text value="UTILITY FEED 11kV" position="-0.45 1.02 0" rotation="0 -90 0" align="center"
+              width="0.9" wrap-count="20" color="#cfe9f5"></a-text>
+    </a-entity>
+
+    <!-- automatic transfer switch -->
+    <a-entity id="ats" position="10.95 0 -1.25">
+      <a-box class="clickable" data-unit="ats" position="0 0.88 0" width="0.70" height="1.76" depth="0.90" material="color:#1b1e22; shader: flat; roughness:.8; metalness:0.08; emissive:#101215; emissiveIntensity:0.45"></a-box>
+      <a-box class="ats-face" position="-0.36 1.2 0" width="0.03" height="0.56" depth="0.62" material="color:#b4bac1; shader: flat; roughness:.6; metalness:0.08; emissive:#7d838a; emissiveIntensity:0.30"></a-box>
+      <a-sphere class="ats-beacon" position="-0.4 1.6 0" radius="0.07" segments-width="12"
+                segments-height="8" material="color:#22d3ee; shader:flat"></a-sphere>
+      <a-text value="ATS | A/B SELECTOR" position="-0.41 0.92 0" rotation="0 -90 0" align="center"
+              width="0.9" wrap-count="22" color="#cfe9f5"></a-text>
+    </a-entity>
+
+    <!-- UPS system A -->
+    <a-entity id="upsA" position="10.7 0 4">
+      <a-box class="clickable" data-unit="upsA" position="0 0.95 0" width="0.90" height="1.90" depth="1.30" material="color:#22262a; shader: flat; roughness:.76; metalness:0.08; emissive:#22262a; emissiveIntensity:0.45"></a-box>
+      <a-box position="0 2 0" width="0.94" height="0.14" depth="1.34" material="color:#9aa1a9; shader: flat; roughness:.7; metalness:0.08; emissive:#6b7178; emissiveIntensity:0.30"></a-box>
+      <a-box class="ups-face" position="-0.455 1.2 0" width="0.03" height="1.10" depth="1.06" material="color:#b4bac1; shader: flat; roughness:.6; metalness:0.08; emissive:#7d838a; emissiveIntensity:0.30"></a-box>
+      <a-box class="ups-bar" position="-0.472 1.62 0" width="0.035" height="0.10" depth="0.90"
+             material="color:#34d399; shader:flat"></a-box>
+      <a-sphere class="ups-beacon" position="-0.5 1.82 0" radius="0.07" segments-width="12"
+                segments-height="8" material="color:#34d399; shader:flat"></a-sphere>
+      <a-text class="ups-label" value="UPS-A | 200kVA ONLINE" position="-0.5 0.86 0" rotation="0 -90 0"
+              align="center" width="1.1" wrap-count="26" color="#cfe9f5"></a-text>
+    </a-entity>
+
+    <!-- UPS system B -->
+    <a-entity id="upsB" position="10.7 0 1.75">
+      <a-box class="clickable" data-unit="upsB" position="0 0.95 0" width="0.90" height="1.90" depth="1.30" material="color:#22262a; shader: flat; roughness:.76; metalness:0.08; emissive:#22262a; emissiveIntensity:0.45"></a-box>
+      <a-box position="0 2 0" width="0.94" height="0.14" depth="1.34" material="color:#9aa1a9; shader: flat; roughness:.7; metalness:0.08; emissive:#6b7178; emissiveIntensity:0.30"></a-box>
+      <a-box class="ups-face" position="-0.455 1.2 0" width="0.03" height="1.10" depth="1.06" material="color:#b4bac1; shader: flat; roughness:.6; metalness:0.08; emissive:#7d838a; emissiveIntensity:0.30"></a-box>
+      <a-box class="ups-bar" position="-0.472 1.62 0" width="0.035" height="0.10" depth="0.90"
+             material="color:#34d399; shader:flat"></a-box>
+      <a-sphere class="ups-beacon" position="-0.5 1.82 0" radius="0.07" segments-width="12"
+                segments-height="8" material="color:#34d399; shader:flat"></a-sphere>
+      <a-text class="ups-label" value="UPS-B | 200kVA ONLINE" position="-0.5 0.86 0" rotation="0 -90 0"
+              align="center" width="1.1" wrap-count="26" color="#cfe9f5"></a-text>
+    </a-entity>
+
+    <!-- diesel generator set -->
+    <a-entity id="gen" position="7 0 -10.75">
+      <a-box class="clickable" data-unit="gen" position="0 0.14 0" width="3.10" height="0.28" depth="1.60" material="color:#454b54; shader: flat; roughness:.9; metalness:0.07; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-box class="clickable gen-side" data-unit="gen" position="-0.4 0.86 0" width="1.50" height="1.02" depth="1.16" material="color:#d9a514; shader: flat; roughness:.55; metalness:0.12; emissive:#8a6a0e; emissiveIntensity:0.35"></a-box>
+      <a-box position="-0.4 1.44 0" width="1.10" height="0.18" depth="0.86" material="color:#22262a; shader: flat; roughness:.7; metalness:0.10; emissive:#22262a; emissiveIntensity:0.45"></a-box>
+      <a-box position="0.62 0.84 0" width="0.24" height="0.98" depth="1.28" material="color:#22262a; shader: flat; roughness:.8; metalness:0.08; emissive:#22262a; emissiveIntensity:0.45"></a-box>
+      <a-cylinder class="gen-fan-housing" position="0.8 0.84 0" radius="0.40" height="0.08" rotation="0 0 90"
+                  segments-radial="18" material="color:#141619; shader: flat; roughness:.9; emissive:#141619; emissiveIntensity:0.45"></a-cylinder>
+      <a-entity class="gen-fan" position="0.86 0.84 0" spin="speed:0; axis:x; damp:0.9">
+        <a-cylinder radius="0.07" height="0.07" rotation="0 0 90" segments-radial="10"
+                    material="color:#8b9199; shader:flat"></a-cylinder>
+        <a-entity rotation="0 0 0"><a-box position="0 0.16 0" rotation="28 0 0" width="0.04" height="0.28" depth="0.09" material="color:#8fa3c4; shader: flat; roughness:.6; metalness:0.10; emissive:#8fa3c4; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="90 0 0"><a-box position="0 0.16 0" rotation="28 0 0" width="0.04" height="0.28" depth="0.09" material="color:#8fa3c4; shader: flat; roughness:.6; metalness:0.10; emissive:#8fa3c4; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="180 0 0"><a-box position="0 0.16 0" rotation="28 0 0" width="0.04" height="0.28" depth="0.09" material="color:#8fa3c4; shader: flat; roughness:.6; metalness:0.10; emissive:#8fa3c4; emissiveIntensity:0.45"></a-box></a-entity>
+        <a-entity rotation="270 0 0"><a-box position="0 0.16 0" rotation="28 0 0" width="0.04" height="0.28" depth="0.09" material="color:#8fa3c4; shader: flat; roughness:.6; metalness:0.10; emissive:#8fa3c4; emissiveIntensity:0.45"></a-box></a-entity>
+      </a-entity>
+      <a-cylinder class="gen-alternator" position="-1.32 0.8 0" radius="0.42" height="0.86" rotation="0 0 90"
+                  segments-radial="18" material="color:#2a2e34; shader: flat; roughness:.55; metalness:0.10; emissive:#2a2e34; emissiveIntensity:0.45"></a-cylinder>
+      <a-box position="0.3 0.42 1.312" width="1.40" height="0.50" depth="0.72" material="color:#454b54; shader: flat; roughness:.9; metalness:0.07; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-cylinder position="-0.72 2.1 -0.525" radius="0.085" height="1.30" segments-radial="10"
+                  material="color:#8b9199; shader: flat; roughness:.7; metalness:0.10; emissive:#8b9199; emissiveIntensity:0.45"></a-cylinder>
+      <a-cylinder position="0.9 2.72 -0.525" radius="0.085" height="3.30" rotation="0 0 90"
+                  segments-radial="10" material="color:#8b9199; shader: flat; roughness:.7; metalness:0.10; emissive:#8b9199; emissiveIntensity:0.45"></a-cylinder>
+      <a-sphere class="gen-beacon" position="-0.4 1.62 0" radius="0.08" segments-width="12"
+                segments-height="8" material="color:#8b9199; shader:flat"></a-sphere>
+      <a-text class="gen-label" value="GEN-1 | 500kVA DIESEL | STANDBY" position="0 1.98 1.062"
+              align="center" width="2.4" wrap-count="46" color="#8fa3c4"></a-text>
+      <a-text value="FUEL 24h" position="0.3 0.78 1.775" align="center" width="0.8" wrap-count="12"
+              color="#8fa3c4"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- ============================ NETWORK CORE =============================== -->
+  <a-entity id="netcore" position="-6 0 0">
+    <a-entity class="netrack" position="-0.62 0 -13.25">
+      <a-box position="0 1 0" width="0.70" height="2.00" depth="0.80" material="color:#454b54; shader: flat; roughness:.7; metalness:0.08; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-plane position="0 1 0.503" width="0.62" height="1.86" material="color:#23272c; shader: flat; roughness:.8; emissive:#23272c; emissiveIntensity:0.30"></a-plane>
+      <a-box class="led net" position="-0.18 1.58 0.515" width="0.055" height="0.032" depth="0.02" material="color:#22d3ee; shader:flat"></a-box>
+      <a-box class="led net" position="0 1.58 0.515" width="0.055" height="0.032" depth="0.02" material="color:#22d3ee; shader:flat"></a-box>
+      <a-box class="led net" position="0.18 1.58 0.515" width="0.055" height="0.032" depth="0.02" material="color:#22d3ee; shader:flat"></a-box>
+      <a-box class="led net" position="-0.18 1.44 0.515" width="0.055" height="0.032" depth="0.02" material="color:#34d399; shader:flat"></a-box>
+      <a-box class="led net" position="0 1.44 0.515" width="0.055" height="0.032" depth="0.02" material="color:#34d399; shader:flat"></a-box>
+      <a-box class="led net" position="0.18 1.44 0.515" width="0.055" height="0.032" depth="0.02" material="color:#34d399; shader:flat"></a-box>
+      <a-text value="NET CORE LEAF-1" position="0 1.88 0.519" align="center" width="0.6"
+              wrap-count="16" color="#9fd8e8"></a-text>
+    </a-entity>
+    <a-entity class="netrack" position="0.62 0 -13.25">
+      <a-box position="0 1 0" width="0.70" height="2.00" depth="0.80" material="color:#454b54; shader: flat; roughness:.7; metalness:0.08; emissive:#454b54; emissiveIntensity:0.30"></a-box>
+      <a-plane position="0 1 0.503" width="0.62" height="1.86" material="color:#23272c; shader: flat; roughness:.8; emissive:#23272c; emissiveIntensity:0.30"></a-plane>
+      <a-box class="led net" position="-0.18 1.58 0.515" width="0.055" height="0.032" depth="0.02" material="color:#22d3ee; shader:flat"></a-box>
+      <a-box class="led net" position="0 1.58 0.515" width="0.055" height="0.032" depth="0.02" material="color:#22d3ee; shader:flat"></a-box>
+      <a-box class="led net" position="0.18 1.58 0.515" width="0.055" height="0.032" depth="0.02" material="color:#22d3ee; shader:flat"></a-box>
+      <a-box class="led net" position="-0.18 1.44 0.515" width="0.055" height="0.032" depth="0.02" material="color:#34d399; shader:flat"></a-box>
+      <a-box class="led net" position="0 1.44 0.515" width="0.055" height="0.032" depth="0.02" material="color:#34d399; shader:flat"></a-box>
+      <a-box class="led net" position="0.18 1.44 0.515" width="0.055" height="0.032" depth="0.02" material="color:#34d399; shader:flat"></a-box>
+      <a-text value="NET CORE LEAF-2" position="0 1.88 0.519" align="center" width="0.6"
+              wrap-count="16" color="#9fd8e8"></a-text>
+    </a-entity>
+  </a-entity>
+
+  <!-- ===================== JS-BUILT MODULES (see script) =====================
+       Everything repetitive is generated from data arrays so the geometry and
+       the behaviour can never drift apart:
+         builder-racks      -> 2 rows x 8 racks + LEDs            (scene layout)
+         builder-tiles      -> perforated cold-aisle floor tiles  (M1.4 source)
+         builder-trays      -> overhead cable trays + hangers     (M1.2 target)
+         builder-chain      -> power-path cylinders               (M1.3)
+         builder-waypoints  -> 5 teleport discs + labels          (M1.1)
+         builder-hotspots   -> 6 pulsing concept spheres          (M1.2)
+         builder-panels     -> 6 billboarded info panels          (M1.2)
+         airflow            -> single-tick particle system        (M1.4)
+       ====================================================================== -->
+  <a-entity id="racks"     builder-racks></a-entity>
+  <a-entity id="tiles"     builder-tiles></a-entity>
+  <a-entity id="trays"     builder-trays></a-entity>
+  <a-entity id="chain"     builder-chain></a-entity>
+  <a-entity id="focus"     builder-focus></a-entity>
+  <a-entity id="waypoints" builder-waypoints></a-entity>
+  <a-entity id="hotspots"  builder-hotspots></a-entity>
+  <a-entity id="panels"    builder-panels></a-entity>
+  <a-entity id="airflow"   airflow="count: 48"></a-entity>
+  <a-entity id="hall"      hall-state></a-entity>
+
+</a-scene>
+
+<script>
+/* ===========================================================================
+   INSIDE A DATA CENTRE - application code
+   All components are registered here, in <head>, BEFORE <a-scene> is parsed,
+   so no element is ever attached with an unregistered component.
+   =========================================================================== */
+(function () {
+  'use strict';
+
+  /* If the CDN script failed (offline / blocked) show a clear message instead
+     of leaving the learner staring at an endless spinner. */
+  if (!window.AFRAME) {
+    document.addEventListener('DOMContentLoaded', function () {
+      var m = document.getElementById('loader-msg');
+      var h = document.querySelector('#loader h2');
+      if (h) { h.textContent = 'A-Frame could not be loaded'; }
+      if (m) {
+        m.className = 'err';
+        m.textContent = 'This file needs vendor/aframe.min.js ' +
+                        '(the locked framework version). Check the network connection and reload.';
+      }
+    });
+    return;
+  }
+
+  var THREE = AFRAME.THREE;
+
+  /* =========================================================================
+     0. PALETTE + SHARED STATE
+     ========================================================================= */
+  var C = {
+    accent: '#22d3ee', ok: '#34d399', warn: '#fbbf24', danger: '#f87171',
+    metal: '#23272b', metal2: '#3a4046', text: '#e2e8f0', muted: '#9aa3ad',
+    floor: '#363c44', bg: '#10151c'
+  };
+  var CHAIN_COLOR = { live: C.accent, ok: C.ok, fail: C.danger, idle: C.metal2 };
+
+  /* A-Frame's MSDF font atlas is ASCII-only (U+0020-U+007E); anything else
+     renders as a blank box. Every string sent to a-text is passed through. */
+  function ascii(s) {
+    return String(s).replace(/[^\x20-\x7E]/g, function (ch) {
+      return ({ '\u00b7': '|', '\u00b0': ' deg', '\u2192': '->', '\u2014': '-',
+                '\u2013': '-', '\u2019': "'", '\u2026': '...' })[ch] || '-';
+    });
+  }
+
+  function mk(tag, attrs, parent) {
+    var el = document.createElement(tag);
+    if (attrs) { Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); }); }
+    if (parent) { parent.appendChild(el); }
+    return el;
+  }
+  function mat(el) { var o = el.getObject3D('mesh'); return o ? o.material : null; }
+  function tint(el, hex, opacity) {
+    var m = mat(el); if (!m || !m.color) { return; }
+    m.color.set(hex);
+    if (opacity !== undefined) {
+      if (m.transparent !== true) { m.transparent = true; m.needsUpdate = true; }
+      m.opacity = opacity;
+    }
+  }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function rnd(seed) { var x = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+  function shade(hex, f) {
+    var n = parseInt(hex.slice(1), 16);
+    function ch(v) { v = f >= 0 ? v + (255 - v) * f : v * (1 + f);
+                     return Math.round(Math.min(255, Math.max(0, v))); }
+    return '#' + ((1 << 24) + (ch(n >> 16 & 255) << 16) + (ch(n >> 8 & 255) << 8) +
+                  ch(n & 255)).toString(16).slice(1);
+  }
+
+  var DC = window.DC = {
+    ready: false,
+    scene: null,
+    rig: null,
+    refs: { racks: [], cracs: [], chain: [], panels: {}, hotspots: {}, power: {}, rear: [], hotzones: [] },
+    state: {
+      temp:       { cold: 21.5, hot: 33.0 },
+      tempTarget: { cold: 21.5, hot: 33.0 },
+      thermalBias: 0,
+      cooling:    { online: 2, standby: 1, mode: 'N+1' },
+      power: {
+        source: 'UTILITY', upsLoad: 34, battery: 100, draining: false,
+        itLoad: 268, downtime: 0,
+        chain: { utility: 'live', ats: 'live', ups: 'ok', load: 'ok', gen: 'idle' }
+      },
+      airflow: true,
+    surgeRacks: [], airBoost: 1,
+      status: { text: 'System nominal', cls: 'ok' },
+      A: { active: false, t: 0, phase: 'idle', fired: {} },
+      B: { active: false, t: 0, phase: 'idle', fired: {} },
+      C: { active: false, t: 0, phase: 'idle', fired: {} }
+    }
+  };
+  var S = DC.state;
+  /* Free-locomotion input bus: keyboard axes + analogue thumb stick. */
+  DC.input = { keys: { fwd: false, back: false, left: false, right: false, run: false },
+               joy: { x: 0, y: 0 } };
+  DC.walkEnabled = true;
+
+  /* =========================================================================
+     1. SCENE DATA  (single source of truth for geometry AND behaviour)
+     ========================================================================= */
+  var ROOM = { xMin: -12, xMax: 12, zMin: -15, zMax: 15, h: 4.6 };
+  var RACK = { w: 0.6, h: 2.0, d: 1.0, colour: C.metal };
+  var ROWS = [{ x: -2.0, ry: 90, prefix: 'A' }, { x: 2.0, ry: -90, prefix: 'B' }];
+  var RACK_Z = (function () { var a = [], i; for (i = 0; i < 8; i++) { a.push(-10.5 + i * 3.0); } return a; })();
+
+  /* M1.1 - five teleport waypoints. `yaw` turns #rig so the point of interest
+     is in front of you on arrival (the camera itself is never touched). */
+  var WAYPOINTS = [
+    { id: 'W1', label: 'W1 ENTRANCE',      pos: [0, 0, 15],    yaw: 0 },
+    { id: 'W2', label: 'W2 COLD AISLE',    pos: [0, 0, 2.5],   yaw: 0 },
+    { id: 'W3', label: 'W3 HOT AISLE',     pos: [3.2, 0, 2.5], yaw: 0 },
+    { id: 'W4', label: 'W4 COOLING PLANT', pos: [-6, 0, 0],    yaw: 90 },
+    { id: 'W5', label: 'W5 POWER ROOM',    pos: [6, 0, -2.5],  yaw: -90 }
+  ];
+
+  /* M1.2 - six hotspots. hs = sphere position, panel = card position,
+     ps = panel scale (larger for subjects seen from further away). */
+  var HOTSPOTS = [
+    {
+      id: 'rack', label: 'SERVER RACK', hs: [1.44, 0.95, 1.5], panel: [0, 1.8, -1.5], ps: 1,
+      title: 'SERVER RACK - WHERE THE REQUEST LANDS',
+      body: 'Each 42U rack holds 20 to 40 servers: the machines that run the application and answer ' +
+            'your HTTP request. A rack draws 4 to 8 kW and is fed by two independent circuits, A and B, ' +
+            'so one failed power path never takes it down. Cold air enters the front, hot air leaves the ' +
+            'rear - that one rule shapes the whole building.'
+    },
+    {
+      id: 'aisle', label: 'COLD / HOT AISLE', hs: [0, 1.32, 5.25], panel: [0, 2.42, 5.25], ps: 1,
+      title: 'COLD AISLE vs HOT AISLE',
+      body: 'Racks face each other so their fronts share a cold aisle fed by perforated floor tiles, ' +
+            'while their rears exhaust into the hot aisles outside. Keeping those two air streams apart ' +
+            'stops hot exhaust being sucked back into the servers, the most common cause of hot spots. ' +
+            'Supply air arrives near 21 C and leaves the rack 12 to 15 C hotter.'
+    },
+    {
+      id: 'crac', label: 'CRAC UNIT', hs: [-8.32, 0.9, 1.25], panel: [-7.55, 2.78, 1.25], ps: 1,
+      title: 'CRAC - COMPUTER ROOM AIR CONDITIONER',
+      body: 'A CRAC pulls hot aisle air in through the top, cools it over a chilled-water or DX coil, ' +
+            'then blows it under the raised floor where it escapes through the perforated tiles. Its fans ' +
+            'never stop: a rack with no airflow overheats in under a minute. This hall runs N+1, so two ' +
+            'units carry the load while the third waits to absorb a failure.'
+    },
+    {
+      id: 'ups', label: 'UPS (2N)', hs: [8.1, 1.02, 1.75], panel: [7.15, 2.72, 0.5], ps: 1,
+      title: 'UPS - UNINTERRUPTIBLE POWER SUPPLY',
+      body: 'The UPS sits between the mains and the servers, passing power through while it keeps a ' +
+            'battery bank charged. If the utility feed dies it transfers to battery in under 10 ' +
+            'milliseconds, far faster than a server power supply can notice. A 2N design means two fully ' +
+            'independent paths, each able to carry the whole hall alone.'
+    },
+    {
+      id: 'gen', label: 'DIESEL GENERATOR', hs: [5.68, 1.3, -10.75], panel: [6.4, 2.32, -8.188], ps: 1.25,
+      title: 'DIESEL GENERATOR - THE LONG BACKUP',
+      body: 'Batteries only cover a few minutes, so a diesel generator starts automatically and picks up ' +
+            'the load within 10 to 15 seconds of a mains failure. On-site fuel tanks usually hold 24 to ' +
+            '48 hours of runtime, with a refuelling contract for longer outages. Until it synchronises, ' +
+            'the UPS batteries are all that stands between the racks and a hard shutdown.'
+    },
+    {
+      id: 'tray', label: 'CABLE TRAYS', hs: [0.62, 3.3, 10.75], panel: [0, 2.35, 12.375], ps: 1,
+      title: 'OVERHEAD CABLE TRAYS - FIBRE AND POWER',
+      body: 'Fibre and copper run in trays above the cold aisle, kept separate from the power busway to ' +
+            'limit electromagnetic interference. The structured cabling from these trays to the patch ' +
+            'panel in each rack is what connects your request to a network card. Redundant routes leave ' +
+            'the hall by different paths, so one cut cable cannot isolate the site.'
+    }
+  ];
+
+  /* M1.3 B - the power path, drawn as thin cylinders between explicit nodes:
+     utility feed -> transformer -> ATS -> UPS A/B -> overhead busway -> racks,
+     with the diesel generator joining the bus upstream of the ATS. */
+  var CHAIN = [
+    { k: 'utility', a: [10.00, 3.10, -6.40], b: [8.70, 3.10, -6.40] },
+    { k: 'utility', a: [8.70, 3.10, -6.40],  b: [8.70, 2.45, -6.40] },
+    { k: 'utility', a: [8.70, 2.45, -6.40],  b: [8.70, 2.45, -1.40] },
+    { k: 'ats',     a: [8.70, 2.45, -1.40],  b: [8.70, 1.80, -1.40] },
+    { k: 'ats',     a: [8.70, 1.80, -0.60],  b: [8.70, 2.45, -0.60] },
+    { k: 'ups',     a: [8.70, 2.45, -0.60],  b: [8.70, 2.45, 3.20] },
+    { k: 'ups',     a: [8.70, 2.45, 1.40],   b: [8.70, 2.08, 1.40] },
+    { k: 'ups',     a: [8.70, 2.45, 3.20],   b: [8.70, 2.08, 3.20] },
+    { k: 'load',    a: [8.70, 2.45, 2.30],   b: [2.00, 2.45, 2.30] },
+    { k: 'load',    a: [2.00, 2.45, 2.30],   b: [2.00, 2.45, 1.20] },
+    { k: 'load',    a: [2.00, 2.45, 1.20],   b: [-2.00, 2.45, 1.20] },
+    { k: 'load',    a: [2.00, 2.45, 1.20],   b: [2.00, 2.06, 1.20] },
+    { k: 'load',    a: [-2.00, 2.45, 1.20],  b: [-2.00, 2.06, 1.20] },
+    { k: 'gen',     a: [6.60, 1.55, -8.60],  b: [6.60, 2.45, -8.60] },
+    { k: 'gen',     a: [6.60, 2.45, -8.60],  b: [8.70, 2.45, -8.60] },
+    { k: 'gen',     a: [8.70, 2.45, -8.60],  b: [8.70, 2.45, -6.40] }
+  ];
+
+  /* Walkable-area blockers so you cannot stroll through a rack (x0,x1,z0,z1). */
+  var BLOCKS = [
+    [-2.85, -1.15, -11.4, 11.4],   // west rack row
+    [1.15, 2.85, -11.4, 11.4],     // east rack row
+    [-11.8, -10.0, -6.5, 9.0],     // cooling plant + ducts
+    [10.0, 11.8, -9.0, 5.25],      // power cabinets
+    [5.2, 8.9, -12.25, -9.25],     // generator set
+    [-7.2, -4.8, -14.1, -12.5]      // network core (west of the ch2 door)
+  ];
+
+  /* =========================================================================
+     2. SMALL REUSABLE COMPONENTS
+     ========================================================================= */
+
+  /* Panels always face the viewer (spec implementation, verbatim). */
+    /* --- Quest thumbstick locomotion: left stick walks the rig, right stick
+         snaps the view 30 degrees. Live only inside immersive VR. ---------- */
+    /* --- door-zone: stand in a doorway (or click it) to travel to the next
+         chapter's room. Page-per-chapter keeps each file self-contained while
+         the doors make the three rooms feel like one building. ------------ */
+  AFRAME.registerComponent('door-zone', {
+    schema: { href: { type: 'string' }, radius: { default: 1.5 }, dwell: { default: 450 } },
+    init: function () {
+      this.since = 0;
+      this.el.addEventListener('click', function () {
+        window.doorGo(this.getAttribute('door-zone').href);
+      });
+    },
+    tick: function (t) {
+      var rig = this.el.sceneEl.querySelector('#rig');
+      if (!rig) { return; }
+      var p = rig.object3D.position, d = this.el.object3D.position;
+      var near = Math.hypot(p.x - d.x, p.z - d.z) < this.data.radius;
+      if (near && !this.since) { this.since = t; }
+      if (!near) { this.since = 0; }
+      if (this.since && t - this.since > this.data.dwell) { window.doorGo(this.data.href); }
+    }
+  });
+
+/* thumbstick-locomotion now lives in xr-quest.js (build 12) */
+
+AFRAME.registerComponent('billboard', {
+    init: function () { this._v = new THREE.Vector3(); },
+    tick: function () {
+      var cam = this.el.sceneEl.camera;
+      if (!cam) { return; }
+      cam.getWorldPosition(this._v);
+      this.el.object3D.lookAt(this._v);
+    }
+  });
+
+  /* Damped rotation for CRAC / generator fans. Setting speed to 0 spins the
+     fan down instead of freezing it, which reads much better in VR. */
+  AFRAME.registerComponent('spin', {
+    schema: {
+      speed: { default: 0 },
+      axis: { default: 'y', oneOf: ['x', 'y', 'z'] },
+      damp: { default: 1.2 }
+    },
+    init: function () { this.cur = 0; },
+    tick: function (t, dt) {
+      var d = dt || 16;
+      if (d > 1000) { d = 16; }             // ignore tab-switch deltas
+      d = Math.min(d, 250) / 1000;          // per-tick step cap (slow phones)
+      this.cur += (this.data.speed - this.cur) * (1 - Math.exp(-d * this.data.damp));
+      if (Math.abs(this.cur) < 0.05) { this.cur = 0; return; }
+      this.el.object3D.rotation[this.data.axis] += THREE.MathUtils.degToRad(this.cur * d);
+    }
+  });
+
+  /* Breathing halo used by waypoint rings and hotspot spheres. */
+  AFRAME.registerComponent('pulse', {
+    schema: {
+      min: { default: 0.92 }, max: { default: 1.5 }, dur: { default: 1700 },
+      omin: { default: 0.08 }, omax: { default: 0.45 }
+    },
+    init: function () { this.m = null; },
+    tick: function (t) {
+      var d = this.data;
+      var k = 0.5 + 0.5 * Math.sin((t / d.dur) * Math.PI * 2);
+      var s = d.min + (d.max - d.min) * k;
+      this.el.object3D.scale.set(s, s, s);
+      if (!this.m) { this.m = mat(this.el); }
+      if (this.m) { this.m.opacity = d.omax + (d.omin - d.omax) * k; }
+    }
+  });
+
+  /* M1.1 - moves #rig only. The camera keeps its own local transform, so
+     look-controls never fights the teleport (no jitter, no height loss). */
+  AFRAME.registerComponent('teleport', {
+    init: function () {
+      this.active = false; this.t = 0; this.dur = 0.42;
+      this.from = new THREE.Vector3(); this.to = new THREE.Vector3();
+      this.fromYaw = 0; this.toYaw = 0;
+    },
+    go: function (pos, yaw) {
+      var o = this.el.object3D;
+      this.from.copy(o.position);
+      this.to.set(pos[0], 0, pos[2]);
+      this.fromYaw = o.rotation.y;
+      var dy = (yaw - this.fromYaw) % (Math.PI * 2);
+      if (dy > Math.PI) { dy -= Math.PI * 2; }
+      if (dy < -Math.PI) { dy += Math.PI * 2; }
+      this.toYaw = this.fromYaw + dy;
+      this.t = 0; this.active = true;
+    },
+    tick: function (time, dt) {
+      if (!this.active) { return; }
+      var d = dt || 16;
+      if (d > 1000) { d = 16; }             // ignore tab-switch deltas
+      d = Math.min(d, 250) / 1000;          // per-tick step cap (slow phones)
+      this.t = Math.min(this.t + d, this.dur);
+      var k = this.t / this.dur;
+      var e = 1 - Math.pow(1 - k, 3);            // easeOutCubic
+      var o = this.el.object3D;
+      o.position.lerpVectors(this.from, this.to, e);
+      o.rotation.y = lerp(this.fromYaw, this.toYaw, e);
+      if (k >= 1) {
+        this.active = false;
+        this.el.setAttribute('position', o.position.x + ' 0 ' + o.position.z);
+      }
+    }
+  });
+
+  /* Keeps the visitor inside the hall and out of the equipment. */
+  AFRAME.registerComponent('rig-bounds', {
+    init: function () { this.blocks = BLOCKS; },
+    tick: function () {
+      var p = this.el.object3D.position, i, b, m = 0.35;
+      p.y = 0;
+      if (p.z > 15.2) { p.x = clamp(p.x, -2.0, 2.0); }   // vestibule is narrow
+      p.x = clamp(p.x, ROOM.xMin + 0.8, ROOM.xMax - 0.8);
+      p.z = clamp(p.z, ROOM.zMin + 0.8, 17.5);
+      for (i = 0; i < this.blocks.length; i++) {
+        b = this.blocks[i];
+        if (p.x > b[0] - m && p.x < b[1] + m && p.z > b[2] - m && p.z < b[3] + m) {
+          var dL = p.x - (b[0] - m), dR = (b[1] + m) - p.x;
+          var dN = p.z - (b[2] - m), dF = (b[3] + m) - p.z;
+          var min = Math.min(dL, dR, dN, dF);
+          if (min === dL) { p.x = b[0] - m; }
+          else if (min === dR) { p.x = b[1] + m; }
+          else if (min === dN) { p.z = b[2] - m; }
+          else { p.z = b[3] + m; }
+        }
+      }
+    }
+  });
+
+
+  /* Optional free locomotion (the "walk" option). Moves #rig - never the
+     camera - along the camera's world facing, so the locked rig pattern and
+     the teleport system keep working exactly as before. Input: WASD/arrows
+     (+Shift to run) on desktop, analogue thumb stick on touch devices.
+     A-Frame's stock wasd-controls cannot be used here: it derives its
+     steering from its OWN element's rotation attribute, which is identity on
+     #rig, so it would slide along world axes instead of where you look. */
+  AFRAME.registerComponent('locomotion', {
+    schema: {
+      enabled: { default: true },
+      speed: { default: 2.4 },       // m/s walk
+      runSpeed: { default: 4.2 }     // m/s with Shift / full stick + run
+    },
+    init: function () {
+      this.vel = new THREE.Vector3();
+      this.fwd = new THREE.Vector3();
+      this.right = new THREE.Vector3();
+      this.want = new THREE.Vector3();
+      this.up = new THREE.Vector3(0, 1, 0);
+      var K = DC.input.keys;
+      var MAP = { KeyW: 'fwd', ArrowUp: 'fwd', KeyS: 'back', ArrowDown: 'back',
+                  KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
+                  ShiftLeft: 'run', ShiftRight: 'run' };
+      window.addEventListener('keydown', function (e) {
+        var k = MAP[e.code]; if (!k) { return; }
+        K[k] = true;
+        if (e.code.indexOf('Arrow') === 0 && DC.walkEnabled) { e.preventDefault(); }
+      });
+      window.addEventListener('keyup', function (e) {
+        var k = MAP[e.code]; if (k) { K[k] = false; }
+      });
+      window.addEventListener('blur', function () {
+        K.fwd = K.back = K.left = K.right = K.run = false;
+        DC.input.joy.x = 0; DC.input.joy.y = 0;
+      });
+    },
+    tick: function (t, dt) {
+      if (!this.data.enabled || !DC.walkEnabled) { this.vel.set(0, 0, 0); return; }
+      var tp = this.el.components.teleport;
+      if (tp && tp.active) { this.vel.set(0, 0, 0); return; }   // glide wins
+      var cam = this.el.sceneEl.camera; if (!cam) { return; }
+      var K = DC.input.keys, J = DC.input.joy;
+      var ix = (K.right ? 1 : 0) - (K.left ? 1 : 0) + J.x;      // strafe
+      var iy = (K.fwd ? 1 : 0) - (K.back ? 1 : 0) + J.y;        // forward
+      var m = Math.hypot(ix, iy);
+      if (m > 1) { ix /= m; iy /= m; m = 1; }
+      if (m < 0.001) { this.want.set(0, 0, 0); }
+      else {
+        cam.getWorldDirection(this.fwd); this.fwd.y = 0;        // look direction,
+        if (this.fwd.lengthSq() < 1e-6) { this.fwd.set(0, 0, -1); }   // flattened
+        this.fwd.normalize();                                   // to the floor
+        this.right.crossVectors(this.fwd, this.up).normalize();
+        var sp = K.run ? this.data.runSpeed : this.data.speed;
+        if (J.x || J.y) { sp *= 2.2; }   /* phone stick: brisk pace */
+        this.want.copy(this.fwd).multiplyScalar(iy)
+                 .addScaledVector(this.right, ix).normalize().multiplyScalar(sp * m);
+      }
+      var d = dt || 16;
+      if (d > 1000) { d = 16; }             // ignore tab-switch deltas
+      d = Math.min(d, 250) / 1000;          // per-tick step cap (slow phones)
+      this.vel.lerp(this.want, 1 - Math.exp(-d * 9));           // smooth accel/stop
+      if (this.vel.lengthSq() < 1e-4) { this.vel.set(0, 0, 0); }
+      this.el.object3D.position.addScaledVector(this.vel, d);   // rig moves, not cam
+    }
+  });
+
+  /* =========================================================================
+     3. GEOMETRY BUILDERS (repetitive structure generated from the data above)
+     ========================================================================= */
+
+  /* --- 16 server racks: 2 rows of 8, fronts facing the cold aisle --------- */
+  AFRAME.registerComponent('builder-racks', {
+    init: function () {
+      var root = this.el;
+      ROWS.forEach(function (row) {
+        mk('a-box', {
+          position: row.x + ' 0.045 0', width: 1.06, height: 0.09, depth: 22.3,
+          material: 'color:#1c2438; shader: flat; roughness:1; metalness:0; emissive:#1c2438; emissiveIntensity:0.30'
+        }, root);
+        RACK_Z.forEach(function (z, i) {
+          var id = row.prefix + '-' + (i < 7 ? '0' : '') + (i + 1);
+          var g = mk('a-entity', {
+            'class': 'rack', position: row.x + ' 0 ' + z, rotation: '0 ' + row.ry + ' 0'
+          }, root);
+          var bc = shade(RACK.colour, (rnd(i * 7.3 + row.prefix.charCodeAt(0) * 1.7) - 0.5) * 0.16);
+          mk('a-box', {                                   // cabinet body = the click target
+            'class': 'clickable', 'data-unit': 'rack:' + id,
+            width: RACK.w, height: RACK.h, depth: RACK.d, position: '0 1.0 0',
+            material: 'color:' + bc + '; shader: flat; roughness:.74; metalness:0.08; emissive:' + bc + '; emissiveIntensity:0.45'
+          }, g);
+          mk('a-plane', {                                   // front door (cold side)
+            'class': 'rack-door', width: 0.54, height: 1.86, position: '0 1.0 0.503',
+            material: 'color:#3f4d63; shader: flat; roughness:.62; metalness:0.10; emissive:#3f4d63; emissiveIntensity:0.45'
+          }, g);
+          mk('a-plane', {                                   // door vent
+            width: 0.44, height: 0.46, position: '0 1.56 0.506',
+            material: 'color:#1a2338; shader: flat; roughness:1; emissive:#1a2338; emissiveIntensity:0.30'
+          }, g);
+          mk('a-box', {                                     // door handle
+            'class': 'rack-handle', width: 0.035, height: 0.42, depth: 0.06,
+            position: '0.235 1.02 0.535',
+            material: 'color:#0f1626; shader: flat; roughness:.55; metalness:.18; emissive:#0f1626; emissiveIntensity:0.40'
+          }, g);
+          mk('a-box', {                                     // status bar
+            'class': 'led status', width: 0.46, height: 0.035, depth: 0.02,
+            position: '0 0.26 0.512', material: 'color:' + C.ok + '; shader:flat'
+          }, g);
+          mk('a-box', {                                     // activity LEDs
+            'class': 'led blink', width: 0.05, height: 0.035, depth: 0.02,
+            position: '0.14 1.16 0.512', material: 'color:' + C.ok + '; shader:flat'
+          }, g);
+          mk('a-box', {
+            'class': 'led blink', width: 0.05, height: 0.035, depth: 0.02,
+            position: '0.22 1.06 0.512', material: 'color:' + C.accent + '; shader:flat'
+          }, g);
+          mk('a-plane', {                                   // rear exhaust grille (hot side)
+            'class': 'rack-rear', width: 0.52, height: 1.7, position: '0 1.0 -0.503',
+            rotation: '0 180 0', material: 'color:#2b3854; shader: flat; roughness:.95; emissive:#2b3854; emissiveIntensity:0.30'
+          }, g);
+          mk('a-text', {
+            value: ascii(id), position: '0 1.88 0.515', align: 'center',
+            width: 0.34, 'wrap-count': 6, color: '#cfe9f5'
+          }, g);
+          DC.refs.racks.push(g);
+        });
+      });
+    }
+  });
+
+  /* --- perforated floor tiles: the cold-air supply into the aisle --------- */
+  AFRAME.registerComponent('builder-tiles', {
+    init: function () {
+      var root = this.el, cols = [-0.78, 0.78], r, c, z;
+      for (r = 0; r < 18; r++) {
+        z = -10.125 + r * 1.1875;
+        for (c = 0; c < cols.length; c++) {
+          mk('a-plane', {
+            'class': 'perf-tile', rotation: '-90 0 0', position: cols[c] + ' 0.012 ' + z,
+            width: 1.16, height: 0.72,
+            material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.25'
+          }, root);
+        }
+      }
+    }
+  });
+
+  /* --- overhead cable trays above the cold aisle (M1.2 hotspot 6) -------- */
+  AFRAME.registerComponent('builder-trays', {
+    init: function () {
+      var root = this.el, i, z;
+      [-0.62, 0.62].forEach(function (x) {
+        mk('a-box', { position: x + ' 3.34 0', width: 0.34, height: 0.05, depth: 19.0,
+                      material: 'color:#22262a; shader: flat; roughness:.8; metalness:0.08; emissive:#22262a; emissiveIntensity:0.45' }, root);
+        mk('a-box', { position: (x - 0.16) + ' 3.41 0', width: 0.03, height: 0.10, depth: 19.0,
+                      material: 'color:#475569; shader: flat; roughness:.8; metalness:0.08; emissive:#475569; emissiveIntensity:0.45' }, root);
+        mk('a-box', { position: (x + 0.16) + ' 3.41 0', width: 0.03, height: 0.10, depth: 19.0,
+                      material: 'color:#475569; shader: flat; roughness:.8; metalness:0.08; emissive:#475569; emissiveIntensity:0.45' }, root);
+      });
+      // cable bundles
+      mk('a-cylinder', { position: '-0.62 3.40 0', radius: 0.055, height: 23.5, rotation: '90 0 0',
+                         'segments-radial': 8, material: 'color:#22d3ee; shader: flat; roughness:.6; emissive:#22d3ee; emissiveIntensity:0.45' }, root);
+      mk('a-cylinder', { position: '-0.52 3.40 0', radius: 0.045, height: 23.5, rotation: '90 0 0',
+                         'segments-radial': 8, material: 'color:#34d399; shader: flat; roughness:.6; emissive:#34d399; emissiveIntensity:0.45' }, root);
+      mk('a-cylinder', { position: '0.62 3.40 0', radius: 0.055, height: 23.5, rotation: '90 0 0',
+                         'segments-radial': 8, material: 'color:#fbbf24; shader: flat; roughness:.6; emissive:#fbbf24; emissiveIntensity:0.45' }, root);
+      // hangers to the ceiling
+      for (i = 0; i < 7; i++) {
+        z = -11.25 + i * 3.75;
+        [-0.62, 0.62].forEach(function (x) {
+          mk('a-box', { position: x + ' 4.26 ' + z, width: 0.035, height: 0.60, depth: 0.035,
+                        material: 'color:#2b3854; shader: flat; roughness:1; emissive:#2b3854; emissiveIntensity:0.30' }, root);
+        });
+      }
+      // cross tray linking the trays to the network core at the north end
+      mk('a-box', { position: '0 3.34 -12', width: 1.6, height: 0.05, depth: 0.34,
+                    material: 'color:#22262a; shader: flat; roughness:.8; metalness:0.08; emissive:#22262a; emissiveIntensity:0.45' }, root);
+    }
+  });
+
+  /* --- M1.3 power path: thin cylinders between explicit nodes ------------- */
+  AFRAME.registerComponent('builder-chain', {
+    init: function () {
+      var root = this.el;
+      var UP = new THREE.Vector3(0, 1, 0);
+      CHAIN.forEach(function (s, idx) {
+        var a = new THREE.Vector3(s.a[0], s.a[1], s.a[2]);
+        var b = new THREE.Vector3(s.b[0], s.b[1], s.b[2]);
+        var dir = new THREE.Vector3().subVectors(b, a);
+        var len = dir.length();
+        var mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+        var q = new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize());
+        var e = new THREE.Euler().setFromQuaternion(q, 'XYZ');
+        var el = mk('a-cylinder', {
+          'class': 'chain-seg clickable', 'data-unit': 'chain:' + s.k,
+          radius: 0.055, height: len.toFixed(3), 'segments-radial': 8,
+          position: mid.x.toFixed(3) + ' ' + mid.y.toFixed(3) + ' ' + mid.z.toFixed(3),
+          rotation: THREE.MathUtils.radToDeg(e.x).toFixed(2) + ' ' +
+                    THREE.MathUtils.radToDeg(e.y).toFixed(2) + ' ' +
+                    THREE.MathUtils.radToDeg(e.z).toFixed(2),
+          material: 'color:' + CHAIN_COLOR[S.power.chain[s.k]] + '; shader:flat; transparent:true; opacity:1'
+        }, root);
+        DC.refs.chain.push({ el: el, k: s.k, state: S.power.chain[s.k], idx: idx,
+                             base: new THREE.Color(CHAIN_COLOR[S.power.chain[s.k]]) });
+      });
+    }
+  });
+
+  /* --- M1.1 waypoint discs ------------------------------------------------ */
+  AFRAME.registerComponent('builder-waypoints', {
+    init: function () {
+      var root = this.el;
+      WAYPOINTS.forEach(function (wp, i) {
+        var g = mk('a-entity', { 'class': 'wp', position: wp.pos.join(' ') }, root);
+        var disc = mk('a-cylinder', {
+          'class': 'clickable wp-disc', radius: 0.62, height: 0.035, position: '0 0.020 0',
+          'segments-radial': 28,
+          material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.28'
+        }, g);
+        mk('a-ring', {
+          'class': 'wp-halo', 'radius-inner': 0.66, 'radius-outer': 0.74,
+          rotation: '-90 0 0', position: '0 0.024 0', 'segments-theta': 40,
+          material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.5; side:double',
+          pulse: 'min:.94; max:1.16; dur:2200; omin:.18; omax:.55'
+        }, g);
+        mk('a-cylinder', {
+          radius: 0.09, height: 0.05, position: '0 0.03 0', 'segments-radial': 16,
+          material: 'color:' + C.accent + '; shader:flat'
+        }, g);
+        mk('a-cylinder', {
+          radius: 0.008, height: 0.44, position: '0 0.26 0', 'segments-radial': 6,
+          material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.45'
+        }, g);
+        mk('a-text', {
+          value: ascii(wp.label), position: '0 0.56 0', align: 'center',
+          width: 1.5, 'wrap-count': 26, color: '#cfe9f5', billboard: ''
+        }, g);
+
+        disc.addEventListener('click', function () { DC.goTo(i); });
+        disc.addEventListener('mouseenter', function () {
+          DC.hover(true); disc.object3D.scale.set(1.12, 1.12, 1.12);
+        });
+        disc.addEventListener('mouseleave', function () {
+          DC.hover(false); disc.object3D.scale.set(1, 1, 1);
+        });
+      });
+    }
+  });
+
+  /* --- M1.2 hotspots + billboarded info panels --------------------------- */
+  AFRAME.registerComponent('builder-hotspots', {
+    init: function () {
+      var root = this.el;
+      HOTSPOTS.forEach(function (h) {
+        var g = mk('a-entity', { 'class': 'hs', position: h.hs.join(' ') }, root);
+        var core = mk('a-sphere', {
+          'class': 'clickable hs-core', radius: 0.10, 'segments-width': 14, 'segments-height': 10,
+          material: 'color:' + C.accent + '; shader:flat; opacity:.95; transparent:true'
+        }, g);
+        mk('a-sphere', {
+          radius: 0.20, 'segments-width': 14, 'segments-height': 10,
+          material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.28',
+          pulse: 'min:.85; max:1.55; dur:1600; omin:.06; omax:.34'
+        }, g);
+        mk('a-text', {
+          value: ascii(h.label), position: '0 0.34 0', align: 'center',
+          width: 1.1, 'wrap-count': 24, color: '#9fd8e8', billboard: ''
+        }, g);
+
+        core.addEventListener('click', function () { DC.togglePanel(h.id); });
+        core.addEventListener('mouseenter', function () {
+          DC.hover(true); core.object3D.scale.set(1.25, 1.25, 1.25);
+        });
+        core.addEventListener('mouseleave', function () {
+          DC.hover(false); core.object3D.scale.set(1, 1, 1);
+        });
+        DC.refs.hotspots[h.id] = g;
+      });
+    }
+  });
+
+  AFRAME.registerComponent('builder-panels', {
+    init: function () {
+      var root = this.el;
+      HOTSPOTS.forEach(function (h) {
+        var s = h.ps || 1;
+        var g = mk('a-entity', {
+          'class': 'panel', position: h.panel.join(' '), visible: 'false',
+          scale: s + ' ' + s + ' ' + s, billboard: ''
+        }, root);
+        mk('a-plane', {                                        // glow border
+          width: 1.87, height: 1.07, position: '0 0 -0.006',
+          material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.30'
+        }, g);
+        mk('a-plane', {                                        // panel body 1.8 x 1.0
+          width: 1.8, height: 1.0,
+          material: 'color:' + C.floor + '; transparent:true; opacity:.92; side:double'
+        }, g);
+        mk('a-plane', {                                        // accent bar
+          width: 1.8, height: 0.05, position: '0 0.475 0.004',
+          material: 'color:' + C.accent + '; shader:flat'
+        }, g);
+        mk('a-text', {
+          value: ascii(h.title), position: '-0.80 0.36 0.012', align: 'left', anchor: 'left',
+          baseline: 'top', width: 1.60, 'wrap-count': 27, color: C.text
+        }, g);
+        mk('a-text', {
+          value: ascii(h.body), position: '-0.81 0.17 0.012', align: 'left', anchor: 'left',
+          baseline: 'top', width: 1.62, 'wrap-count': 47, color: '#b9c7de'
+        }, g);
+        mk('a-plane', {
+          width: 1.62, height: 0.008, position: '0 -0.30 0.010',
+          material: 'color:#475569; shader:flat; transparent:true; opacity:.6'
+        }, g);
+        mk('a-text', {
+          value: ascii('Module M1.2 - concept summary'), position: '-0.81 -0.36 0.012',
+          align: 'left', anchor: 'left', baseline: 'top', width: 1.2, 'wrap-count': 40,
+          color: '#6f83a3'
+        }, g);
+        var x = mk('a-plane', {                                 // close button
+          'class': 'clickable panel-close', width: 0.22, height: 0.22, position: '0.74 0.36 0.014',
+          material: 'color:#1e2a44; shader:flat; transparent:true; opacity:.9'
+        }, g);
+        mk('a-text', {
+          value: 'X', position: '0.74 0.36 0.020', align: 'center', anchor: 'center',
+          baseline: 'center', width: 0.14, 'wrap-count': 1, color: C.accent
+        }, g);
+        x.addEventListener('click', function () { DC.closePanel(); });
+        x.addEventListener('mouseenter', function () { DC.hover(true); tint(x, C.danger); });
+        x.addEventListener('mouseleave', function () { DC.hover(false); tint(x, '#1e2a44'); });
+        DC.refs.panels[h.id] = { el: g, scale: s };
+      });
+    }
+  });
+
+  /* =========================================================================
+     4. M1.4 - AIRFLOW / THERMAL PATH (one tick drives every particle)
+     ========================================================================= */
+  AFRAME.registerComponent('airflow', {
+    schema: { count: { default: 48 } },
+
+    init: function () {
+      this.particles = [];
+      this.stops = [
+        [0.00, new THREE.Color(C.accent)], [0.18, new THREE.Color(C.accent)],
+        [0.32, new THREE.Color(C.warn)],   [0.45, new THREE.Color(C.danger)],
+        [0.62, new THREE.Color(C.danger)], [0.78, new THREE.Color(C.warn)],
+        [0.92, new THREE.Color(C.accent)], [1.00, new THREE.Color(C.accent)]
+      ];
+      this.danger = new THREE.Color(C.danger);
+      this.tmp = new THREE.Color();
+      this.tmp2 = new THREE.Color();
+      var i;
+      for (i = 0; i < this.data.count; i++) {
+        var el = mk('a-sphere', {
+          'class': 'air-particle', radius: 0.042, 'segments-width': 8, 'segments-height': 6,
+          material: 'color:' + C.accent + '; shader:flat; transparent:true; opacity:.8'
+        }, this.el);
+        var p = { el: el, obj: null, m: null, seg: 0, u: 0, speed: 0, path: null,
+                  lens: null, phase: Math.random() * 6.28 };
+        this.particles.push(p);
+        this.respawn(p, true);
+      }
+      this.applyVisibility();
+    },
+
+    /* A closed loop: tile -> cold aisle -> rack front -> rack rear -> hot
+       aisle -> ceiling -> CRAC intake -> coil -> supply duct -> under floor. */
+    makePath: function () {
+      var side = Math.random() < 0.5 ? -1 : 1;
+      var z0 = -8.0 + Math.random() * 16.0;
+      var x0 = side * (0.30 + Math.random() * 1.0);
+      var cracs = DC.refs.cracs.filter(function (c) { return c.mode !== 'fault'; });
+      var cz = (cracs.length ? cracs[Math.floor(Math.random() * cracs.length)].z
+                             : [6.0, 1.0, -4.0][Math.floor(Math.random() * 3)]);
+      return [
+        [x0, 0.06, z0], [x0 * 0.9, 0.85, z0], [side * 1.42, 1.10, z0],
+        [side * 2.55, 1.45, z0], [side * 3.55, 1.98, z0], [side * 3.75, 3.10, z0 * 0.92],
+        [-4.2, 3.45, z0 * 0.7], [-8.30, 2.90, cz], [-8.90, 1.20, cz],
+        [-8.90, 0.42, cz * 0.6], [-4.5, 0.10, z0 * 0.5], [x0, 0.06, z0]
+      ];
+    },
+
+    respawn: function (p, randomStart) {
+      p.path = this.makePath();
+      p.lens = [];
+      var total = 0, i;
+      for (i = 0; i < p.path.length - 1; i++) {
+        var a = p.path[i], b = p.path[i + 1];
+        var l = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]) +
+                          (b[2] - a[2]) * (b[2] - a[2]));
+        p.lens.push(Math.max(l, 0.001)); total += l;
+      }
+      p.total = total;
+      // air crawls out of the tiles, accelerates through the rack and home to
+      // the CRAC - clusters particles where the story is and reads as flow
+      p.segFactor = [0.7, 0.7, 0.8, 1.1, 1.15, 1.2, 1.3, 1.35, 1.35, 1.3, 1.05, 0.9];
+      p.seg = 0; p.u = 0;
+      p.speed = 1.05 + Math.random() * 0.55;
+      if (randomStart) {                        // stagger so the loop is filled
+        var d = Math.random() * total, k = 0;
+        while (k < p.lens.length - 1 && d > p.lens[k]) { d -= p.lens[k]; k++; }
+        p.seg = k; p.u = d / p.lens[k];
+      }
+      if (!p.obj) { p.obj = p.el.getObject3D('mesh'); p.m = p.obj ? p.obj.material : null; }
+    },
+
+    colourFor: function (g, out) {
+      var st = this.stops, i;
+      for (i = 0; i < st.length - 1; i++) {
+        if (g <= st[i + 1][0]) {
+          var t = (g - st[i][0]) / (st[i + 1][0] - st[i][0] || 1);
+          return out.copy(st[i][1]).lerp(st[i + 1][1], clamp(t, 0, 1));
+        }
+      }
+      return out.copy(st[st.length - 1][1]);
+    },
+
+    tick: function (t, dt) {
+      if (!S.airflow || !this.particles.length) { return; }
+      var d = dt || 16;
+      if (d > 1000) { d = 16; }             // ignore tab-switch deltas
+      d = Math.min(d, 250) / 1000;          // per-tick step cap (slow phones)
+      var bias = S.thermalBias, wob = t / 1000;
+      for (var i = 0; i < this.particles.length; i++) {
+        var p = this.particles[i];
+        if (!p.obj) {
+          p.obj = p.el.getObject3D('mesh');
+          if (!p.obj) { continue; }
+          p.m = p.obj.material;
+        }
+        p.u += (p.speed * (S.airBoost || 1) * (p.segFactor[p.seg] || 1) * d) / p.lens[p.seg];
+        while (p.u >= 1) {
+          p.u -= 1; p.seg++;
+          if (p.seg >= p.lens.length) { this.respawn(p, false); break; }
+        }
+        var a = p.path[p.seg], b = p.path[p.seg + 1] || p.path[p.seg];
+        var u = p.u;
+        var wx = 0.055 * Math.sin(wob * 2.1 + p.phase);
+        var wz = 0.055 * Math.cos(wob * 1.7 + p.phase * 1.3);
+        p.obj.position.set(lerp(a[0], b[0], u) + wx, lerp(a[1], b[1], u), lerp(a[2], b[2], u) + wz);
+
+        var g = (p.seg + u) / p.lens.length;
+        this.colourFor(g, this.tmp);
+        if (bias > 0) { this.tmp.lerp(this.danger, bias * 0.45); }
+        if (p.m) { p.m.color.copy(this.tmp); }
+        var heat = clamp((g - 0.2) / 0.45, 0, 1) * (1 - clamp((g - 0.65) / 0.3, 0, 1));
+        var sc = 1 + heat * 0.35 + bias * 0.15;
+        p.obj.scale.set(sc, sc, sc);
+      }
+    },
+
+    applyVisibility: function () { this.el.object3D.visible = !!S.airflow; },
+
+    update: function () { this.applyVisibility(); }
+  });
+
+  /* =========================================================================
+     5. EFFECTS USED BY THE SCENARIOS
+     ========================================================================= */
+  function setStatus(text, cls) {
+    S.status.text = text; S.status.cls = cls || 'ok';
+  }
+  function applyChain() {
+    DC.refs.chain.forEach(function (seg) {
+      seg.state = S.power.chain[seg.k];
+      seg.base.set(CHAIN_COLOR[seg.state] || C.metal2);
+    });
+  }
+  function setCrac(i, mode) {
+    var r = DC.refs.cracs[i]; if (!r) { return; }
+    r.mode = mode;
+    tint(r.beacon, mode === 'fault' ? C.danger : (mode === 'duty' ? C.ok : C.metal2));
+    tint(r.louvre, mode === 'fault' ? C.danger : (mode === 'duty' ? C.accent : C.metal2),
+         mode === 'fault' ? 0.7 : 0.5);
+    tint(r.intake, mode === 'fault' ? C.danger : (mode === 'duty' ? C.warn : C.metal2), 0.32);
+    r.fan.setAttribute('spin', 'speed', mode === 'duty' ? 320 : 0);
+    r.label.setAttribute('text', 'value',
+      ascii(r.name + ' | ' + (mode === 'fault' ? 'FAULT' : mode === 'duty' ? 'DUTY' : 'STANDBY')));
+    r.label.setAttribute('text', 'color',
+      mode === 'fault' ? C.danger : mode === 'duty' ? '#cfe9f5' : C.muted);
+    r.alarm.setAttribute('visible', mode === 'fault' ? 'true' : 'false');
+    S.cooling.online = DC.refs.cracs.filter(function (c) { return c.mode === 'duty'; }).length;
+    S.cooling.standby = DC.refs.cracs.filter(function (c) { return c.mode === 'standby'; }).length;
+  }
+  function setBeacon(which, state) {
+    var p = DC.refs.power;
+    var target = which === 'util' ? p.utilBeacon : which === 'ats' ? p.atsBeacon : p[which];
+    if (!target) { return; }
+    var col = CHAIN_COLOR[state] || C.metal2;
+    if (which === 'ups') {
+      tint(p.ups.beaconA, col); tint(p.ups.beaconB, col);
+      tint(p.ups.barA, col); tint(p.ups.barB, col);
+      var txt = state === 'live' ? 'UPS-A | 200kVA ON BATTERY' : 'UPS-A | 200kVA ONLINE';
+      p.ups.labelA.setAttribute('text', 'value', ascii(txt));
+      p.ups.labelB.setAttribute('text', 'value', ascii(txt.replace('UPS-A', 'UPS-B')));
+      p.ups.labelA.setAttribute('text', 'color', state === 'live' ? C.accent : '#cfe9f5');
+      p.ups.labelB.setAttribute('text', 'color', state === 'live' ? C.accent : '#cfe9f5');
+    } else if (which === 'util') {
+      tint(p.utilBeacon, col);
+    } else if (which === 'ats') {
+      tint(p.atsBeacon, col);
+    } else if (which === 'gen') {
+      tint(p.gen.beacon, col);
+      p.gen.label.setAttribute('text', 'value', ascii(
+        state === 'ok' ? 'GEN-1 | 500kVA DIESEL | RUNNING' :
+        state === 'live' ? 'GEN-1 | 500kVA DIESEL | RUNNING' :
+        state === 'fail' ? 'GEN-1 | 500kVA DIESEL | FAULT' :
+        'GEN-1 | 500kVA DIESEL | STANDBY'));
+      p.gen.label.setAttribute('text', 'color', state === 'ok' || state === 'live' ? C.ok : C.muted);
+    }
+  }
+  function btnState(which, busy, label) {
+    var b = document.getElementById('btn-' + which);
+    var l = document.getElementById('btn-' + which + '-label');
+    if (b) { b.setAttribute('data-busy', busy ? 'true' : 'false'); }
+    if (l && label) { l.textContent = label; }
+  }
+
+  /* --- M1.3 A : cooling N+1 --------------------------------------------- */
+  var TL_A = [
+    { at: 0.00, fn: function () {
+        setCrac(1, 'fault');
+        DC.setFocus(0, [-8.9, 0, 1.0], 1.15, C.danger, 2.7);
+        DC.callout(0, [-8.1, 3.2, 1.0], '1. CRAC-2 COMPRESSOR FAULT', '#ffd9d9');
+        S.tempTarget.cold = 28.8; S.tempTarget.hot = 44.5;
+        setStatus('Cooling fault - CRAC-2 offline', 'bad');
+        btnState('a', true, 'Scenario A running - CRAC-2 failed');
+      } },
+    { at: 1.40, fn: function () { setStatus('Cold aisle temperature climbing', 'bad'); } },
+    { at: 2.60, fn: function () {
+        setCrac(2, 'duty');
+        DC.setFocus(1, [-8.9, 0, -4.0], 1.15, C.ok, 2.7);
+        DC.callout(1, [-8.1, 3.2, -4.0], '2. STANDBY CRAC-3 STARTS (N+1)', '#c9f7e4');
+        S.tempTarget.cold = 21.8; S.tempTarget.hot = 33.6;
+        setStatus('Standby CRAC-3 started - N+1 absorbing the loss', 'warn');
+      } },
+    { at: 5.80, fn: function () {
+        setStatus('Cooling restored - no impact on the racks', 'ok');
+        DC.callout(2, [0, 2.9, 2], '3. COLD AISLE RECOVERED', '#c9f7e4');
+      } },
+    { at: 6.80, fn: function () {
+        S.A.phase = 'resolved';
+        DC.clearCallouts();
+        btnState('a', false, 'Reset Scenario A');
+      } }
+  ];
+
+  /* --- M1.3 B : 2N power, UPS + generator -------------------------------- */
+  var TL_B = [
+    { at: 0.00, fn: function () {
+        S.power.chain.utility = 'fail';
+        DC.setFocus(0, [8.95, 0, -6.4], 0.95, C.danger, 2.3);
+        DC.setFocus(1, [8.7, 0, 2.3], 1.5, C.accent, 2.6);
+        DC.callout(0, [8.3, 3.0, -6.4], '1. GRID LOST - UPS ON BATTERY 0 ms', '#ffd9d9');
+        S.power.chain.ups = 'live';
+        S.power.source = 'UPS BATTERY'; S.power.upsLoad = 100; S.power.draining = true;
+        setBeacon('util', 'fail'); setBeacon('ats', 'live'); setBeacon('ups', 'live');
+        applyChain();
+        setStatus('Utility feed lost - UPS transfer in 0 ms', 'bad');
+        btnState('b', true, 'Scenario B running - utility lost');
+      } },
+    { at: 0.90, fn: function () { setStatus('Racks still fed from battery - zero downtime', 'warn'); } },
+    { at: 3.00, fn: function () {
+        setBeacon('gen', 'warn');
+        DC.callout(1, [7.0, 2.8, -8.6], '2. DIESEL GENERATOR CRANKING', '#ffe9c4');
+        DC.refs.power.gen.fan.setAttribute('spin', 'speed', 190);
+        setStatus('Diesel generator cranking - taking load in ~1 s', 'warn');
+      } },
+    { at: 3.90, fn: function () {
+        S.power.chain.gen = 'ok'; S.power.chain.ups = 'ok';
+        DC.setFocus(2, [7.0, 0, -8.6], 1.9, C.ok, 2.5);
+        DC.callout(2, [8.2, 3.0, -3.4], '3. ON GENERATOR - 2N PATH SECURE', '#c9f7e4');
+        S.power.source = 'GENERATOR'; S.power.upsLoad = 36; S.power.draining = false;
+        setBeacon('gen', 'ok'); setBeacon('ups', 'ok'); setBeacon('ats', 'live');
+        DC.refs.power.gen.fan.setAttribute('spin', 'speed', 430);
+        applyChain();
+        setStatus('On generator - 2N power path secure', 'ok');
+      } },
+    { at: 5.60, fn: function () {
+        S.B.phase = 'resolved';
+        DC.clearCallouts();
+        btnState('b', false, 'Reset Scenario B');
+      } }
+  ];
+  /* --- real-life scenario briefs: shown top-centre for exactly 8 s --------- */
+  var BRIEFS = {
+    A: { tag: 'SCENARIO A - COOLING FAILURE - WHAT HAPPENS IN REAL LIFE',
+         text: 'A compressor fault has tripped CRAC-2 and its fans have stopped. A fully loaded ' +
+               'rack overheats in under two minutes, so the N+1 design takes over: standby ' +
+               'CRAC-3 auto-starts and absorbs the load while the cold aisle warms, then ' +
+               'recovers. The servers never notice - downtime stays 0 ms.' },
+    B: { tag: 'SCENARIO B - UTILITY POWER LOSS - WHAT HAPPENS IN REAL LIFE',
+         text: 'The grid feed has failed. Servers cannot ride through even a 20 ms blink, so the ' +
+               'UPS batteries instantly take the full load (0 ms transfer) while the diesel ' +
+               'generator cranks. Seconds later the ATS switches the building onto generator ' +
+               'power - the rack LEDs never flicker.' }
+  };
+
+  BRIEFS.C = {
+    tag: 'SCENARIO C - TRAFFIC SURGE - WHAT HAPPENS IN REAL LIFE',
+    text: 'A viral moment triples requests per second, and every watt those extra servers burn ' +
+          'becomes heat: row A soaks toward its thermal limit in minutes. The CRACs ramp to ' +
+          'full, then the load balancer and auto-scaler spread the traffic ' +
+          'across both rows - heat evens out, no request is dropped, downtime stays 0 ms.'
+  };
+
+  /* --- builder-focus: pooled highlight rigs (the pulsing red ring that marks the
+       machine being talked about) + billboarded caption tags used by scenarios ------ */
+  AFRAME.registerComponent('builder-focus', {
+    init: function () {
+      this.rigs = [];
+      for (var f = 0; f < 4; f++) {
+        var g = mk('a-entity', { visible: false }, this.el);
+        var ring = mk('a-ring', {
+          color: C.danger, radius: '0.7',
+          rotation: '-90 0 0',
+          material: 'shader:flat; side:double; transparent:true; opacity:0.9',
+          pulse: 'min:0.8; max:1.2; dur:1100; omin:0.45; omax:1'
+        }, g);
+        var beam = mk('a-cylinder', {
+          color: C.danger, height: '4.6', radius: '0.012', position: '0 2.3 0',
+          material: 'shader:flat; transparent:true; opacity:0.5'
+        }, g);
+        mk('a-sphere', {
+          color: C.danger, radius: '0.055', position: '0 2.4 0',
+          material: 'shader:flat',
+          pulse: 'min:0.6; max:1.5; dur:800; omin:1; omax:1'
+        }, g);
+        this.rigs.push({ g: g, ring: ring, beam: beam });
+      }
+      this.tags = [];
+      for (var t = 0; t < 3; t++) {
+        var tg = mk('a-entity', { visible: false }, this.el);
+        mk('a-plane', {
+          width: '2.6', height: '0.34',
+          material: 'color:' + C.floor + '; shader:flat; transparent:true; opacity:0.93',
+          billboard: ''
+        }, tg);
+        var txt = mk('a-text', {
+          value: '', align: 'center', width: '2.4', color: C.text, anchor: 'center',
+          baseline: 'center'
+        }, tg);
+        this.tags.push({ g: tg, txt: txt });
+      }
+      DC.focusRigs = this.rigs;
+      DC.focusTags = this.tags;
+    }
+  });
+
+  /* --- highlight + caption API ---------------------------------------------------- */
+  DC.setFocus = function (i, pos, radius, hex) {
+    var rigs = DC.focusRigs; if (!rigs || !rigs[i]) { return; }
+    var r = rigs[i], k = (radius || 0.9) / 0.7;
+    r.g.setAttribute('position', pos[0] + ' ' + (pos[1] || 0) + ' ' + pos[2]);
+    if (r.g.object3D) { r.g.object3D.scale.set(k, 1, k); }
+    r.ring.setAttribute('color', hex || C.danger);
+    r.beam.setAttribute('color', hex || C.danger);
+    r.g.setAttribute('visible', true);
+  };
+  DC.clearFocus = function (i) {
+    var rigs = DC.focusRigs; if (rigs && rigs[i]) { rigs[i].g.setAttribute('visible', false); }
+  };
+  DC.clearAllFocus = function () {
+    (DC.focusRigs || []).forEach(function (r) { r.g.setAttribute('visible', false); });
+  };
+  DC.callout = function (i, pos, text, hex) {
+    var tags = DC.focusTags; if (!tags || !tags[i]) { return; }
+    var t = tags[i];
+    t.g.setAttribute('position', pos[0] + ' ' + pos[1] + ' ' + pos[2]);
+    t.txt.setAttribute('value', text);
+    t.txt.setAttribute('color', hex || C.text);
+    t.g.setAttribute('visible', true);
+  };
+  DC.clearCallouts = function () {
+    (DC.focusTags || []).forEach(function (t) { t.g.setAttribute('visible', false); });
+  };
+
+  /* --- guided tour: step by step through how the data centre works ---------------- */
+  var TOUR = [
+    { title: 'The hall - "the cloud" is a room', view: [0, 15, 0],
+      body: 'This 20 x 24 m hall is where the internet does its computing: 16 racks of servers, a cooling plant on the left and a 2N power room on the right. Everything critical is duplicated - N+1 cooling, 2N power - so one failure never reaches your request.' },
+    { title: 'Server racks - where requests live', view: [0, 8.1, 0],
+      focus: [[-2, 0, 1.5], 0.85],
+      body: 'Your request ends up in one of these 42U cabinets: 20-40 servers per rack, each answering thousands of requests per second. Every rack has dual A+B power feeds, and breathes cold air in the front, hot air out the back.' },
+    { title: 'Cold aisle - chilled air from the floor', view: [0, 10.6, 0],
+      focus: [[0, 0, 5.25], 1.1],
+      body: 'Racks face each other in pairs to form cold aisles. Perforated tiles push about 21 C air up from the raised floor into the server intakes. Stopping cold and hot air from mixing is rule number one of data centre design.' },
+    { title: 'CRAC units - the air conditioners', view: [-6, 1, 90],
+      focus: [[-10.9, 0, 1.25], 1.15],
+      body: 'CRACs suck hot return air in at the top, chill it over cooling coils and blow it under the floor. Two run while one stands by (N+1). Press the Scenario A button or key C to watch one fail and the standby take over automatically.' },
+    { title: 'Hot aisle - where the heat goes', view: [3.2, 7.5, 0],
+      focus: [[2, 0, 4.5], 0.85],
+      body: 'Rear exhaust dumps 33-44 C air into the hot aisles, which drifts back up to the CRAC intakes. Watch the airflow particles (key F) cycle cyan - amber - red, and the rack grilles glow with real heat.' },
+    { title: 'Utility feed + ATS - the grid connection', view: [6, -2.5, -90],
+      focus: [[10.95, 0, -8], 0.95, [10.95, 0, -1.25], 0.8],
+      body: 'Grid power arrives at 11 kV and is stepped down here. The automatic transfer switch inspects it thousands of times a second - the instant it dies, everything downstream switches over. Press Scenario B (key P) to see the grid fail.' },
+    { title: 'UPS - power that never blinks', view: [6, 2.9, -90],
+      focus: [[10.7, 0, 4], 0.9, [10.7, 0, 1.75], 0.9],
+      body: 'Two independent UPS systems condition the power and hold batteries that can carry the full load with 0 ms of interruption. They are the bridge - about ten seconds - while the diesel generator spins up to speed.' },
+    { title: 'Diesel generator - the last line', view: [4.5, -10.75, -90],
+      focus: [[7, 0, -10.75], 1.9],
+      body: 'The genset cranks in seconds and can run for days on the on-site fuel store. When the ATS sees stable grid power return, it switches back and the UPS batteries recharge. That is the whole journey of resilience, end to end.' }
+  ];
+
+  DC.tourOn = false; DC.tourStep = 0;
+  DC.tourStart = function () {
+    if (DC.arOn) { return; }
+    DC.tourOn = true; DC.tourStep = 0;
+    document.getElementById('tourcard').removeAttribute('hidden');
+    DC.tourShow();
+  };
+  DC.tourShow = function () {
+    var s2 = TOUR[DC.tourStep];
+    var st = document.getElementById('tour-step');
+    var ti = document.getElementById('tour-title');
+    var bd = document.getElementById('tour-body');
+    if (st) { st.textContent = 'STEP ' + (DC.tourStep + 1) + ' / ' + TOUR.length; }
+    if (ti) { ti.textContent = s2.title; }
+    if (bd) { bd.textContent = s2.body; }
+    var nx = document.getElementById('tour-next');
+    if (nx) { nx.innerHTML = DC.tourStep === TOUR.length - 1 ? 'Finish \u2713' : 'Next \u2192'; }
+    DC.clearAllFocus();
+    if (s2.focus) {
+      for (var f = 0; f < s2.focus.length; f += 2) {
+        DC.setFocus(f / 2, s2.focus[f], s2.focus[f + 1], C.danger);
+      }
+    }
+    var tp = DC.rig && DC.rig.components.teleport;
+    if (tp) { tp.go([s2.view[0], 0, s2.view[1]], THREE.MathUtils.degToRad(s2.view[2])); }
+  };
+  DC.tourNext = function () {
+    if (!DC.tourOn) { return; }
+    if (DC.tourStep >= TOUR.length - 1) { DC.tourEnd(); return; }
+    DC.tourStep++; DC.tourShow();
+  };
+  DC.tourBack = function () {
+    if (DC.tourOn && DC.tourStep > 0) { DC.tourStep--; DC.tourShow(); }
+  };
+  DC.tourEnd = function () {
+    DC.tourOn = false;
+    document.getElementById('tourcard').setAttribute('hidden', '');
+    DC.clearAllFocus();
+  };
+
+
+  /* --- click-a-machine info cards: "what does this unit do?" --------------- */
+  function chainStatus(k, map) {
+    var v = S.power.chain[k];
+    var m = map[v] || [String(v).toUpperCase(), 'info'];
+    return { text: m[0], cls: m[1] };
+  }
+  function cracStatus(i) {
+    var r = DC.refs.cracs[i];
+    var m = { duty: ['ON DUTY - COOLING', 'ok'], standby: ['STANDBY - READY', 'info'],
+              fault: ['FAULT - TRIPPED', 'bad'] }[r ? r.mode : 'standby'];
+    return { text: m[0], cls: m[1] };
+  }
+  var CRAC_DOES = 'Pulls hot aisle air in through the top, cools it over chilled-water coils, ' +
+        'and blows it under the raised floor so it rises through the perforated tiles into the ' +
+        'cold aisle. Its fans run 24/7 - a rack with no airflow overheats in under a minute.';
+  var UPS_DOES = 'The bridge between grid and servers. It conditions incoming power ' +
+        'continuously, and its batteries take the full IT load instantly - 0 ms - during any ' +
+        'outage, covering the ~10 seconds the generators need to start and take over. ';
+  var RACK_DOES = 'A 42U cabinet of servers and switches - the machines that actually process ' +
+        'your request. It draws 4-8 kW, is fed by two independent A+B power circuits so one ' +
+        'failed path never takes it down, and follows the golden rule of the hall: cold air in ' +
+        'the front, hot air out the back.';
+  var UNITS = {
+    crac1: { name: 'CRAC-1', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES,
+             status: function () { return cracStatus(0); } },
+    crac2: { name: 'CRAC-2', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES,
+             status: function () { return cracStatus(1); } },
+    crac3: { name: 'CRAC-3', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES,
+             status: function () { return cracStatus(2); } },
+    'util-in': { name: 'UTILITY INCOMER + TRANSFORMER', role: 'POWER - GRID ENTRANCE',
+      does: 'Where grid power enters the site: the medium-voltage utility supply is stepped ' +
+            'down by transformers and fed into the electrical chain. Two independent feeds ' +
+            'from two substations (2N) mean one grid outage should never reach the servers.',
+      status: function () {
+        return chainStatus('utility', { live: ['UTILITY LIVE', 'ok'], fail: ['GRID FAILED', 'bad'] });
+      } },
+    ats: { name: 'ATS - AUTOMATIC TRANSFER SWITCH', role: 'POWER - UTILITY / GENERATOR CHANGEOVER',
+      does: 'Watches the utility supply continuously. The instant the grid fails it isolates ' +
+            'the building and routes power from the generators instead, then switches back ' +
+            'automatically once clean utility power returns and has stabilised.',
+      status: function () {
+        return chainStatus('ats', { live: ['CLOSED - NORMAL', 'ok'], fail: ['ISOLATED', 'bad'] });
+      } },
+    upsA: { name: 'UPS-A (2N SIDE A)', role: 'POWER - UNINTERRUPTIBLE SUPPLY',
+      does: UPS_DOES + 'Side A feeds the A circuit of every rack.',
+      status: function () {
+        return chainStatus('ups', { ok: ['ONLINE - DOUBLE CONVERSION', 'ok'],
+                                    live: ['ON BATTERY - DISCHARGING', 'info'], fail: ['FAULT', 'bad'] });
+      } },
+    upsB: { name: 'UPS-B (2N SIDE B)', role: 'POWER - UNINTERRUPTIBLE SUPPLY',
+      does: UPS_DOES + 'Side B feeds the B circuit of every rack.',
+      status: function () {
+        return chainStatus('ups', { ok: ['ONLINE - DOUBLE CONVERSION', 'ok'],
+                                    live: ['ON BATTERY - DISCHARGING', 'info'], fail: ['FAULT', 'bad'] });
+      } },
+    gen: { name: 'GEN-1 - 500 kVA DIESEL', role: 'POWER - BACKUP GENERATOR',
+      does: 'The last line of defence. It cranks within seconds of a utility failure, reaches ' +
+            'full power in about 10 seconds, and can run the entire facility for days on the ' +
+            'on-site fuel reserve while the site waits for the grid to return.',
+      status: function () {
+        if (S.power.chain.gen === 'ok') { return { text: 'RUNNING - CARRYING LOAD', cls: 'ok' }; }
+        if (S.B.active && S.B.t >= 3.0) { return { text: 'CRANKING - TAKING LOAD', cls: 'warn' }; }
+        return { text: 'IDLE - STANDBY', cls: 'info' };
+      } }
+  };
+  (function () {
+    ROWS.forEach(function (row) {
+      RACK_Z.forEach(function (z, i) {
+        var id = row.prefix + '-' + (i < 7 ? '0' : '') + (i + 1);
+        UNITS['rack:' + id] = {
+          name: 'SERVER RACK ' + id.toUpperCase(),
+          role: 'IT CABINET - 42U, ROW ' + row.prefix, does: RACK_DOES
+        };
+      });
+    });
+    var CHAIN_INFO = {
+      utility: ['UTILITY FEEDER', 'POWER PATH - GRID TO ATS',
+        'Carries grid power from the transformer incomer down to the ATS. Red means the ' +
+        'utility has failed and this path is dead.'],
+      ats: ['ATS LINK', 'POWER PATH - THROUGH THE TRANSFER SWITCH',
+        'The switched connection through the ATS: utility or generator power passes here on ' +
+        'its way to the UPS systems.'],
+      ups: ['UPS LINK', 'POWER PATH - UPS OUTPUT',
+        'Conditioned power between the UPS systems and the overhead busway - cyan means the ' +
+        'UPS is holding the load on battery.'],
+      load: ['OVERHEAD BUSWAY', 'POWER PATH - TO THE RACK ROWS',
+        'The power highway above the rows: it drops dual A+B feeds into every rack, so each ' +
+        'cabinet always has two independent supplies.'],
+      gen: ['GENERATOR FEEDER', 'POWER PATH - GENERATOR TO ATS',
+        'Brings generator power up to the ATS, joining upstream of the UPS so the generator ' +
+        'can carry the whole building.']
+    };
+    Object.keys(CHAIN_INFO).forEach(function (k) {
+      var v = CHAIN_INFO[k];
+      UNITS['chain:' + k] = {
+        name: v[0], role: v[1], does: v[2],
+        status: (function (kk) { return function () {
+          var map = kk === 'ups'
+            ? { ok: ['ONLINE', 'ok'], live: ['ON BATTERY', 'info'], fail: ['FAULT', 'bad'] }
+            : kk === 'gen'
+              ? { idle: ['STANDBY', 'info'], ok: ['RUNNING', 'ok'], fail: ['FAILED', 'bad'] }
+              : kk === 'utility'
+                ? { live: ['LIVE', 'ok'], fail: ['FAILED', 'bad'] }
+                : { live: ['LIVE', 'ok'], ok: ['OK', 'ok'], fail: ['FAILED', 'bad'], idle: ['IDLE', 'info'] };
+          return chainStatus(kk, map);
+        }; })(k)
+      };
+    });
+  })();
+  DC.UNITS = UNITS;
+
+  /* --- M1.3 C : traffic surge -> heat soak -> ramp + balance -------------- */
+  var TL_C = [
+    { at: 0.00, fn: function () {
+        S.surgeRacks = [3, 4, 5]; S.airBoost = 1.45; S.power.itLoad = 342;
+        S.tempTarget.cold = 25.6; S.tempTarget.hot = 41.5;
+        DC.setFocus(0, [-2, 0, 1.2], 0.85, C.danger, 2.3);
+        DC.callout(0, [-0.9, 2.9, 1.2], '1. TRAFFIC SURGE - ROW A HEAT SOAK', '#ffd9d9');
+        setStatus('Traffic surge - row A heat soaking', 'warn');
+        btnState('c', true, 'Scenario C running - traffic surge');
+      } },
+    { at: 1.60, fn: function () {
+        DC.refs.cracs.forEach(function (c) {
+          if (c.mode === 'duty') { c.fan.setAttribute('spin', 'speed', 460); }
+        });
+        DC.callout(1, [-8.2, 3.0, 1.0], '2. CRACs RAMP TO FULL SPEED', '#ffe9c4');
+        setStatus('CRAC fans at 100 percent - fighting the hotspot', 'warn');
+      } },
+    { at: 3.60, fn: function () {
+        S.surgeRacks = []; S.power.itLoad = 312;
+        S.tempTarget.cold = 23.4; S.tempTarget.hot = 36.5;
+        DC.clearFocus(0);
+        DC.callout(2, [0, 2.9, 2], '3. LOAD BALANCER SPREADS TRAFFIC', '#c9f7e4');
+        setStatus('Load balanced across both rows - heat evening out', 'warn');
+      } },
+    { at: 5.60, fn: function () {
+        S.airBoost = 1; S.power.itLoad = 284;
+        S.tempTarget.cold = 21.8; S.tempTarget.hot = 33.6;
+        DC.refs.cracs.forEach(function (c) {
+          if (c.mode === 'duty') { c.fan.setAttribute('spin', 'speed', 380); }
+        });
+        DC.callout(0, [0, 2.9, 4.2], '4. THERMAL EQUILIBRIUM RESTORED', '#c9f7e4');
+        setStatus('Surge absorbed - zero dropped requests', 'ok');
+      } },
+    { at: 7.20, fn: function () {
+        S.C.phase = 'resolved';
+        DC.clearCallouts();
+        DC.refs.cracs.forEach(function (c) {
+          if (c.mode === 'duty') { c.fan.setAttribute('spin', 'speed', 320); }
+        });
+        btnState('c', false, 'Reset Scenario C');
+      } }
+  ];
+
+  var TIMELINES = { A: TL_A, B: TL_B, C: TL_C };
+
+  DC.runScenario = function (k) {
+    var sc = S[k];
+    if (sc.active) {                       // second press = reset that scenario
+      if (k === 'A') { DC.resetA(); } else if (k === 'B') { DC.resetB(); } else { DC.resetC(); }
+      return;
+    }
+    sc.active = true; sc.t = 0; sc.phase = 'running'; sc.fired = {};
+    DC.showBrief(k);
+  };
+  DC.resetA = function () {
+    DC.hideBrief(); DC.clearAllFocus(); DC.clearCallouts();
+    S.A.active = false; S.A.t = 0; S.A.phase = 'idle'; S.A.fired = {};
+    setCrac(0, 'duty'); setCrac(1, 'duty'); setCrac(2, 'standby');
+    S.tempTarget.cold = 21.5; S.tempTarget.hot = 33.0;
+    btnState('a', false, 'Scenario A - Fail CRAC-2');
+    if (!S.B.active) { setStatus('System nominal', 'ok'); }
+  };
+  DC.resetB = function () {
+    DC.hideBrief(); DC.clearAllFocus(); DC.clearCallouts();
+    S.B.active = false; S.B.t = 0; S.B.phase = 'idle'; S.B.fired = {};
+    S.power.chain = { utility: 'live', ats: 'live', ups: 'ok', load: 'ok', gen: 'idle' };
+    S.power.source = 'UTILITY'; S.power.upsLoad = 34; S.power.battery = 100; S.power.draining = false;
+    setBeacon('util', 'ok'); setBeacon('ats', 'live'); setBeacon('ups', 'ok'); setBeacon('gen', 'idle');
+    DC.refs.power.gen.fan.setAttribute('spin', 'speed', 0);
+    applyChain();
+    btnState('b', false, 'Scenario B - Fail utility power');
+    if (!S.A.active) { setStatus('System nominal', 'ok'); }
+  };
+  DC.resetC = function () {
+    DC.hideBrief();
+    S.C.active = false; S.C.t = 0; S.C.phase = 'idle'; S.C.fired = {};
+    S.surgeRacks = []; S.airBoost = 1; S.power.itLoad = 268;
+    S.tempTarget.cold = 21.5; S.tempTarget.hot = 33.0;
+    DC.refs.cracs.forEach(function (c) {
+      if (c.mode === 'duty') { c.fan.setAttribute('spin', 'speed', 320); }
+    });
+    DC.clearAllFocus(); DC.clearCallouts();
+    btnState('c', false, 'Scenario C - Traffic surge');
+    if (!S.A.active && !S.B.active) { setStatus('System nominal', 'ok'); }
+  };
+  DC.resetAll = function () { DC.resetA(); DC.resetB(); DC.resetC(); DC.closePanel(); setStatus('System nominal', 'ok'); };
+
+  DC.toggleAirflow = function () {
+    S.airflow = !S.airflow;
+    var el = document.getElementById('airflow');
+    if (el) { el.object3D.visible = S.airflow; }
+    var b = document.getElementById('btn-flow');
+    var l = document.getElementById('btn-flow-label');
+    if (b) { b.setAttribute('aria-pressed', S.airflow ? 'true' : 'false'); }
+    if (l) { l.textContent = S.airflow ? 'Airflow - ON' : 'Airflow - OFF'; }
+  };
+
+  /* Walk option: one switch for keys + thumb stick + dock button state. */
+  DC.setWalk = function (on) {
+    DC.walkEnabled = !!on;
+    var K = DC.input.keys;
+    if (!on) {
+      K.fwd = K.back = K.left = K.right = K.run = false;
+      DC.input.joy.x = 0; DC.input.joy.y = 0;
+      var kn = document.getElementById('stick-knob');
+      if (kn) { kn.style.transform = ''; }
+    }
+    var rig = document.getElementById('rig');
+    if (rig) { rig.setAttribute('locomotion', 'enabled', on ? 'true' : 'false'); }
+    document.documentElement.classList.toggle('walk-on', !!on);
+    var b = document.getElementById('btn-walk');
+    if (b) { b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    var l = document.getElementById('btn-walk-label');
+    if (l) { l.textContent = on ? 'Walk - ON' : 'Walk - OFF'; }
+  };
+
+  DC.goTo = function (i) {
+    if (DC.arOn) { return; }
+    var wp = WAYPOINTS[i]; if (!wp || !DC.rig) { return; }
+    DC.closePanel();
+    DC.rig.components.teleport.go(wp.pos, THREE.MathUtils.degToRad(wp.yaw));
+  };
+
+  DC.togglePanel = function (id) {
+    if (DC.openPanel === id) { DC.closePanel(); return; }
+    DC.closePanel();
+    var p = DC.refs.panels[id]; if (!p) { return; }
+    DC.openPanel = id;
+    p.el.setAttribute('visible', 'true');
+    var s = p.scale, f = (s * 0.82).toFixed(3);
+    p.el.setAttribute('animation', {
+      property: 'scale', from: f + ' ' + f + ' ' + f, to: s + ' ' + s + ' ' + s,
+      dur: 240, easing: 'easeOutQuad'
+    });
+  };
+  DC.closePanel = function () {
+    if (!DC.openPanel) { return; }
+    var p = DC.refs.panels[DC.openPanel];
+    if (p) { p.el.removeAttribute('animation'); p.el.setAttribute('visible', 'false');
+             p.el.setAttribute('scale', p.scale + ' ' + p.scale + ' ' + p.scale); }
+    DC.openPanel = null;
+  };
+  DC.hover = function (on) {
+    var ch = document.getElementById('crosshair');
+    if (ch) { ch.classList.toggle('hot', !!on); }
+  };
+
+  /* --- top banner: real-life scenario brief, auto-hides after exactly 8 s -- */
+  DC.openUnit = null; DC._unitTimer = null; DC.briefTimer = null; DC.briefUntil = 0;
+  DC.showBrief = function (k) {
+    var b = BRIEFS[k]; if (!b) { return; }
+    var el = document.getElementById('brief'); if (!el) { return; }
+    document.getElementById('brief-tag').textContent = b.tag;
+    document.getElementById('brief-text').textContent = b.text;
+    el.hidden = false;
+    var bar = document.getElementById('brief-bar');
+    if (bar) { bar.classList.remove('run'); void bar.offsetWidth; bar.classList.add('run'); }
+    if (DC.briefTimer) { clearTimeout(DC.briefTimer); }
+    DC.briefUntil = Date.now() + 8000;
+    DC.briefTimer = setTimeout(DC.hideBrief, 8000);
+  };
+  DC.hideBrief = function () {
+    if (DC.briefTimer) { clearTimeout(DC.briefTimer); DC.briefTimer = null; }
+    DC.briefUntil = 0;
+    var el = document.getElementById('brief'); if (el) { el.hidden = true; }
+    var bar = document.getElementById('brief-bar'); if (bar) { bar.classList.remove('run'); }
+  };
+
+  /* --- machine info card: what does this unit do? (close icon / Esc) ------- */
+  DC.refreshUnitStatus = function () {
+    var st = document.getElementById('unit-status');
+    if (!st) { return; }
+    var u = DC.openUnit ? UNITS[DC.openUnit] : null;
+    var s = u && u.status ? u.status() : null;
+    if (!s) { st.hidden = true; st.textContent = ''; return; }
+    st.hidden = false; st.textContent = s.text; st.className = s.cls;
+  };
+  DC.showUnit = function (id) {
+    var u = UNITS[id]; if (!u) { return; }
+    var card = document.getElementById('unitcard'); if (!card) { return; }
+    DC.openUnit = id;
+    document.getElementById('unit-role').textContent = u.role;
+    document.getElementById('unit-name').textContent = u.name;
+    document.getElementById('unit-does').textContent = u.does;
+    card.hidden = false;
+    DC.refreshUnitStatus();
+    if (DC._unitTimer) { clearInterval(DC._unitTimer); }
+    DC._unitTimer = setInterval(DC.refreshUnitStatus, 400);
+  };
+  DC.hideUnit = function () {
+    DC.openUnit = null;
+    if (DC._unitTimer) { clearInterval(DC._unitTimer); DC._unitTimer = null; }
+    var card = document.getElementById('unitcard'); if (card) { card.hidden = true; }
+  };
+  DC.toggleUnit = function (id) {
+    if (DC.openUnit === id) { DC.hideUnit(); } else { DC.showUnit(id); }
+  };
+
+  /* --- texture slots: reskin the primitives with real surface photography --
+     Route-A asset pipeline. DC_TEX starts empty, so the hall keeps the locked
+     solid-palette look; registering a data-URI (or URL) per slot maps it onto
+     every surface in that slot - geometry, lights and behaviour untouched.
+     Slots: rack-door rack-rear perf-tile hall-floor hall-wall hall-ceiling
+            crac-face crac-grille ups-face ats-face util-face gen-side       */
+  var DC_TEX = window.DC_TEX = {};
+  var TEX_SLOTS = {
+    'rack-door':    { sel: '.rack-door',     mat: 'std' },
+    'rack-rear':    { sel: '.rack-rear',     mat: 'std' },
+    'perf-tile':    { sel: '.perf-tile',     mat: 'flat' },
+    'hall-floor':   { sel: '.hall-floor',    mat: 'std', repeat: '5 6' },
+    'hall-wall':    { sel: '.hall-wall',     mat: 'std', repeat: '3 1' },
+    'hall-ceiling': { sel: '.hall-ceiling',  mat: 'std', repeat: '5 6' },
+    'crac-face':    { sel: '.crac-face',     mat: 'std' },
+    'crac-grille':  { sel: '.crac-intake',   mat: 'flat' },
+    'ups-face':     { sel: '.ups-face',      mat: 'std' },
+    'ats-face':     { sel: '.ats-face',      mat: 'std' },
+    'util-face':    { sel: '.util-face',     mat: 'std' },
+    'gen-side':     { sel: '.gen-side',      mat: 'std' }
+  };
+  function texMaterial(conf, imgSel) {
+    var m = 'src:' + imgSel + '; ';
+    if (conf.mat === 'flat') { m += 'shader:flat; transparent:true; opacity:1'; }
+    else { m += 'color:#ffffff; shader: flat; roughness:.85; metalness:0; emissive:#0b1020; emissiveIntensity:.45'; }
+    if (conf.repeat) { m += '; repeat:' + conf.repeat; }
+    return m;
+  }
+  DC.applyTexture = function (slot, src) {
+    var conf = TEX_SLOTS[slot]; if (!conf || !src) { return false; }
+    var id = 'dc-tex-' + slot;
+    var el = document.getElementById(id);
+    var ready = true;
+    if (typeof src === 'string') {                       // data-URI / URL photo
+      if (!el || el.tagName !== 'IMG') {
+        if (el) { el.parentNode.removeChild(el); }
+        el = document.createElement('img'); el.id = id; el.alt = '';
+        el.style.cssText = 'position:absolute;left:-9999px;width:0;height:0;opacity:0;pointer-events:none';
+        document.body.appendChild(el);
+      }
+      el.src = src;
+      ready = el.complete && el.naturalWidth > 0;
+    } else {                                             // live canvas: upload-ready now
+      if (el) { el.parentNode.removeChild(el); }
+      el = src; el.id = id;
+      el.style.cssText = 'position:absolute;left:-9999px;opacity:0;pointer-events:none';
+      document.body.appendChild(el);
+    }
+    var matStr = texMaterial(conf, '#' + id);
+    function attach() {
+      Array.prototype.forEach.call(document.querySelectorAll(conf.sel), function (tel) {
+        if (!tel._dcOrigMat && tel.components.material) {
+          // snapshot the parsed component data: the raw DOM attribute is
+          // consumed by A-Frame at upgrade time, so strings are unreliable
+          tel._dcOrigMat = JSON.parse(JSON.stringify(tel.components.material.data));
+        }
+        tel.setAttribute('material', matStr);
+      });
+    }
+    if (ready) { attach(); }
+    else { el.addEventListener('load', attach, { once: true }); }
+    return document.querySelectorAll(conf.sel).length > 0;
+  };
+  DC.clearTexture = function (slot) {
+    var conf = TEX_SLOTS[slot]; if (!conf) { return; }
+    Array.prototype.forEach.call(document.querySelectorAll(conf.sel), function (el) {
+      if (el._dcOrigMat) {
+        el.setAttribute('material', el._dcOrigMat);
+        delete el._dcOrigMat;
+      }
+      var o = el.getObject3D('mesh');
+      if (o && o.material && o.material.map) { o.material.map = null; o.material.needsUpdate = true; }
+    });
+  };
+  DC.texSlots = Object.keys(TEX_SLOTS);
+
+  /* =========================================================================
+     4b. PROCEDURAL SURFACE TEXTURES - painted on 2-D canvases at boot and
+     pushed through the Route-A slot pipeline: real surface detail (mesh
+     doors, hex grilles, swirl tiles, epoxy floors, louvres, mimic panels,
+     decals) with ZERO external files and the single-HTML rule intact.
+     A photo registered in DC_TEX always wins over the painted slot.
+     ========================================================================= */
+  
+  function paintBoard (id, title, lines, step) {
+    var c = document.getElementById(id); if (!c) { return; }
+    var g = c.getContext('2d');
+    g.fillStyle = 'rgba(27,30,34,0.96)'; g.fillRect(0, 0, c.width, c.height);
+    g.strokeStyle = 'rgba(217,165,20,.55)'; g.lineWidth = 6; g.strokeRect(3, 3, c.width - 6, c.height - 6);
+    g.fillStyle = '#fbbf24'; g.font = '800 44px system-ui, sans-serif'; g.fillText(title, 40, 78);
+    g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
+    lines.forEach(function (ln, i) { g.fillText(ln, 40, 150 + i * (step || 74)); });
+  }
+function canvasPainter(w, h) {
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    return { c: c, g: c.getContext('2d') };
+  }
+  function texUri(p, jpeg) { return p.c.toDataURL(jpeg ? 'image/jpeg' : 'image/png', 0.88); }
+  function speckle(g, w, h, n, alpha, rgb, seed) {
+    for (var i = 0; i < n; i++) {
+      var x = rnd(i * 3.1 + seed) * w, y = rnd(i * 7.7 + seed + 5) * h;
+      var r = 0.7 + rnd(i * 1.9 + seed) * 1.6;
+      g.fillStyle = 'rgba(' + rgb + ',' + (alpha * (0.35 + rnd(i * 1.3 + seed) * 0.65)).toFixed(3) + ')';
+      g.fillRect(x, y, r, r);
+      if (x < 4) { g.fillRect(x + w, y, r, r); } if (x > w - 4) { g.fillRect(x - w, y, r, r); }
+      if (y < 4) { g.fillRect(x, y + h, r, r); } if (y > h - 4) { g.fillRect(x, y - h, r, r); }
+    }
+  }
+  function hazard(g, x, y, w, h) {
+    g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+    g.fillStyle = '#fbbf24'; g.fillRect(x, y, w, h);
+    g.fillStyle = '#111827';
+    for (var i = -h; i < w + h; i += 18) {
+      g.beginPath(); g.moveTo(x + i, y + h); g.lineTo(x + i + 9, y + h);
+      g.lineTo(x + i + 9 + h, y); g.lineTo(x + i + h, y); g.closePath(); g.fill();
+    }
+    g.restore();
+  }
+  function sheen(g, w, h, a) {
+    var gr = g.createLinearGradient(0, 0, w, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,' + a + ')'); gr.addColorStop(.55, 'rgba(0,0,0,0)');
+    gr.addColorStop(1, 'rgba(0,0,0,' + (a * 3.2).toFixed(2) + ')');
+    g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  }
+
+  function paintRackDoor() {
+    var p = canvasPainter(256, 512), g = p.g, x, y;
+    g.fillStyle = '#2b2f34'; g.fillRect(0, 0, 256, 512); sheen(g, 256, 512, .05);
+    g.fillStyle = '#1f2327';
+    for (y = 64; y < 206; y += 7) { for (x = 26; x < 206; x += 7) { g.beginPath(); g.arc(x, y, 2.1, 0, 6.29); g.fill(); } }
+    for (y = 236; y < 440; y += 7) { for (x = 26; x < 206; x += 7) { g.beginPath(); g.arc(x, y, 2.1, 0, 6.29); g.fill(); } }
+    g.strokeStyle = 'rgba(148,163,184,.25)'; g.lineWidth = 2;
+    g.strokeRect(18, 56, 196, 158); g.strokeRect(18, 228, 196, 220);
+    g.fillStyle = '#121518'; g.fillRect(214, 210, 26, 190);        // handle recess (3-D bar sits here)
+    g.fillStyle = '#121518'; g.fillRect(18, 18, 196, 30);          // brand + LED print
+    g.fillStyle = '#22d3ee'; g.fillRect(26, 30, 46, 6);
+    ['#34d399', '#34d399', '#22d3ee', '#fbbf24'].forEach(function (c, i) {
+      g.fillStyle = c; g.beginPath(); g.arc(190 - i * 16, 33, 4, 0, 6.29); g.fill();
+    });
+    g.fillStyle = '#3f444a'; g.fillRect(0, 470, 256, 42);          // kick plate
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, 212, 256, 3); g.fillRect(0, 452, 256, 3);
+    speckle(g, 256, 512, 240, .05, '255,255,255', 11);
+    return p.c;
+  }
+  function paintRackRear() {
+    var p = canvasPainter(256, 512), g = p.g, x, y, r = 6, row = 0, k;
+    g.fillStyle = '#26292e'; g.fillRect(0, 0, 256, 512); sheen(g, 256, 512, .04);
+    g.fillStyle = '#1b1e22';
+    for (y = 18; y < 500; y += 11) { row++;
+      for (x = 16 + (row % 2 ? 6 : 0); x < 244; x += 12) {
+        g.beginPath();
+        for (k = 0; k < 6; k++) { var a = Math.PI / 3 * k + .52;
+          if (k) { g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } else { g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r); } }
+        g.closePath(); g.fill();
+      } }
+    g.strokeStyle = 'rgba(148,163,184,.18)'; g.lineWidth = 3; g.strokeRect(8, 8, 240, 496);
+    g.fillStyle = 'rgba(0,0,0,.40)'; g.fillRect(124, 8, 8, 496);
+    speckle(g, 256, 512, 200, .05, '255,255,255', 21);
+    return p.c;
+  }
+  function paintTile() {
+    var p = canvasPainter(256, 160), g = p.g, i;
+    g.fillStyle = '#2e3339'; g.fillRect(0, 0, 256, 160);
+    g.strokeStyle = '#3d4c66'; g.lineWidth = 6; g.strokeRect(3, 3, 250, 154);
+    [[68, 44, 0], [188, 44, 1.57], [68, 116, 1.57], [188, 116, 0]].forEach(function (c) {
+      g.save(); g.translate(c[0], c[1]); g.rotate(c[2]);
+      g.strokeStyle = '#0c1220'; g.lineWidth = 5;
+      for (i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(-26, i * 8 - 3); g.lineTo(26, i * 8 + 3); g.stroke(); }
+      g.strokeStyle = 'rgba(34,211,238,.30)'; g.lineWidth = 1.5;
+      for (i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(-26, i * 8 - 6); g.lineTo(26, i * 8); g.stroke(); }
+      g.restore();
+    });
+    g.fillStyle = '#8b9199';
+    [[12, 12], [244, 12], [12, 148], [244, 148]].forEach(function (sc) { g.beginPath(); g.arc(sc[0], sc[1], 4, 0, 6.29); g.fill(); });
+    return p.c;
+  }
+  function paintFloor() {
+    var p = canvasPainter(512, 512), g = p.g, i;
+    g.fillStyle = '#383d43'; g.fillRect(0, 0, 512, 512);
+    for (i = 0; i < 24; i++) {                                    // soft blotches, edge-safe
+      var x = 70 + rnd(i * 3.7 + 1) * 372, y = 70 + rnd(i * 9.1 + 2) * 372, r = 34 + rnd(i) * 56;
+      var gr = g.createRadialGradient(x, y, 0, x, y, r);
+      var lite = rnd(i + 40) > .55;
+      gr.addColorStop(0, lite ? 'rgba(255,255,255,.028)' : 'rgba(0,0,0,.055)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    g.strokeStyle = 'rgba(0,0,0,.50)'; g.lineWidth = 2;           // 2 m tile seams (periodic)
+    [0, 256, 512].forEach(function (v) {
+      g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 512); g.stroke();
+      g.beginPath(); g.moveTo(0, v); g.lineTo(512, v); g.stroke();
+    });
+    g.strokeStyle = 'rgba(255,255,255,.05)'; g.lineWidth = 1;
+    [2, 258].forEach(function (v) {
+      g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 512); g.stroke();
+      g.beginPath(); g.moveTo(0, v); g.lineTo(512, v); g.stroke();
+    });
+    speckle(g, 512, 512, 900, .05, '255,255,255', 31);
+    speckle(g, 512, 512, 700, .07, '0,0,0', 32);
+    return p.c;
+  }
+  function paintWall() {
+    var p = canvasPainter(512, 512), g = p.g, x;
+    g.fillStyle = '#4d545c'; g.fillRect(0, 0, 512, 512);
+    for (x = 0; x <= 512; x += 128) {
+      g.fillStyle = 'rgba(0,0,0,.42)'; g.fillRect(x - 2, 0, 4, 512);
+      g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(x + 3, 0, 2, 512);
+      g.fillStyle = '#3a4046';
+      for (var y = 40; y < 512; y += 96) { g.beginPath(); g.arc(x + 64, y, 2.4, 0, 6.29); g.fill(); }
+    }
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, 300, 512, 10);  // dado rail
+    g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(0, 310, 512, 2);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, 470, 512, 42);  // scuffed base
+    speckle(g, 512, 512, 500, .04, '255,255,255', 41);
+    return p.c;
+  }
+  function paintCeiling() {
+    var p = canvasPainter(512, 512), g = p.g;
+    g.fillStyle = '#23272c'; g.fillRect(0, 0, 512, 512);
+    [0, 256, 512].forEach(function (v) {
+      g.fillStyle = 'rgba(0,0,0,.38)'; g.fillRect(v - 13, 0, 26, 512); g.fillRect(0, v - 13, 512, 26);
+      g.fillStyle = 'rgba(255,255,255,.045)'; g.fillRect(v + 13, 0, 2, 512); g.fillRect(0, v + 13, 512, 2);
+    });
+    g.fillStyle = 'rgba(0,0,0,.30)'; g.fillRect(0, 138, 512, 7); g.fillRect(0, 372, 512, 7);
+    speckle(g, 512, 512, 600, .05, '255,255,255', 45);
+    return p.c;
+  }
+  function paintCracFace() {
+    var p = canvasPainter(256, 384), g = p.g, y, i;
+    g.fillStyle = '#c9ced4'; g.fillRect(0, 0, 256, 384); sheen(g, 256, 384, .06);
+    for (y = 22; y < 150; y += 13) {
+      g.fillStyle = '#6b7178'; g.fillRect(20, y, 216, 8);
+      g.fillStyle = 'rgba(255,255,255,.16)'; g.fillRect(20, y + 8, 216, 2);
+    }
+    g.fillStyle = '#121518'; g.fillRect(20, 168, 216, 92);
+    g.fillStyle = '#22262a'; g.fillRect(32, 180, 118, 44);
+    g.strokeStyle = '#22d3ee'; g.lineWidth = 2; g.beginPath();
+    for (i = 0; i <= 20; i++) {
+      var xx = 36 + i * 5.5, yy = 202 - Math.sin(i * .9) * 9 - rnd(i) * 4;
+      if (i) { g.lineTo(xx, yy); } else { g.moveTo(xx, yy); }
+    }
+    g.stroke();
+    ['#34d399', '#fbbf24', '#f87171'].forEach(function (c, k) { g.fillStyle = c; g.beginPath(); g.arc(176 + k * 20, 192, 6, 0, 6.29); g.fill(); });
+    g.fillStyle = '#22d3ee'; g.font = '700 15px system-ui, sans-serif'; g.fillText('CRAC', 32, 248);
+    g.fillStyle = '#566068'; g.font = '600 10px system-ui, sans-serif'; g.fillText('N+1 PRECISION COOLING', 78, 248);
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, 272, 256, 3);
+    g.fillStyle = '#121518'; g.fillRect(196, 292, 16, 60);
+    g.fillStyle = '#8b9199'; g.fillRect(200, 300, 7, 44);
+    g.fillStyle = '#fbbf24'; g.beginPath(); g.moveTo(48, 344); g.lineTo(64, 316); g.lineTo(80, 344); g.closePath(); g.fill();
+    g.fillStyle = '#111827'; g.font = '700 18px system-ui, sans-serif'; g.fillText('!', 60, 340);
+    speckle(g, 256, 384, 220, .05, '255,255,255', 51);
+    return p.c;
+  }
+  function paintCracGrille() {
+    var p = canvasPainter(256, 448), g = p.g, y;
+    g.fillStyle = '#2e3237'; g.fillRect(0, 0, 256, 448);
+    for (y = 14; y < 434; y += 15) {
+      g.fillStyle = '#191c20'; g.fillRect(12, y, 232, 9);
+      g.fillStyle = 'rgba(255,255,255,.14)'; g.fillRect(12, y + 9, 232, 2);
+    }
+    g.strokeStyle = 'rgba(148,163,184,.22)'; g.lineWidth = 4; g.strokeRect(6, 6, 244, 436);
+    speckle(g, 256, 448, 180, .05, '255,255,255', 55);
+    return p.c;
+  }
+  function paintUpsFace() {
+    var p = canvasPainter(256, 256), g = p.g, i;
+    g.fillStyle = '#2a2e33'; g.fillRect(0, 0, 256, 256); sheen(g, 256, 256, .05);
+    g.fillStyle = '#121518'; g.fillRect(22, 22, 152, 56);
+    g.fillStyle = '#22262a'; g.fillRect(30, 30, 90, 40);
+    g.fillStyle = '#22d3ee';
+    for (i = 0; i < 5; i++) { g.fillRect(36 + i * 16, 62 - (10 + rnd(i + 3) * 20), 9, 10 + rnd(i + 3) * 20); }
+    g.fillStyle = '#34d399'; g.font = '700 13px system-ui, sans-serif'; g.fillText('ONLINE', 126, 55);
+    for (i = 0; i < 6; i++) {
+      g.fillStyle = i < 4 ? '#34d399' : '#22d3ee';
+      g.beginPath(); g.arc(204, 30 + i * 12, 4, 0, 6.29); g.fill();
+    }
+    g.fillStyle = '#22d3ee'; g.font = '800 17px system-ui, sans-serif'; g.fillText('UPS - 2N', 24, 106);
+    g.fillStyle = '#121518'; g.fillRect(22, 120, 212, 46);          // breaker bay
+    g.fillStyle = '#8b9199'; g.fillRect(120, 128, 18, 30);
+    g.fillStyle = 'rgba(255,255,255,.20)'; g.fillRect(120, 128, 6, 30);
+    for (i = 0; i < 7; i++) { g.fillStyle = '#17191c'; g.fillRect(24 + i * 30, 182, 20, 5); }
+    for (i = 0; i < 7; i++) { g.fillStyle = '#17191c'; g.fillRect(24 + i * 30, 196, 20, 5); }
+    hazard(g, 22, 224, 212, 18);
+    speckle(g, 256, 256, 200, .05, '255,255,255', 71);
+    return p.c;
+  }
+  function paintAtsFace() {
+    var p = canvasPainter(256, 256), g = p.g, i;
+    g.fillStyle = '#c9ced4'; g.fillRect(0, 0, 256, 256); sheen(g, 256, 256, .05);
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 3; g.strokeRect(14, 14, 228, 228);
+    g.fillStyle = '#121518'; g.beginPath(); g.arc(86, 84, 40, 0, 6.29); g.fill();   // meter
+    g.strokeStyle = '#566068'; g.lineWidth = 2; g.beginPath(); g.arc(86, 84, 40, 0, 6.29); g.stroke();
+    g.strokeStyle = '#f87171'; g.lineWidth = 3; g.beginPath(); g.moveTo(86, 84); g.lineTo(108, 58); g.stroke();
+    g.fillStyle = '#e2e8f0'; g.font = '800 16px system-ui, sans-serif'; g.fillText('ATS', 150, 66);
+    g.fillStyle = '#566068'; g.font = '600 10px system-ui, sans-serif'; g.fillText('AUTO TRANSFER', 150, 84);
+    g.fillStyle = '#121518'; g.fillRect(180, 110, 26, 90);                            // handle
+    g.fillStyle = '#8b9199'; g.fillRect(186, 122, 12, 40);
+    for (i = 0; i < 4; i++) { g.fillStyle = i < 2 ? '#34d399' : '#fbbf24'; g.beginPath(); g.arc(48 + i * 22, 150, 5, 0, 6.29); g.fill(); }
+    hazard(g, 14, 214, 228, 20);
+    speckle(g, 256, 256, 180, .05, '255,255,255', 75);
+    return p.c;
+  }
+  function paintUtilFace() {
+    var p = canvasPainter(256, 256), g = p.g, i, j;
+    g.fillStyle = '#c9ced4'; g.fillRect(0, 0, 256, 256); sheen(g, 256, 256, .05);
+    g.fillStyle = '#e2e8f0'; g.font = '800 15px system-ui, sans-serif'; g.fillText('UTILITY  11 kV', 22, 40);
+    for (j = 0; j < 3; j++) { for (i = 0; i < 4; i++) {                               // breaker grid
+      g.fillStyle = '#121518'; g.fillRect(24 + i * 52, 58 + j * 44, 40, 32);
+      g.fillStyle = '#8b9199'; g.fillRect(38 + i * 52, 64 + j * 44, 10, 20);
+    } }
+    g.fillStyle = '#121518'; g.beginPath(); g.arc(60, 208, 24, 0, 6.29); g.fill();
+    g.beginPath(); g.arc(124, 208, 24, 0, 6.29); g.fill();
+    g.strokeStyle = '#22d3ee'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(60, 208); g.lineTo(74, 194); g.stroke();
+    g.beginPath(); g.moveTo(124, 208); g.lineTo(112, 192); g.stroke();
+    hazard(g, 168, 190, 72, 42);
+    speckle(g, 256, 256, 180, .05, '255,255,255', 79);
+    return p.c;
+  }
+  function paintGenSide() {
+    var p = canvasPainter(512, 352), g = p.g, i, y;
+    g.fillStyle = '#39465e'; g.fillRect(0, 0, 512, 352);
+    var gr = g.createLinearGradient(0, 0, 0, 352);
+    gr.addColorStop(0, 'rgba(255,255,255,.07)'); gr.addColorStop(.6, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.30)');
+    g.fillStyle = gr; g.fillRect(0, 0, 512, 352);
+    g.fillStyle = 'rgba(0,0,0,.40)'; g.fillRect(0, 118, 512, 4); g.fillRect(0, 250, 512, 4);
+    for (i = 0; i < 2; i++) {
+      var bx = 60 + i * 220;
+      g.fillStyle = '#17191c';
+      for (y = 140; y < 236; y += 11) { g.fillRect(bx, y, 150, 6); }
+      g.strokeStyle = 'rgba(148,163,184,.25)'; g.lineWidth = 2; g.strokeRect(bx - 6, 132, 162, 112);
+    }
+    g.fillStyle = '#22d3ee'; g.fillRect(28, 40, 150, 10);
+    g.fillStyle = '#e2e8f0'; g.font = '800 30px system-ui, sans-serif'; g.fillText('GEN-1  500 kVA', 28, 92);
+    g.fillStyle = '#566068'; g.font = '600 13px system-ui, sans-serif'; g.fillText('DIESEL STANDBY - WEEKLY TEST', 28, 112);
+    for (i = 0; i < 18; i++) { g.fillStyle = '#1f2937'; g.beginPath(); g.arc(16 + i * 28, 336, 3.5, 0, 6.29); g.fill(); }
+    g.fillStyle = '#fbbf24'; g.fillRect(420, 40, 64, 64);
+    g.fillStyle = '#111827'; g.font = '700 11px system-ui, sans-serif'; g.fillText('HOT', 440, 68); g.fillText('SURFACE', 426, 84);
+    speckle(g, 512, 352, 420, .06, '0,0,0', 61);
+    speckle(g, 512, 352, 260, .05, '255,255,255', 62);
+    return p.c;
+  }
+  var PAINTERS = {
+    'rack-door': paintRackDoor, 'rack-rear': paintRackRear, 'perf-tile': paintTile,
+    'hall-floor': paintFloor, 'hall-wall': paintWall, 'hall-ceiling': paintCeiling,
+    'crac-face': paintCracFace, 'crac-grille': paintCracGrille, 'ups-face': paintUpsFace,
+    'ats-face': paintAtsFace, 'util-face': paintUtilFace, 'gen-side': paintGenSide
+  };
+  DC.bakeProcedural = function () {
+    var applied = 0;
+    paintBoard('tex-takeaways', 'WHAT THIS HALL TEACHES', [
+      '1  heat is the enemy - N+1 cooling outlives any single failure',
+      '2  power paths are doubled (2N) so no single fault drops racks',
+      '3  cold aisle to hot aisle is why airflow direction matters',
+      '4  every machine here has a job you can open and read'], 74);
+    Object.keys(PAINTERS).forEach(function (slot) {
+      if (DC_TEX[slot]) { return; }                       // a real photo always wins
+      if (DC.applyTexture(slot, PAINTERS[slot]() )) { applied++; }
+    });
+    DC.texAppliedCount = applied;
+  };
+
+  /* =========================================================================
+     6. HALL STATE - one tick drives scenarios, thermals, LEDs, HUD
+     ========================================================================= */
+  AFRAME.registerComponent('hall-state', {
+    init: function () {
+      this.collected = false;
+      this.hudClock = 0; this.fastClock = 0;
+      this.cache = {};
+      this.cOld = new THREE.Color('#3a4046');
+      this.cHot = new THREE.Color(C.danger);
+      this.cLed = new THREE.Color();
+      this.leds = [];
+      var self = this;
+      this.el.sceneEl.addEventListener('loaded', function () { self.collect(); });
+    },
+
+    collect: function () {
+      if (this.collected) { return; }
+      var q = function (sel) { return document.querySelector(sel); };
+      var qa = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
+
+      // racks + their LEDs / hot-side grilles
+      var self2 = this;
+      DC.refs.racks.forEach(function (r, ri) {
+        var rear = r.querySelector('.rack-rear');
+        if (rear) { DC.refs.rear.push({ el: rear, m: mat(rear), rackIdx: ri }); }
+        Array.prototype.forEach.call(r.querySelectorAll('.led'), function (el) {
+          var m = mat(el);
+          self2.leds.push({ el: el, m: m, base: m && m.color ? m.color.clone() : new THREE.Color(C.ok),
+                   net: el.classList.contains('net'),
+                   status: el.classList.contains('status'),
+                   phase: Math.random() * 6.28, freq: 1.6 + Math.random() * 5.5, rackIdx: ri });
+        });
+      });
+
+      // cooling plant
+      [1, 2, 3].forEach(function (n, i) {
+        var g = q('#crac' + n); if (!g) { return; }
+        var alarm = mk('a-ring', {
+          'radius-inner': 1.05, 'radius-outer': 1.22, rotation: '-90 0 0', position: '0 0.026 0',
+          'segments-theta': 40, visible: 'false',
+          material: 'color:' + C.danger + '; shader:flat; transparent:true; opacity:.55; side:double',
+          pulse: 'min:.9; max:1.1; dur:900; omin:.25; omax:.6'
+        }, g);
+        DC.refs.cracs[i] = {
+          el: g, n: n, name: 'CRAC-' + n, z: [6.0, 1.0, -4.0][i],
+          beacon: g.querySelector('.crac-beacon'), louvre: g.querySelector('.crac-louvre'),
+          intake: g.querySelector('.crac-intake'), fan: g.querySelector('.crac-fan'),
+          label: g.querySelector('.crac-label'), alarm: alarm,
+          mode: i === 2 ? 'standby' : 'duty'
+        };
+      });
+
+      // power room
+      DC.refs.power = {
+        utilBeacon: q('#util-in .util-beacon'),
+        atsBeacon: q('#ats .ats-beacon'),
+        ups: {
+          beaconA: q('#upsA .ups-beacon'), beaconB: q('#upsB .ups-beacon'),
+          barA: q('#upsA .ups-bar'), barB: q('#upsB .ups-bar'),
+          labelA: q('#upsA .ups-label'), labelB: q('#upsB .ups-label')
+        },
+        gen: { el: q('#gen'), beacon: q('#gen .gen-beacon'), fan: q('#gen .gen-fan'),
+               label: q('#gen .gen-label') }
+      };
+      DC.refs.hotzones = [q('#hotzone-w'), q('#hotzone-e')].filter(Boolean);
+
+      applyChain();
+      this.collected = true;
+    },
+
+    tick: function (t, dt) {
+      if (!this.collected) { return; }
+      var d = dt || 16;
+      if (d > 1000) { d = 16; }             // ignore tab-switch deltas
+      d = Math.min(d, 250) / 1000;          // per-tick step cap (slow phones)
+
+      /* --- scenario timelines --- */
+      ['A', 'B', 'C'].forEach(function (k) {
+        var sc = S[k]; if (!sc.active) { return; }
+        sc.t += d;
+        var tl = TIMELINES[k];
+        for (var i = 0; i < tl.length; i++) {
+          if (!sc.fired[i] && sc.t >= tl[i].at) { sc.fired[i] = true; tl[i].fn(); }
+        }
+      });
+
+      /* --- thermals (first-order lag towards the current target) --- */
+      var kc = 1 - Math.exp(-d / 4.0);
+      S.temp.cold += (S.tempTarget.cold - S.temp.cold) * kc + (Math.random() - 0.5) * 0.02;
+      S.temp.hot += (S.tempTarget.hot - S.temp.hot) * (1 - Math.exp(-d / 2.6)) + (Math.random() - 0.5) * 0.03;
+      S.thermalBias = clamp((S.temp.cold - 21.6) / 7.0, 0, 1);
+
+      /* --- battery --- */
+      if (S.power.draining) { S.power.battery = clamp(S.power.battery - 2.4 * d, 0, 100); }
+      else if (S.power.battery < 100) { S.power.battery = clamp(S.power.battery + 3.0 * d, 0, 100); }
+
+      /* --- 30 Hz: LEDs, power chain, hot-side grilles --- */
+      this.fastClock += d;
+      if (this.fastClock > 0.033) { this.fastClock = 0; this.updateVisuals(t / 1000); }
+
+      /* --- 8 Hz: HTML telemetry --- */
+      this.hudClock += d;
+      if (this.hudClock > 0.12) { this.hudClock = 0; this.updateHud(); }
+    },
+
+    updateVisuals: function (time) {
+      var i, l, b, heat;
+      // rack status colour is driven by the cold-aisle temperature
+      var statusHex = S.temp.cold > 27.5 ? C.danger : (S.temp.cold > 24.5 ? C.warn : C.ok);
+      for (i = 0; i < this.leds.length; i++) {
+        l = this.leds[i]; if (!l.m || !l.m.color) { continue; }
+        if (S.surgeRacks.length && S.surgeRacks.indexOf(l.rackIdx) !== -1) {
+          this.cLed.set(C.warn);                       // surging racks blink hot + fast
+          b = 0.30 + 0.70 * Math.pow(0.5 + 0.5 * Math.sin(time * l.freq * 3.4 + l.phase), 1.5);
+          l.m.color.copy(this.cLed).multiplyScalar(b);
+          continue;
+        }
+        if (l.net) {
+          b = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(time * l.freq * 2.2 + l.phase));
+          l.m.color.copy(l.base).multiplyScalar(b);
+          continue;
+        }
+        if (l.status) {
+          l.m.color.set(statusHex);
+          b = 0.72 + 0.28 * Math.sin(time * 2.4 + l.phase);
+          l.m.color.multiplyScalar(b);
+        } else {
+          this.cLed.set(statusHex);
+          b = 0.25 + 0.75 * Math.pow(0.5 + 0.5 * Math.sin(time * l.freq + l.phase), 2);
+          l.m.color.copy(this.cLed).multiplyScalar(b);
+        }
+      }
+      // power chain: colour by state, gentle brightness wave along the path
+      for (i = 0; i < DC.refs.chain.length; i++) {
+        var seg = DC.refs.chain[i], m = mat(seg.el);
+        if (!m || !m.color) { continue; }
+        m.color.copy(seg.base);
+        if (seg.state === 'live' || seg.state === 'ok') {
+          m.color.multiplyScalar(0.78 + 0.22 * Math.sin(time * 3.2 - seg.idx * 0.55));
+        } else if (seg.state === 'fail') {
+          m.color.multiplyScalar(0.65 + 0.35 * Math.sin(time * 7.5));
+        } else {
+          m.color.multiplyScalar(0.8);
+        }
+      }
+      // while B runs, a power pulse travels along the chain (index-phase wave)
+      if (S.B.active) {
+        for (i = 0; i < DC.refs.chain.length; i++) {
+          var cm = mat(DC.refs.chain[i].el);
+          if (cm) { cm.opacity = 0.68 + 0.32 * (0.5 + 0.5 * Math.sin(time * 6.0 - DC.refs.chain[i].idx * 0.8)); }
+        }
+      }
+      // hot-side grilles + hot-aisle floor wash glow with the return temperature
+      heat = clamp((S.temp.hot - 33) / 11, 0, 1);
+      for (i = 0; i < DC.refs.rear.length; i++) {
+        var r = DC.refs.rear[i];
+        var rh = heat + (S.surgeRacks.indexOf(r.rackIdx) !== -1 ? 0.4 : 0);
+        if (r.m && r.m.color) { r.m.color.copy(this.cOld).lerp(this.cHot, clamp(rh, 0, 1) * 0.85); }
+      }
+      for (i = 0; i < DC.refs.hotzones.length; i++) {
+        var hz = mat(DC.refs.hotzones[i]);
+        if (hz) { hz.opacity = 0.055 + heat * 0.14; }
+      }
+    },
+
+    updateHud: function () {
+      var p = S.power, co = S.cooling;
+      this.set('t-cold', S.temp.cold.toFixed(1) + ' \u00b0C',
+               S.temp.cold > 27 ? 'crit' : S.temp.cold > 24.5 ? 'hot' : '');
+      this.set('t-hot', S.temp.hot.toFixed(1) + ' \u00b0C',
+               S.temp.hot > 41 ? 'crit' : S.temp.hot > 36 ? 'hot' : '');
+      this.set('t-cool', co.online + '/3 CRAC ' + (co.standby ? '\u00b7 ' + co.standby + ' standby' : '\u00b7 N+1 used'),
+               co.online < 2 ? 'crit' : co.standby === 0 ? 'hot' : 'good');
+      this.set('t-src', p.source + ' \u00b7 2N', p.source === 'UTILITY' ? 'good' : 'hot');
+      this.set('t-ups', Math.round(p.upsLoad) + ' % \u00b7 batt ' + Math.round(p.battery) + ' %',
+               p.draining ? 'hot' : 'good');
+      this.set('t-load', p.itLoad + ' kW \u00b7 16 racks', 'good');
+      this.set('t-down', p.downtime + ' ms', 'good');
+
+      var st = document.getElementById('t-status');
+      if (st) {
+        if (st.textContent !== S.status.text) { st.textContent = S.status.text; }
+        if (st.className !== S.status.cls) { st.className = S.status.cls; }
+      }
+      var dot = document.getElementById('t-dot');
+      if (dot) {
+        dot.style.background = S.status.cls === 'ok' ? C.ok : S.status.cls === 'warn' ? C.warn : C.danger;
+        dot.style.boxShadow = '0 0 9px ' + dot.style.background;
+      }
+    },
+
+    set: function (id, txt, cls) {
+      var el = document.getElementById(id); if (!el) { return; }
+      var key = id + '|' + txt + '|' + cls;
+      if (this.cache[id] === key) { return; }
+      this.cache[id] = key;
+      el.textContent = txt;
+      el.className = cls || '';
+    }
+  });
+
+  
+  /* --- VR control wall: mirrors the HTML HUD inside the headset ------------ */
+  var vrScene = document.querySelector('a-scene');
+  DC.vrMenu = function (show) {
+    var menu = document.getElementById('vrmenu');
+    menu.object3D.visible = !!show;
+    if (!show) { return; }
+    XRQ.faceUser(menu, 2.1, 1.5);   /* build 12: was placed behind the user */
+  };
+  vrScene.addEventListener('enter-vr', function () { DC.vrMenu(true); });
+  vrScene.addEventListener('exit-vr', function () { DC.vrMenu(false); });
+  setInterval(function () {
+    if (!XRQ.inXR(vrScene)) { return; }
+    var st = document.getElementById('status');
+    var vm = document.getElementById('vm-status');
+    if (st && vm) { vm.setAttribute('value', st.textContent); }
+  }, 500);
+  [['vm-tour', function () { if (DC.tourOn) { DC.tourEnd(); } else { DC.tourStart(); } }],
+   ['vm-a', function () { DC.runScenario('A'); }],
+   ['vm-b', function () { DC.runScenario('B'); }],
+   ['vm-c', function () { DC.runScenario('C'); }],
+   ['vm-flow', function () { DC.toggleAirflow(); }],
+   ['vm-reset', function () { DC.resetAll(); }],
+   ['vm-exit', function () { vrScene.exitVR(); }]].forEach(function (pair) {
+    var e2 = document.getElementById(pair[0]);
+    if (e2) { e2.addEventListener('click', pair[1]); }
+  });
+
+/* =========================================================================
+     7. BOOT - wiring, HUD, keyboard, loader
+     ========================================================================= */
+  AFRAME.registerComponent('app-root', {
+    init: function () {
+      var self = this;
+      DC.scene = this.el;
+      this.el.addEventListener('loaded', function () { self.onLoaded(); });
+    },
+
+    onLoaded: function () {
+      DC.rig = document.getElementById('rig');
+      DC.ready = true;
+
+      // let the raycaster see the dynamically built .clickable elements
+      var cam = this.el.camera && this.el.camera.el;
+      if (cam && cam.components && cam.components.raycaster) { cam.components.raycaster.refreshObjects(); }
+
+      ['btn-a', 'btn-b', 'btn-c', 'btn-flow', 'btn-walk', 'btn-tour', 'btn-reset', 'btn-hub']
+        .forEach(function (id) {
+          var b = document.getElementById(id); if (b) { b.disabled = false; }
+        });
+
+      document.getElementById('btn-a').addEventListener('click', function () { DC.runScenario('A'); });
+      document.getElementById('btn-b').addEventListener('click', function () { DC.runScenario('B'); });
+      document.getElementById('btn-c').addEventListener('click', function () { DC.runScenario('C'); });
+      document.getElementById('btn-tour').addEventListener('click', function () {
+        if (DC.tourOn) { DC.tourEnd(); } else { DC.tourStart(); }
+      });
+      document.getElementById('tour-back').addEventListener('click', function () { DC.tourBack(); });
+      document.getElementById('tour-next').addEventListener('click', function () { DC.tourNext(); });
+      document.getElementById('tour-exit').addEventListener('click', function () { DC.tourEnd(); });
+      document.getElementById('btn-flow').addEventListener('click', function () { DC.toggleAirflow(); });
+      document.getElementById('btn-reset').addEventListener('click', function () { DC.resetAll(); });
+      document.getElementById('btn-hub').addEventListener('click', function () { location.href = 'index.html'; });
+      document.getElementById('unit-close').addEventListener('click', function () { DC.hideUnit(); });
+
+      // The cursor emits click/hover on the intersected CHILD entity and A-Frame
+      // events bubble, so one delegated listener maps any hit back to the
+      // machine root carrying data-unit (racks, CRACs, UPS, ATS, generator,
+      // utility incomer and every power-path segment).
+      document.addEventListener('click', function (e) {
+        var u = e.target && e.target.closest ? e.target.closest('[data-unit]') : null;
+        if (u) { DC.toggleUnit(u.getAttribute('data-unit')); }
+      });
+      var hoverOff = null;
+      document.addEventListener('mouseenter', function (e) {
+        if (hoverOff) { clearTimeout(hoverOff); hoverOff = null; }
+        if (e.target && e.target.closest && e.target.closest('[data-unit]')) { DC.hover(true); }
+      });
+      document.addEventListener('mouseleave', function (e) {
+        if (!(e.target && e.target.closest && e.target.closest('[data-unit]'))) { return; }
+        if (hoverOff) { clearTimeout(hoverOff); }
+        hoverOff = setTimeout(function () { hoverOff = null; DC.hover(false); }, 90);
+      });
+
+      window.addEventListener('keydown', function (e) {
+        if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+        var k = e.key;
+        if (k >= '1' && k <= '5') { DC.goTo(parseInt(k, 10) - 1); e.preventDefault(); }
+        else if (k === 'c' || k === 'C') { DC.runScenario('A'); }   // 'a'/'s'/'d' now walk
+        else if (k === 'p' || k === 'P') { DC.runScenario('B'); }
+        else if (k === 'h' || k === 'H') { DC.runScenario('C'); }
+        else if (k === 'f' || k === 'F') { DC.toggleAirflow(); }
+        else if (k === 't' || k === 'T') { if (DC.tourOn) { DC.tourEnd(); } else { DC.tourStart(); } }
+        else if ((k === 'n' || k === 'N') && DC.tourOn) { DC.tourNext(); }
+        else if (k === 'r' || k === 'R') { DC.resetAll(); }
+        else if (k === 'Escape') {
+          if (DC.arOn) { DC.setAR(false); }
+          else if (DC.tourOn) { DC.tourEnd(); }
+          else if (DC.openUnit) { DC.hideUnit(); }
+          else { DC.closePanel(); }
+        }
+      });
+
+      // ---- free locomotion: toggle button + analogue thumb stick ----
+      if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+        document.documentElement.classList.add('coarse');
+      }
+      window.TOUCHJOY = DC.input.joy;   /* one shared axis object everywhere */
+      var stick = document.getElementById('stick');
+      var knob = document.getElementById('stick-knob');
+      if (stick && knob) {
+        var R = 40;
+        var stickMove = function (e) {
+          var r = stick.getBoundingClientRect();
+          var dx = e.clientX - (r.left + r.width / 2);
+          var dy = e.clientY - (r.top + r.height / 2);
+          var mm = Math.hypot(dx, dy);
+          if (mm > R) { dx *= R / mm; dy *= R / mm; }
+          knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+          DC.input.joy.x = dx / R; DC.input.joy.y = -dy / R;
+          window.TOUCHJOY.x = dx / R; window.TOUCHJOY.y = -dy / R;
+          window.STICK_ACTIVE = true;
+        };
+        var stickEnd = function (e) {
+          if (stick.hasPointerCapture && e.pointerId !== undefined &&
+              stick.hasPointerCapture(e.pointerId)) { stick.releasePointerCapture(e.pointerId); }
+          knob.style.transform = ''; DC.input.joy.x = 0; DC.input.joy.y = 0;
+          window.TOUCHJOY.x = 0; window.TOUCHJOY.y = 0;
+          window.STICK_ACTIVE = false;
+          var c = document.getElementById('cam'); if (c) { c.setAttribute('look-controls', 'touchEnabled', 'true'); }
+        };
+        stick.addEventListener('pointerdown', function (e) {
+          stick.setPointerCapture(e.pointerId); stickMove(e); e.preventDefault();
+          var c = document.getElementById('cam'); if (c) { c.setAttribute('look-controls', 'touchEnabled', 'false'); }
+        });
+        stick.addEventListener('pointermove', function (e) {
+          if (stick.hasPointerCapture(e.pointerId)) { stickMove(e); }
+        });
+        stick.addEventListener('pointerup', stickEnd);
+        stick.addEventListener('pointercancel', stickEnd);
+      }
+      document.getElementById('btn-walk').addEventListener('click', function () {
+        DC.setWalk(!DC.walkEnabled);
+      });
+      DC.setWalk(true);
+
+      // painted-surface pass (zero external files), then any photo overrides
+      DC.bakeProcedural();
+      Object.keys(DC_TEX).forEach(function (slot) { DC.applyTexture(slot, DC_TEX[slot]); });
+
+      // hide the boot veil
+      var loader = document.getElementById('loader');
+      if (loader) { loader.classList.add('done'); setTimeout(function () { loader.style.display = 'none'; }, 800); }
+
+      // fade the help card once the visitor has had a look
+      var hint = document.getElementById('hint');
+      if (hint) {
+        setTimeout(function () { hint.classList.add('faded'); }, 16000);
+        ['mousedown', 'touchstart'].forEach(function (ev) {
+          window.addEventListener(ev, function once() {
+            hint.classList.add('faded');
+            window.removeEventListener(ev, once);
+          }, { passive: true });
+        });
+      }
+    }
+  });
+
+  /* Safety net: if the scene never fires `loaded` (e.g. the font atlas is
+     blocked and something stalls), still lift the veil so the hall is usable. */
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+      var loader = document.getElementById('loader');
+      if (loader && !loader.classList.contains('done')) {
+        loader.classList.add('done');
+        setTimeout(function () { loader.style.display = 'none'; }, 800);
+        ['btn-a', 'btn-b', 'btn-c', 'btn-flow', 'btn-walk', 'btn-tour', 'btn-reset', 'btn-hub']
+          .forEach(function (id) {
+            var b = document.getElementById(id); if (b) { b.disabled = false; }
+          });
+      }
+    }, 12000);
+  });
+
+})();
+</script>
+
+<script>
+/* While the thumb stick is steering, a second thumb dragging the canvas turns
+   the rig left/right (stock touch-look tracks only the first touch, so it goes
+   silent during multi-touch). Yaw on #rig - camera stays pristine. */
+(function () {
+  var last = null, cvEl = null;
+  function cv () { if (!cvEl) { cvEl = document.querySelector('canvas.a-canvas') || document.querySelector('canvas'); } return cvEl; }
+  document.addEventListener('touchmove', function (e) {
+    if (!window.STICK_ACTIVE || e.target !== cv()) { return; }
+    var t = e.changedTouches[0];
+    if (!last || last.id !== t.identifier) { last = { id: t.identifier, x: t.clientX }; return; }
+    var dx = t.clientX - last.x; last.x = t.clientX;
+    var r = document.getElementById('rig');
+    if (r) { r.object3D.rotation.y -= dx * 0.011; }
+  }, { passive: true, capture: true });
+  document.addEventListener('touchend', function (e) {
+    if (!last) { return; }
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === last.id) { last = null; }
+    }
+  }, { passive: true, capture: true });
+})();
+</script>
+<style>.a-enter-ar{display:none!important}</style>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 12</div>
+</body>
+</html>

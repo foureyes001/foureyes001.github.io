@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Load Balancing &amp; Auto-Scaling · Interactive 3D Simulator</title>
+<script src="vendor/aframe.min.js"></script>
+<script src="xr-quest.js"></script>
+<script>
+/* 3D text font. A-Frame fetches its default font from cdn.aframe.io, so all
+   a-text vanishes offline or on networks that block it. Prefer the bundled copy
+   in vendor/ when served over http(s); fall back to the CDN if it is missing. */
+(function () {
+  if (!window.AFRAME || !AFRAME.components.text) { return; }
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') { return; }
+  var LOCAL = 'vendor/Roboto-msdf.json';
+  var schema = AFRAME.components.text.schema;
+  schema.font.default = LOCAL;
+  function revert () {
+    schema.font.default = 'roboto';
+    document.querySelectorAll('[text], a-text').forEach(function (el) {
+      var t = el.getAttribute('text');
+      if (t && t.font === LOCAL) { el.setAttribute('text', 'font', 'roboto'); }
+    });
+  }
+  fetch(LOCAL, { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+    if (!r.ok) { throw new Error(String(r.status)); }
+  }).catch(function () {
+    window.__fontFallback = true;
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', revert); } else { revert(); }
+    var sc = document.querySelector('a-scene');
+    if (sc) { sc.addEventListener('loaded', revert); }
+    setTimeout(revert, 1500);
+  });
+})();
+</script>
+<script>
+/* Components register before the a-scene element parses, or they never attach. */
+AFRAME.registerComponent('door-zone', {
+  schema: { href: { type: 'string' }, radius: { default: 1.5 }, dwell: { default: 350 } },
+  init: function () {
+    this.since = 0;
+    this.el.addEventListener('click', function () {
+      window.doorGo(this.getAttribute('door-zone').href);
+    });
+  },
+  tick: function (t) {
+    var rig = this.el.sceneEl.querySelector('#rig');
+    if (!rig) { return; }
+    var p = rig.object3D.position, d = this.el.object3D.position;
+    var near = Math.hypot(p.x - d.x, p.z - d.z) < this.data.radius;
+    if (near && !this.since) { this.since = t; }
+    if (!near) { this.since = 0; }
+    if (this.since && t - this.since > this.data.dwell) { window.doorGo(this.data.href); }
+  }
+});
+AFRAME.registerComponent('billboard', {
+  init: function () { this._v = new THREE.Vector3(); },
+  tick: function () {
+    var cam = this.el.sceneEl.camera;
+    if (!cam) { return; }
+    cam.getWorldPosition(this._v);
+    this.el.object3D.lookAt(this._v);
+  }
+});
+AFRAME.registerComponent('lbsim', {
+  tick: function (t, dt) { if (window.__lbSimTick) { window.__lbSimTick(t, dt); } }
+});
+AFRAME.registerComponent('spin', {
+  schema: { deg: { default: 18 } },
+  tick: function (t, dt) { this.el.object3D.rotation.y += (this.data.deg * Math.PI / 180) * dt / 1000; }
+});
+/* Quest thumbsticks: left stick drives the rig, right stick snaps the view 30 deg.
+   Only live inside immersive VR, where the HTML overlay cannot be seen. */
+AFRAME.registerComponent('rig-walk', {
+  schema: { speed: { default: 2.6 }, bound: { default: 0 }, rbound: { default: 0 } },
+  init: function () {
+    this.keys = {};
+    this.cam = document.getElementById('cam');
+    var self = this;
+    window.addEventListener('keydown', function (e) { self.keys[e.code] = true; });
+    window.addEventListener('keyup', function (e) { self.keys[e.code] = false; });
+  },
+  tick: function (t, dt) {
+    var k = this.keys, d = dt / 1000, f = 0, sd = 0;
+    if (k.KeyW || k.ArrowUp) { f += 1; }
+    if (k.KeyS || k.ArrowDown) { f -= 1; }
+    if (k.KeyD || k.ArrowRight) { sd += 1; }
+    if (k.KeyA || k.ArrowLeft) { sd -= 1; }
+    var J = window.TOUCHJOY;
+    if (J) {
+      if (Math.abs(J.y) > 0.12) { f += J.y; }
+      if (Math.abs(J.x) > 0.12) { sd += J.x; }
+    }
+    if (!f && !sd) { return; }
+    var rig = this.el.object3D, v = this.cam.object3D.getWorldDirection(new THREE.Vector3());
+    v.y = 0; v.normalize(); v.negate();   /* cameras look down -Z; +Z is backwards */
+    var r = new THREE.Vector3(-v.z, 0, v.x);
+    var sp = this.data.speed * (k.ShiftLeft ? 1.8 : 1);
+    if (J && (J.x || J.y)) { sp *= 2.2; }   /* phone stick: brisk pace */
+    rig.position.addScaledVector(v, f * sp * d).addScaledVector(r, sd * sp * d);
+    if (this.data.bound > 0) {
+      rig.position.x = Math.max(-this.data.bound, Math.min(this.data.bound, rig.position.x));
+      rig.position.z = Math.max(-this.data.bound, Math.min(this.data.bound, rig.position.z));
+    }
+    if (this.data.rbound > 0) {
+      var len = Math.hypot(rig.position.x, rig.position.z);
+      if (len > this.data.rbound) {
+        rig.position.x *= this.data.rbound / len; rig.position.z *= this.data.rbound / len;
+      }
+    }
+    rig.position.y = 0;
+  }
+});
+/* thumbstick-locomotion now lives in xr-quest.js (build 12) */
+</script>
+<style>
+  html, body { margin: 0; padding: 0; background: #10151c; overflow: hidden; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e2e8f0; }
+  a-scene canvas { touch-action: none; }
+  #hud { position: fixed; top: 10px; left: 10px; z-index: 5; max-width: 330px;
+         background: rgba(23, 26, 31, 0.9); border: 1px solid rgba(217, 165, 20, 0.4);
+         border-radius: 10px; padding: 10px 12px; }
+  #hud .eyebrow { color: #22d3ee; font-size: 10px; letter-spacing: 0.14em; font-weight: 700; }
+  #hud h1 { margin: 3px 0 2px; font-size: 15px; }
+  #hud .sub { font-size: 11px; color: #a8b0b6; line-height: 1.35; }
+  #status { margin-top: 6px; font-size: 11px; color: #34d399; min-height: 14px; }
+  #bar { position: fixed; left: 10px; bottom: 10px; z-index: 5; display: flex; flex-wrap: wrap;
+         gap: 6px; align-items: center; max-width: calc(100vw - 20px);
+         background: rgba(19, 26, 46, 0.88); border: 1px solid rgba(34, 211, 238, 0.25);
+         border-radius: 10px; padding: 8px 10px; }
+  #bar label { font-size: 11px; color: #a8b0b6; }
+  #bar input[type=range] { width: 110px; accent-color: #22d3ee; }
+  #bar button { font: inherit; font-size: 11.5px; color: #e2e8f0; background: #26292e;
+                border: 1px solid #3a3f45; border-radius: 7px; padding: 6px 9px; cursor: pointer; }
+  #bar button.on { border-color: #22d3ee; color: #22d3ee; }
+  #rateval { font-size: 11px; color: #22d3ee; min-width: 46px; }
+/* ---- tab bar / collapsible panels ---- */
+#tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 61;
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96vw; }
+#tabbar .tab { font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; color: #e2e8f0;
+  background: #26292e; border: 1px solid #3a3f46; border-radius: 999px; padding: 8px 13px; cursor: pointer; }
+#tabbar .tab.on { background: #22d3ee; color: #101317; border-color: #22d3ee; }
+#tabbar #b-hub { border-color: #d9a514; color: #fbbf24; }
+.tabpanel { position: fixed !important; left: 50% !important; right: auto !important; top: auto !important;
+  bottom: 86px !important; transform: translateX(-50%) !important; display: none !important;
+  flex-direction: column; gap: 6px; width: min(380px, calc(100vw - 14px)); max-width: calc(100vw - 14px);
+  max-height: 46vh; overflow: auto; box-sizing: border-box; margin: 0 !important; z-index: 60;
+  background: rgba(27,30,34,.94); border: 1px solid #34383f; border-radius: 12px; padding: 8px; }
+.tabpanel.open { display: flex !important; }
+#tabbar small { display: none; }
+@media (max-width: 700px) {
+  #tabbar .tab { font-size: 10.5px; padding: 7px 10px; }
+  #tabbar { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; left: 8px; right: 8px;
+    transform: none; bottom: 8px; max-width: none; }
+  #tabbar .tab { text-align: center; }
+  #tabbar #b-hub { grid-column: 1 / -1; }
+  .tabpanel { bottom: 120px !important; }
+}
+
+/* ---- touch thumb stick (phones: no WASD out there) ---- */
+#stick{position:fixed;left:14px;bottom:132px;width:116px;height:116px;border-radius:50%;
+  background:rgba(23,26,31,.55);border:1px solid rgba(217,165,20,.5);display:none;
+  touch-action:none;z-index:40}
+#stick::after{content:"";position:absolute;inset:34px;border-radius:50%;
+  border:1px dashed rgba(226,232,240,.25)}
+#stick-knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;
+  border-radius:50%;background:rgba(34,211,238,.85);box-shadow:0 0 16px rgba(34,211,238,.55)}
+html.coarse #stick{display:block}
+</style>
+<link rel="prefetch" href="datacentre.html">
+<link rel="prefetch" href="cdn.html">
+</head>
+<body>
+<div id="doorfade"></div>
+<div id="veil">loading chapter&hellip;</div>
+<style>
+#doorfade{position:fixed;inset:0;background:#10151c;opacity:0;transition:opacity .16s ease;
+  pointer-events:none;z-index:98}
+#doorfade.on{opacity:1;pointer-events:all}
+#veil{position:fixed;inset:0;background:#10151c;z-index:99;display:flex;align-items:center;
+  justify-content:center;color:#e2e8f0;font:600 13px/1 system-ui,sans-serif;letter-spacing:.08em}
+#veil.gone{display:none}
+</style>
+<script>
+window.doorGo = function (href) {
+  if (window.__dooring) { return; }
+  window.__dooring = true;
+  var f = document.getElementById('doorfade');
+  if (f) { f.classList.add('on'); }
+  var l = document.createElement('link'); l.rel = 'prefetch'; l.href = href;
+  document.head.appendChild(l);
+  var sc = document.querySelector('a-scene');
+  if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
+  setTimeout(function () { location.href = href; }, 170);
+};
+(function () {
+  var v = document.getElementById('veil');
+  if (!v) { return; }
+  var kill = function () { v.classList.add('gone'); };
+  var hook = function () {
+    var sc = document.querySelector('a-scene');
+    if (sc) { sc.addEventListener('loaded', function () { setTimeout(kill, 250); }); }
+  };
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', hook); }
+  else { hook(); }
+  setTimeout(kill, 9000);
+})();
+</script>
+
+
+<div id="hud">
+  <div class="eyebrow">CLOUD INFRASTRUCTURE, CHAPTER 2 OF 3</div>
+  <h1>Load Balancing &amp; Auto-Scaling</h1>
+  <div class="sub">Requests flow from users through one balancer into a pool that
+    grows and shrinks by itself. Drag to look · click anything glowing · stick to walk in VR.</div>
+  <div id="status">ready</div>
+</div>
+
+<div id="tabbar">
+  <button class="tab" data-tab="traffic" id="tab-traffic" type="button">TRAFFIC &amp; POOL</button>
+  <button class="tab" data-tab="view" id="tab-view" type="button">RESET</button>
+  <button class="tab" data-tab="learn" id="tab-learn" type="button">EXPLAIN &amp; HELP</button>
+  <button id="b-hub" class="tab" type="button">CHAPTERS</button>
+</div>
+<div id="stick" aria-hidden="true"><div id="stick-knob"></div></div>
+<div id="bar" class="tabpanel" data-tab="traffic">
+  <label for="rate">traffic</label>
+  <input id="rate" type="range" min="1" max="30" step="1" value="4">
+  <span id="rateval">4 req/s</span>
+  <button id="b-algo">algorithm: least-connections</button>
+  <button id="b-auto" class="on">auto-scaling: on</button>
+  <button id="b-cd" class="on">cooldown: on</button>
+  <label for="db-share">read share</label>
+  <input id="db-share" type="range" min="0" max="100" step="5" value="80">
+  <button id="b-db">kill a replica</button>
+  <button id="b-dbex">explain the db tier</button>
+</div>
+<div id="bar-view" class="tabpanel" data-tab="view">
+  <button id="b-reset">reset</button>
+</div>
+<div id="bar-learn" class="tabpanel" data-tab="learn">
+  <button id="b-explain">explain the simulation</button>
+  <span class="tabhint">walk: W A S D / arrows · drag to look · click cabinets, users or the core for info · thumb stick or W A S D walks · gold doors change chapter</span>
+</div>
+
+<a-scene
+  background="color: #10151c"
+  fog="type: linear; color: #10151c; near: 12; far: 44"
+  renderer="antialias: true; colorManagement: true"
+  xr-mode-ui="enabled: true; XRMode: xr"
+  quest-ar="hide: #shell, .ar-hide" lbsim>
+
+  <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.75"></a-entity>
+  <a-entity light="type: directional; color: #fff4e0; intensity: 0.55" position="-2 4 3"></a-entity>
+
+  <a-entity id="rig" position="0 0 8" rig-walk="bound: 11.0" thumbstick-locomotion>
+    <a-entity id="cam" camera position="0 1.6 0"
+      look-controls="pointerLockEnabled: false; magicWindowTrackingEnabled: true;
+                     reverseTouchDrag: true; mouseEnabled: true; touchEnabled: true">
+      <a-entity id="mouseCursor" cursor="rayOrigin: mouse; fuse: false"
+                raycaster="objects: .clickable; far: 30"></a-entity>
+    </a-entity>
+    <a-entity id="handR" laser-controls="hand: right" cursor="fuse: false"
+              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+    <a-entity id="handL" laser-controls="hand: left"
+              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+  </a-entity>
+
+  <a-entity id="world">
+    <a-plane class="ar-hide" rotation="-90 0 0" geometry="width: 24; height: 24"
+             material="color: #363c44; shader: flat; roughness: .95"></a-plane>
+
+    <a-entity id="shell">
+      <a-box position="0 -0.1 0" width="24.6" height="0.2" depth="24.6"
+             material="color: #22262b; shader: flat"></a-box>
+      <a-box position="-7.7 2.3 12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="7.7 2.3 12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="0 3.6 12.15" width="2.6" height="2.0" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="-12.15 2.3 0" width="0.3" height="4.6" depth="24.6" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="12.15 2.3 0" width="0.3" height="4.6" depth="24.6" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="-7.7 2.3 -12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="7.7 2.3 -12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="0 3.6 -12.15" width="2.6" height="2.0" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
+      <a-box position="0 4.7 0" width="24.6" height="0.18" depth="24.6" material="color: #2b3038; shader: flat"></a-box>
+      <a-box position="0 4.55 4" width="0.3" height="0.08" depth="22" material="color: #eaf6ff; shader: flat; opacity: .85; transparent: true"></a-box>
+      <a-box position="0 4.55 -4" width="0.3" height="0.08" depth="22" material="color: #eaf6ff; shader: flat; opacity: .85; transparent: true"></a-box>
+    </a-entity>
+
+    <a-entity id="door-ch1" class="clickable" door-zone="href: datacentre.html" position="0 0 11.9">
+      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+             material="color: #d9a514; shader: flat"></a-box>
+      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+             material="color: #d9a514; shader: flat"></a-box>
+      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
+             material="color: #d9a514; shader: flat"></a-box>
+      <a-plane position="0 1.3 -0.05" width="2.55" height="2.6"
+               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3; side: double"></a-plane>
+      <a-text value="CHAPTER 1" position="0 3.35 -0.1" rotation="0 180 0" align="center"
+              width="4.2" color="#fbbf24" material="shader: flat"></a-text>
+      <a-text value="INSIDE A DATA CENTRE - WALK IN TO GO BACK" position="0 3.02 -0.1"
+              rotation="0 180 0" align="center" width="3.4" wrap-count="40"
+              color="#e2e8f0" material="shader: flat"></a-text>
+    </a-entity>
+
+    <a-entity id="door-ch3" class="clickable" door-zone="href: cdn.html" position="0 0 -11.9">
+      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+             material="color: #d9a514; shader: flat"></a-box>
+      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+             material="color: #d9a514; shader: flat"></a-box>
+      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
+             material="color: #d9a514; shader: flat"></a-box>
+      <a-plane position="0 1.3 0.05" width="2.55" height="2.6"
+               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3; side: double"></a-plane>
+      <a-text value="CHAPTER 3" position="0 3.35 0.1" align="center"
+              width="4.2" color="#fbbf24" material="shader: flat"></a-text>
+      <a-text value="CDN &amp; EDGE CACHING - WALK IN TO CONTINUE" position="0 3.02 0.1"
+              align="center" width="3.4" wrap-count="40"
+              color="#e2e8f0" material="shader: flat"></a-text>
+    </a-entity>
+
+    <canvas id="tex-rackfront" width="256" height="512" style="display:none"></canvas>
+    <canvas id="tex-lbfront" width="256" height="256" style="display:none"></canvas>
+    <canvas id="tex-concrete" width="512" height="512" style="display:none"></canvas>
+
+    <a-entity id="info" position="0 2.2 0" billboard visible="false">
+      <a-plane geometry="width: 1.8; height: 1.0" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
+      <a-text id="info-title" value="" position="-0.82 0.36 0.01" align="left" color="#fbbf24"
+              width="1.6" material="shader: flat"></a-text>
+      <a-text id="info-body" value="" position="-0.82 0.16 0.01" align="left" color="#e2e8f0"
+              width="1.6" material="shader: flat"></a-text>
+    </a-entity>
+
+    <a-entity id="clients"></a-entity>
+    <a-text value="USERS" position="0 0.03 8.4" rotation="-90 0 0" align="center" color="#9fb0cc" width="3"
+            material="shader: flat"></a-text>
+
+    <a-entity id="lb" position="0 1 2.5">
+      <a-box position="0 -0.95 0" width="1.5" height="0.12" depth="1.1" material="color: #17191c; shader: flat"></a-box>
+      <a-box position="-0.7 0 0" width="0.12" height="1.9" depth="1.1" material="color: #23272b; shader: flat"></a-box>
+      <a-box position="0.7 0 0" width="0.12" height="1.9" depth="1.1" material="color: #23272b; shader: flat"></a-box>
+      <a-box position="0 0.98 0" width="1.52" height="0.14" depth="1.12" material="color: #17191c; shader: flat"></a-box>
+      <a-box position="0 -0.02 -0.54" width="1.4" height="1.8" depth="0.06" material="color: #23272b; shader: flat"></a-box>
+      <a-plane position="0 -0.02 0.56" width="1.36" height="1.76"
+               material="color: #ffffff; shader: flat; src: #tex-lbfront; opacity: .96; transparent: true"></a-plane>
+      <a-box position="-0.5 0.9 0.5" width="0.06" height="0.06" depth="0.06" material="color: #34d399; shader: flat"></a-box>
+      <a-box position="-0.36 0.9 0.5" width="0.06" height="0.06" depth="0.06" material="color: #fbbf24; shader: flat"></a-box>
+      <a-cylinder position="0 1.28 0" radius="0.05" height="0.7"
+                  material="color: #22d3ee; shader: flat; opacity: .45; transparent: true"></a-cylinder>
+      <a-octahedron radius="0.45" position="0 1.85 0" spin
+                    material="color: #22d3ee; shader: flat; opacity: 0.95"
+                    class="clickable" id="lb-core"></a-octahedron>
+    </a-entity>
+
+    <a-entity id="links"></a-entity>
+    <a-entity id="servers"></a-entity>
+    <a-entity id="pool"></a-entity>
+
+    <a-entity id="metrics" position="0 3.15 2.5" billboard>
+      <a-plane id="metrics-board" class="clickable" geometry="width: 3.5; height: 1.62"
+               material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
+      <a-text id="metrics-text" value="" position="-1.62 0.68 0.01" align="left" color="#e2e8f0"
+              width="3.2" material="shader: flat"></a-text>
+    </a-entity>
+
+    <canvas id="tex-legend" width="1024" height="576" style="display:none"></canvas>
+    <canvas id="tex-takeaways" width="1024" height="512" style="display:none"></canvas>
+    <a-entity id="legend" position="-11.9 2.1 0" rotation="0 90 0">
+      <a-plane geometry="width: 4.6; height: 2.6" material="color: #ffffff; shader: flat; src: #tex-legend"></a-plane>
+    </a-entity>
+    <a-entity id="takeaways" position="11.9 2.1 0" rotation="0 -90 0">
+      <a-plane geometry="width: 4.6; height: 2.3" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
+    </a-entity>
+
+    <canvas id="tex-db" width="1024" height="576" style="display:none"></canvas>
+    <a-entity id="dbboard" position="-11.9 2.1 -7.4" rotation="0 90 0">
+      <a-plane geometry="width: 4.6; height: 2.6" material="color: #ffffff; shader: flat; src: #tex-db"></a-plane>
+    </a-entity>
+    <a-entity id="dbtier" position="-7.4 0 -7.4">
+      <a-cylinder radius="2.7" height="0.06" position="0 0.03 0"
+                  material="color: #22262b; shader: flat"></a-cylinder>
+      <a-entity id="db-primary" class="clickable" position="0 0 0.95">
+        <a-cylinder radius="0.55" height="1.5" position="0 0.75 0" material="color: #23272b; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.58" height="0.05" position="0 0.42 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.58" height="0.05" position="0 0.78 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.58" height="0.05" position="0 1.14 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder id="dbp-heat" radius="0.57" height="0.16" position="0 1.42 0" material="color: #d9a514; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.32" height="0.06" position="0 1.55 0" material="color: #fbbf24; shader: flat; opacity: .9; transparent: true"></a-cylinder>
+        <a-box id="dbp-led" geometry="width: 0.07; height: 0.07; depth: 0.07" position="0.44 1.28 0.44"
+               material="color: #f59e0b; shader: flat" visible="false"></a-box>
+        <a-entity id="dbp-tag" billboard position="0 2.12 0">
+          <a-plane geometry="width: 2.0; height: 0.5" position="0 0 -0.02"
+                   material="color: #10151c; shader: flat; opacity: .85; transparent: true"></a-plane>
+          <a-text id="dbp-label" value="PRIMARY - takes writes" position="0 0.12 0" align="center"
+                  color="#fbbf24" width="2.2" material="shader: flat"></a-text>
+          <a-text id="dbp-stat" value="ops 0 · heat 0%" position="0 -0.12 0" align="center"
+                  color="#e2e8f0" width="1.8" material="shader: flat"></a-text>
+        </a-entity>
+      </a-entity>
+      <a-entity id="db-r1" class="clickable" position="-1.55 0 -0.95">
+        <a-cylinder radius="0.45" height="1.2" position="0 0.6 0" material="color: #2a2f35; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.48" height="0.04" position="0 0.34 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.48" height="0.04" position="0 0.66 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder id="dbr1-ring" radius="0.47" height="0.12" position="0 1.14 0" material="color: #14b8a6; shader: flat"></a-cylinder>
+        <a-box id="dbr1-led" geometry="width: 0.06; height: 0.06; depth:0.06" position="0.36 1.0 0.36"
+               material="color: #22d3ee; shader: flat" visible="false"></a-box>
+        <a-box geometry="width: 0.94; height: 0.08; depth: 0.02" position="0 1.34 0"
+               material="color: #22262b; shader: flat"></a-box>
+        <a-box id="dbr1-lag" geometry="width: 0.94; height: 0.08; depth: 0.03" position="-0.47 1.34 0.01"
+               material="color: #22d3ee; shader: flat" scale="0.05 1 1"></a-box>
+        <a-entity id="dbr1-tag" billboard position="0 1.78 0">
+          <a-plane geometry="width: 2.1; height: 0.5" position="0 0 -0.02"
+                   material="color: #10151c; shader: flat; opacity: .85; transparent: true"></a-plane>
+          <a-text id="dbr1-label" value="REPLICA 1 - serves reads" position="0 0.12 0" align="center"
+                  color="#5eead4" width="2.2" material="shader: flat"></a-text>
+          <a-text id="dbr1-stat" value="ops 0 · lag ~0 ms" position="0 -0.12 0" align="center"
+                  color="#e2e8f0" width="1.8" material="shader: flat"></a-text>
+        </a-entity>
+      </a-entity>
+      <a-entity id="db-r2" class="clickable" position="1.55 0 -0.95">
+        <a-cylinder radius="0.45" height="1.2" position="0 0.6 0" material="color: #2a2f35; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.48" height="0.04" position="0 0.34 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder radius="0.48" height="0.04" position="0 0.66 0" material="color: #3a4046; shader: flat"></a-cylinder>
+        <a-cylinder id="dbr2-ring" radius="0.47" height="0.12" position="0 1.14 0" material="color: #14b8a6; shader: flat"></a-cylinder>
+        <a-box id="dbr2-led" geometry="width: 0.06; height: 0.06; depth:0.06" position="0.36 1.0 0.36"
+               material="color: #22d3ee; shader: flat" visible="false"></a-box>
+        <a-box geometry="width: 0.94; height: 0.08; depth: 0.02" position="0 1.34 0"
+               material="color: #22262b; shader: flat"></a-box>
+        <a-box id="dbr2-lag" geometry="width: 0.94; height: 0.08; depth: 0.03" position="-0.47 1.34 0.01"
+               material="color: #22d3ee; shader: flat" scale="0.05 1 1"></a-box>
+        <a-entity id="dbr2-tag" billboard position="0 1.78 0">
+          <a-plane geometry="width: 2.1; height: 0.5" position="0 0 -0.02"
+                   material="color: #10151c; shader: flat; opacity: .85; transparent: true"></a-plane>
+          <a-text id="dbr2-label" value="REPLICA 2 - serves reads" position="0 0.12 0" align="center"
+                  color="#5eead4" width="2.2" material="shader: flat"></a-text>
+          <a-text id="dbr2-stat" value="ops 0 · lag ~0 ms" position="0 -0.12 0" align="center"
+                  color="#e2e8f0" width="1.8" material="shader: flat"></a-text>
+        </a-entity>
+      </a-entity>
+      <a-entity id="db-links">
+        <a-line start="0 1.6 0.95" end="-1.55 1.2 -0.95" material="color: #22d3ee; opacity: .75; transparent: true"></a-line>
+        <a-line start="0 1.6 0.95" end="1.55 1.2 -0.95" material="color: #22d3ee; opacity: .75; transparent: true"></a-line>
+      </a-entity>
+      <a-entity id="db-ops"></a-entity>
+    </a-entity>
+    <canvas id="tex-dbconsole" width="1024" height="640" style="display:none"></canvas>
+    <a-entity id="dbconsole" billboard position="-7.4 3.4 -7.4">
+      <a-plane geometry="width: 3.5; height: 2.19" material="color: #ffffff; shader: flat; src: #tex-dbconsole"></a-plane>
+    </a-entity>
+    <a-entity id="dbexplain" billboard position="-8.7 1.75 -4.5" visible="false">
+      <a-plane geometry="width: 3.5; height: 2.2" material="color: #1b1e22; shader: flat; opacity: 0.95"></a-plane>
+      <a-text id="dbexplain-text" value="" position="-1.62 1.0 0.01" align="left" color="#e2e8f0"
+              width="3.2" baseline="top" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="explain" position="0 1.7 7.5" billboard visible="false">
+      <a-plane geometry="width: 2.6; height: 1.5" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
+      <a-text id="explain-text" value="" position="-1.18 0.63 0.01" align="left" color="#e2e8f0"
+              width="2.36" material="shader: flat"></a-text>
+    </a-entity>
+
+    <a-entity id="vrmenu" position="0 1.45 6.2" visible="false">
+      <a-plane geometry="width: 2.5; height: 1.7" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
+      <a-text value="CONTROLS" position="0 0.72 0.01" align="center" color="#22d3ee" width="3"
+              material="shader: flat"></a-text>
+      <a-entity id="vm-algo"  class="clickable" position="-0.72 0.16 0.01">
+        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text value="algorithm" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-auto"  class="clickable" position="0.42 0.16 0.01">
+        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text value="autoscale" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-cd"    class="clickable" position="-0.72 -0.14 0.01">
+        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text value="cooldown" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-rate"  class="clickable" position="0.42 -0.14 0.01">
+        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text value="rate - / +" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-expl"  class="clickable" position="-0.72 -0.44 0.01">
+        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text value="explain" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-exit"  class="clickable" position="0.42 -0.44 0.01">
+        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text value="leave VR" align="center" color="#f87171" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-db" class="clickable" position="0 -0.72 0.01">
+        <a-plane geometry="width: 2.2; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+        <a-text id="vm-db-t" value="kill a replica" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+    </a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+(function () {
+  'use strict';
+  var scene = document.querySelector('a-scene');
+  var statusEl = document.getElementById('status');
+  function setStatus (t, kind) {
+    statusEl.textContent = t;
+    statusEl.style.color = kind === 'warn' ? '#fbbf24' : kind === 'bad' ? '#f87171' : '#34d399';
+  }
+
+  var CAP = 4, MIN_SERVERS = 2, MAX_SERVERS = 8;
+  var SCALE_OUT_UTIL = 0.70, SCALE_OUT_HOLD = 3000;
+  var SCALE_IN_UTIL = 0.30, SCALE_IN_HOLD = 5000;
+  var COOLDOWN = 10000;
+  var POOL_N = 220;
+
+  var rate = 4, algo = 'lc', autoOn = true, cooldownOn = true;
+  var rrIndex = -1, lastScale = 0, aboveSince = 0, belowSince = 0;
+  var waitSamples = [], served = 0, acc = 0, caption = '', scaleEvents = 0;
+  var servers = [], pool = [], poolCursor = 0;
+
+  var C_GREEN = new THREE.Color('#34d399'), C_AMBER = new THREE.Color('#fbbf24'),
+      C_RED = new THREE.Color('#f87171'), C_SLATE = new THREE.Color('#334155');
+  var tmpC = new THREE.Color();
+  function utilColor (u, target) {
+    if (u <= 0.6) { tmpC.copy(C_GREEN).lerp(C_AMBER, u / 0.6); }
+    else { tmpC.copy(C_AMBER).lerp(C_RED, (u - 0.6) / 0.4); }
+    target.copy(tmpC); return target;
+  }
+
+  function el (tag, attrs, parent) {
+    var e = document.createElement(tag);
+    for (var k in attrs) { e.setAttribute(k, attrs[k]); }
+    if (parent) { parent.appendChild(e); }
+    return e;
+  }
+
+  var clientSpots = [];
+  function buildStatics () {
+    var clients = document.getElementById('clients');
+    for (var i = 0; i < 12; i++) {
+      var x = -3 + 6 * Math.random(), z = 6 + (Math.random() - 0.5) * 1.6, y = 0.8 + Math.random() * 0.5;
+      clientSpots.push(new THREE.Vector3(x, y, z));
+      var dev = ['#8b5cf6', '#14b8a6', '#f59e0b', '#ec4899'][i % 4];
+      var tok = el('a-sphere', { radius: 0.12, position: x + ' ' + y + ' ' + z,
+        material: 'color: ' + dev + '; shader: flat', 'class': 'clickable' }, clients);
+      (function (token, colour, idx) {
+        var device = { '#8b5cf6': 'phone on 5G', '#14b8a6': 'laptop on fibre',
+                       '#f59e0b': 'tablet on wifi', '#ec4899': 'smart TV on cable' }[colour] || 'device';
+        token.addEventListener('click', function () {
+          openInfo('USER ' + (idx + 1), 'a real visitor: ' + device + '\nevery tap sends HTTP requests\nto the load balancer out front\nwatch the cyan sphere it launches',
+            token.object3D.position);
+        });
+      })(tok, dev, i);
+    }
+    var links = document.getElementById('links');
+    el('a-cylinder', { id: 'link-clients', radius: 0.01,
+      material: 'color: #454b54; shader: flat' }, links);
+    for (var s = 0; s < MAX_SERVERS; s++) {
+      el('a-cylinder', { id: 'link-s' + s, radius: 0.01, visible: 'false',
+        material: 'color: #454b54; shader: flat' }, links);
+    }
+    var poolWrap = document.getElementById('pool');
+    for (var p = 0; p < POOL_N; p++) {
+      var sp = el('a-sphere', { radius: 0.08, visible: 'false',
+        material: 'color: #22d3ee; shader: flat' }, poolWrap);
+      var item = { el: sp, phase: 0, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(),
+        srv: null, spawnAt: 0 };
+      sp.addEventListener('click', function () {
+        openInfo('ONE REQUEST', item.phase === 0 ? 'waiting at a user, not sent yet'
+          : 'in flight: user -> ' + (item.srv ? 'server S' + (item.srv.id + 1) : 'balancer') +
+            '\nwaiting ' + Math.round(Math.max(0, nowMs() - item.spawnAt)) + ' ms so far',
+          sp.object3D.position);
+      });
+      pool.push(item);
+    }
+  }
+
+  function makeServer (idx) {
+    var g = el('a-entity', { visible: 'false' }, document.getElementById('servers'));
+    el('a-box', { position: '0 0.06 0', geometry: 'primitive: box; width: 0.8; height: 0.12; depth: 0.8',
+      material: 'color: #17191c; shader: flat' }, g);
+    el('a-box', { position: '0 0.95 0', geometry: 'primitive: box; width: 0.72; height: 1.66; depth: 0.72',
+      material: 'color: #23272b; shader: flat' }, g);
+    el('a-plane', { position: '0 0.98 0.37', geometry: 'width: 0.64; height: 1.5',
+      material: 'color: #ffffff; shader: flat; src: #tex-rackfront' }, g);
+    el('a-box', { position: '0 1.82 0', geometry: 'primitive: box; width: 0.76; height: 0.08; depth: 0.76',
+      material: 'color: #17191c; shader: flat' }, g);
+    el('a-box', { position: '0.3 0.95 0.38', geometry: 'primitive: box; width: 0.04; height: 0.6; depth: 0.04',
+      material: 'color: #8b9199; shader: flat' }, g);
+    var box = el('a-box', { 'geometry': 'primitive: box; width: 0.6; height: 0.05; depth: 0.05',
+      position: '0 1.9 0.3', material: 'color: #454b54; shader: flat',
+      'class': 'clickable' }, g);
+    var qbar = el('a-box', { 'geometry': 'primitive: box; width: 0.12; height: 0.02; depth: 0.12',
+      position: '0.44 1.98 0', visible: 'false', material: 'color: #f87171; shader: flat' }, g);
+    var txt = el('a-text', { value: '', position: '0 2.3 0', align: 'center', color: '#e2e8f0',
+      width: 3, material: 'shader: flat', billboard: '' }, g);
+    var srv = { id: idx, el: g, box: box, qbar: qbar, txt: txt, inFlight: [], queue: [],
+      state: 'hidden', homeX: 0, scaleT: 1, load: 0, util: 0 };
+    box.addEventListener('click', function () {
+      setStatus('S' + (srv.id + 1) + ' · in flight ' + srv.inFlight.length + '/' + CAP +
+        ' · queued ' + srv.queue.length + ' · ' + Math.round(srv.util * 100) + '% utilised');
+      openInfo('POOL SERVER S' + (srv.id + 1),
+        'rack cabinet · 8 vCPU · 32 GB RAM\nrole: pool worker, least-connections pick\nin flight ' +
+        srv.inFlight.length + '/' + CAP + ' · queued ' + srv.queue.length + '\nutilisation ' +
+        Math.round(srv.util * 100) + '% · state ' + srv.state, srv.el.object3D.position);
+    });
+    servers.push(srv);
+    return srv;
+  }
+
+  function activeServers () {
+    return servers.filter(function (s) { return s.state === 'active'; });
+  }
+  function layoutRow () {
+    var list = servers.filter(function (s) { return s.state !== 'hidden'; });
+    for (var i = 0; i < list.length; i++) { list[i].homeX = (i - (list.length - 1) / 2) * 1.3; }
+  }
+  function pickServer () {
+    var act = activeServers();
+    if (!act.length) { return null; }
+    if (algo === 'rr') { rrIndex = (rrIndex + 1) % act.length; return act[rrIndex]; }
+    return act.reduce(function (best, s) {
+      var l = s.inFlight.length + s.queue.length;
+      var b = best.inFlight.length + best.queue.length;
+      return l < b ? s : best;
+    });
+  }
+
+  function spawnRequest (now) {
+    for (var tries = 0; tries < POOL_N; tries++) {
+      poolCursor = (poolCursor + 1) % POOL_N;
+      if (pool[poolCursor].phase === 0) { break; }
+    }
+    var it = pool[poolCursor];
+    if (it.phase !== 0) { return; }
+    var from = clientSpots[(Math.random() * clientSpots.length) | 0];
+    it.phase = 1; it.t = 0; it.spawnAt = now;
+    it.from.copy(from); it.to.set(0, 1.0, 2.5);
+    it.el.object3D.visible = true;
+  }
+
+  
+function nowMs () { return performance.now(); }
+var infoEl = null;
+function openInfo (title, body, pos) {
+  if (!infoEl) { infoEl = document.getElementById('info'); }
+  document.getElementById('info-title').setAttribute('value', title);
+  document.getElementById('info-body').setAttribute('value', body);
+  infoEl.object3D.position.set(pos.x, 2.35, pos.z);
+  infoEl.setAttribute('visible', true);
+  clearTimeout(openInfo.t);
+  openInfo.t = setTimeout(function () { infoEl.setAttribute('visible', false); }, 8000);
+}
+
+/* Runtime canvas textures: rack fronts, balancer face, concrete shell. */
+
+function paintBoard (id, title, lines, h) {
+  var c = document.getElementById(id), g = c.getContext('2d');
+  g.fillStyle = 'rgba(27,30,34,0.96)'; g.fillRect(0, 0, c.width, c.height);
+  g.strokeStyle = 'rgba(217,165,20,.55)'; g.lineWidth = 6; g.strokeRect(3, 3, c.width - 6, c.height - 6);
+  g.fillStyle = '#fbbf24'; g.font = '800 44px system-ui, sans-serif'; g.fillText(title, 40, 78);
+  g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
+  lines.forEach(function (ln, i) { g.fillText(ln, 40, 150 + i * (h || 62)); });
+}
+function paintTextures () {
+  var c = document.getElementById('tex-rackfront'), g = c.getContext('2d'), y, i;
+  g.fillStyle = '#2b2f34'; g.fillRect(0, 0, 256, 512);
+  g.fillStyle = '#121518';
+  for (y = 24; y < 470; y += 34) { g.fillRect(18, y, 220, 20); }
+  g.fillStyle = '#8b9199';
+  for (y = 24; y < 470; y += 34) { for (i = 0; i < 8; i++) { g.fillRect(26 + i * 26, y + 8, 14, 4); } }
+  g.fillStyle = '#34d399'; g.fillRect(222, 30, 8, 8);
+  g.fillStyle = '#22d3ee'; g.fillRect(222, 46, 8, 8);
+  g.fillStyle = '#3f444a'; g.fillRect(0, 478, 256, 34);
+  g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 253, 509);
+
+  c = document.getElementById('tex-lbfront'); g = c.getContext('2d');
+  g.fillStyle = '#26292e'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#121518'; g.fillRect(20, 20, 216, 60);
+  g.fillStyle = '#22d3ee'; g.font = '700 22px system-ui, sans-serif'; g.fillText('EDGE-LB 01', 32, 58);
+  g.fillStyle = '#0d1424';
+  for (i = 0; i < 12; i++) { g.fillRect(24 + (i % 6) * 36, 100 + Math.floor(i / 6) * 26, 26, 16); }
+  g.fillStyle = '#d9a514'; g.fillRect(20, 168, 216, 10);
+  g.fillStyle = '#34d399';
+  for (i = 0; i < 6; i++) { g.fillRect(24 + i * 36, 196, 10, 10); }
+  g.fillStyle = '#8b9199'; g.font = '600 13px system-ui, sans-serif';
+  g.fillText('L4/L7 · 2N PSU · 40 GbE', 24, 236);
+  g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 253, 253);
+
+  c = document.getElementById('tex-concrete'); g = c.getContext('2d');
+  g.fillStyle = '#d4d6d8'; g.fillRect(0, 0, 512, 512);
+  for (i = 0; i < 26; i++) {
+    var x = 60 + (i * 97) % 392, yy = 60 + (i * 211) % 392, r = 30 + (i * 37) % 60;
+    var gr = g.createRadialGradient(x, yy, 0, x, yy, r);
+    gr.addColorStop(0, i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x - r, yy - r, r * 2, r * 2);
+  }
+  g.strokeStyle = 'rgba(0,0,0,.42)'; g.lineWidth = 2;
+  [0, 256, 512].forEach(function (v) {
+    g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 512); g.stroke();
+    g.beginPath(); g.moveTo(0, v); g.lineTo(512, v); g.stroke();
+  });
+  g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 1;
+  [2, 258].forEach(function (v) {
+    g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 512); g.stroke();
+    g.beginPath(); g.moveTo(0, v); g.lineTo(512, v); g.stroke();
+  });
+  paintBoard('tex-legend', 'HOW TO READ THIS ROOM', [
+    'coloured tokens  = users pressing refresh',
+    'cyan spheres     = one request in flight',
+    'cabinets         = pool servers (click one)',
+    'cyan octahedron  = the load balancer core',
+    'light bar green / amber / red = idle / busy / over',
+    'small red block  = queue overflow',
+    'walk to a gold door = next chapter',
+    'gold spark = a WRITE going to the PRIMARY db',
+    'teal spark = a READ served by a REPLICA db'], 54);
+  paintBoard('tex-db', 'THE DATABASE TIER - BEHIND EVERY REQUEST', [
+    '1  a pool server finishes a request -> it touches the db',
+    '2  WRITE (gold spark): only the PRIMARY may change data;',
+    '     it then streams the change down both cyan links',
+    '     (that travel time is the replication lag bar)',
+    '3  READ (teal spark, ~4 of 5): served by a REPLICA,',
+    '     round-robin - the balancer trick, one tier down',
+    '4  replica down? its reads fail over; both down? the',
+    '     primary serves everything and heats up red',
+    'try: read-share slider + kill/restore in TRAFFIC & POOL,',
+    'live numbers on the console board above the cylinders'], 46);
+  paintBoard('tex-takeaways', 'WHAT THIS ROOM TEACHES', [
+    '1  one entry point spreads load across many workers',
+    '2  least-connections beats round-robin when work is uneven',
+    '3  cooldown stops the pool from flapping up and down',
+    '4  queues form when every worker is already busy'], 74);
+  document.querySelectorAll('#shell a-box, #world > a-plane').forEach(function (e) {
+    var m = e.getAttribute('material') || {};
+    if (m.shader === 'flat' && !m.src && (m.color === '#5a616b' || m.color === '#363c44')) {
+      e.setAttribute('material', 'src', '#tex-concrete');
+    }
+  });
+}
+
+function startProc (srv, spawnAt, now) {
+    srv.inFlight.push({ doneAt: now + 200 + Math.random() * 1800 });
+    waitSamples.push(now - spawnAt);
+    if (waitSamples.length > 120) { waitSamples.shift(); }
+  }
+
+  function arrive (it, now) {
+    var srv = it.srv;
+    it.phase = 0; it.srv = null; it.el.object3D.visible = false;
+    if (!srv || srv.state !== 'active') { return; }
+    if (srv.inFlight.length < CAP) { startProc(srv, it.spawnAt, now); }
+    else { srv.queue.push(it.spawnAt); }
+  }
+
+  function scaleOut (now) {
+    for (var i = 0; i < servers.length; i++) {
+      if (servers[i].state === 'hidden') {
+        servers[i].state = 'spawning'; servers[i].scaleT = 0;
+        servers[i].el.object3D.visible = true;
+        layoutRow(); lastScale = now; aboveSince = 0; scaleEvents++;
+        caption = 'scaled OUT - ' + activeServersCount() + ' active (cooldown ' +
+          (cooldownOn ? '10 s' : 'off') + ')';
+        setStatus(caption, 'warn');
+        return;
+      }
+    }
+  }
+  function activeServersCount () {
+    return servers.filter(function (s) { return s.state === 'active' || s.state === 'spawning'; }).length;
+  }
+  function scaleIn (now) {
+    var act = activeServers();
+    if (act.length <= MIN_SERVERS) { return; }
+    var cand = act.reduce(function (b, s) {
+      return (s.inFlight.length + s.queue.length) < (b.inFlight.length + b.queue.length) ? s : b;
+    });
+    cand.state = 'draining'; lastScale = now; belowSince = 0; scaleEvents++;
+    caption = 'draining S' + (cand.id + 1) + ' for scale-in';
+    setStatus(caption, 'warn');
+  }
+
+  var LB_TOP = new THREE.Vector3(0, 1.0, 2.5);
+  var vA = new THREE.Vector3(), vB = new THREE.Vector3(), vM = new THREE.Vector3(),
+      vD = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+  function setTube (cyl, a, b) {
+    vD.subVectors(b, a);
+    var len = vD.length();
+    if (len < 0.001) { cyl.object3D.visible = false; return; }
+    vM.addVectors(a, b).multiplyScalar(0.5);
+    cyl.object3D.position.copy(vM);
+    cyl.object3D.quaternion.setFromUnitVectors(UP, vD.normalize());
+    cyl.object3D.scale.set(1, len / 2, 1);
+  }
+
+  function refreshLinks () {
+    var lc = document.getElementById('link-clients');
+    lc.object3D.visible = true;
+    setTube(lc, vA.set(0, 0.9, 6), LB_TOP);
+    for (var i = 0; i < MAX_SERVERS; i++) {
+      var cyl = document.getElementById('link-s' + i);
+      var srv = servers[i];
+      if (!srv || srv.state === 'hidden') { cyl.object3D.visible = false; continue; }
+      cyl.object3D.visible = true;
+      setTube(cyl, LB_TOP, vB.set(srv.el.object3D.position.x, 0.9, 0));
+    }
+  }
+
+  var lastText = 0, lastScaleCheck = 0;
+  function metricsTick (now) {
+    var act = activeServers(), sum = 0, mx = 0, mn = 99;
+    for (var i = 0; i < servers.length; i++) {
+      var s = servers[i];
+      if (s.state === 'hidden') { continue; }
+      s.load = s.inFlight.length + s.queue.length;
+      s.util = Math.min(1, s.load / CAP);
+      if (s.state === 'active') {
+        sum += s.util;
+        mx = Math.max(mx, s.load); mn = Math.min(mn, s.load);
+      }
+      s.txt.setAttribute('value', 'S' + (s.id + 1) + '  ' + s.inFlight.length + '/' + CAP +
+        '  q' + s.queue.length);
+      s.box.setAttribute('material', 'color',
+        s.state === 'draining' ? '#475569' : '#' + utilColor(s.util, tmpC).getHexString());
+      var q = s.queue.length;
+      if (q > 0) {
+        s.qbar.object3D.visible = true;
+        s.qbar.object3D.scale.y = Math.min(2.4, 0.12 * q) / 0.02;
+        s.qbar.object3D.position.y = Math.min(2.4, 0.12 * q) / 2;
+      } else { s.qbar.object3D.visible = false; }
+    }
+    var mean = act.length ? sum / act.length : 0;
+    var imb = act.length ? mx - mn : 0;
+    var avgWait = waitSamples.length ?
+      waitSamples.reduce(function (a, b) { return a + b; }, 0) / waitSamples.length : 0;
+    if (window.dbTick) { window.dbTick(now); }
+    var cdLeft = cooldownOn ? Math.max(0, (lastScale + COOLDOWN - now) / 1000) : 0;
+    document.getElementById('metrics-text').setAttribute('value',
+      'algorithm: ' + (algo === 'rr' ? 'round-robin' : 'least-connections') +
+      '   auto-scale: ' + (autoOn ? 'on' : 'off') + '\n' +
+      'active servers: ' + act.length + '   mean utilisation: ' + Math.round(mean * 100) + '%\n' +
+      'avg wait: ' + Math.round(avgWait) + ' ms   imbalance: ' + imb +
+      '   served: ' + served + '\n' +
+      'cooldown: ' + (cooldownOn ? cdLeft.toFixed(0) + ' s' : 'DISABLED') +
+      '\n' + (window.dbLine ? window.dbLine() : '') + (caption ? '\n' + caption : ''));
+    return mean;
+  }
+
+  function autoscaleTick (now, mean) {
+    if (!autoOn || !activeServers().length) { return; }
+    var cdOk = !cooldownOn || (now - lastScale >= COOLDOWN);
+    if (mean > SCALE_OUT_UTIL) {
+      aboveSince = aboveSince || now; belowSince = 0;
+      if (now - aboveSince >= SCALE_OUT_HOLD && cdOk && activeServersCount() < MAX_SERVERS) { scaleOut(now); }
+    } else if (mean < SCALE_IN_UTIL) {
+      belowSince = belowSince || now; aboveSince = 0;
+      if (now - belowSince >= SCALE_IN_HOLD && cdOk && activeServers().length > MIN_SERVERS) { scaleIn(now); }
+    } else { aboveSince = 0; belowSince = 0; }
+  }
+
+  scene.addEventListener('loaded', function () {
+    buildStatics();
+    for (var i = 0; i < MAX_SERVERS; i++) { makeServer(i); }
+    servers[0].state = 'active'; servers[1].state = 'active';
+    servers[0].el.object3D.visible = true; servers[1].el.object3D.visible = true;
+    layoutRow();
+    for (var j = 0; j < 2; j++) { servers[j].el.object3D.position.x = servers[j].homeX; }
+
+    document.getElementById('explain-text').setAttribute('value',
+      'A load balancer is the single door in front of many servers.\n' +
+      'Round-robin hands requests out in a fixed rotation. Least-\n' +
+      'connections hands each one to the idlest server. When every\n' +
+      'request costs the same (200-2000 ms here, randomised) both\n' +
+      'look equal. With varied cost, rotation piles work onto busy\n' +
+      'servers: queues and avg wait climb. Least-connections avoids\n' +
+      'that. Auto-scaling adds a server above 70% mean utilisation\n' +
+      'held 3 s, removes one below 30% held 5 s, and waits 10 s\n' +
+      'between actions. Kill the cooldown and watch the pool flap.');
+    document.getElementById('explain').object3D.visible = false;
+
+    scene.addEventListener('enter-vr', function () {
+      document.getElementById('vrmenu').object3D.visible = true;
+    });
+    scene.addEventListener('exit-vr', function () {
+      document.getElementById('vrmenu').object3D.visible = false;
+    });
+
+  /* ---- database tier: one primary, two read replicas ------------------ */
+  var DB = { ready: false, readShare: 0.8, rr: 0, ops: [], free: [], writes: 0, reads: 0,
+             primary: null, reps: [] };
+  var vDb = new THREE.Vector3();
+
+  function lerpHex (a, b, t) {
+    var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+    var r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * t);
+    var g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * t);
+    var bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * t);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+  }
+
+  function dbUnit (elId, ringId, labelId, kind, num) {
+    var el = document.getElementById(elId);
+    var u = { el: el, kind: kind, id: num, ops: 0, load: 0, state: 'live', lagMs: 0, ledAt: 0,
+      ring: document.getElementById(ringId), label: document.getElementById(labelId),
+      stat: document.getElementById(kind === 'primary' ? 'dbp-stat' : 'dbr' + num + '-stat'),
+      lag: document.getElementById('dbr' + num + '-lag'),
+      led: document.getElementById(kind === 'primary' ? 'dbp-led' : 'dbr' + num + '-led') };
+    el.addEventListener('click', function () {
+      openInfo(kind === 'primary' ? 'PRIMARY DATABASE' : 'READ REPLICA ' + num,
+        kind === 'primary'
+          ? 'the single writable copy\nevery gold spark lands here\nops served ' + u.ops +
+            ' · heat ' + Math.round(Math.min(1, u.load / 6) * 100) +
+            '%\nstreams each write to both replicas'
+          : 'read-only copy of the primary\nserves teal sparks round-robin\nops served ' + u.ops +
+            ' · state ' + u.state + '\nreplication lag ~' + Math.round(u.lagMs) + ' ms',
+        el.object3D.position);
+    });
+    return u;
+  }
+
+  function dbTop (u) {
+    u.el.object3D.getWorldPosition(vDb);
+    vDb.y += u.kind === 'primary' ? 1.6 : 1.25;
+    return vDb.clone();
+  }
+
+  function dbSphere (color, radius) {
+    for (var i = 0; i < DB.free.length; i++) {
+      var f = DB.free[i];
+      if (f.rad === radius) { DB.free.splice(i, 1); f.el.object3D.visible = true;
+        f.el.setAttribute('material', 'color', color); return f.el; }
+    }
+    var el = document.createElement('a-sphere');
+    el.setAttribute('radius', String(radius));
+    el.setAttribute('material', 'color: ' + color + '; shader: flat');
+    document.getElementById('db-ops').appendChild(el);
+    return el;
+  }
+
+  function dbFreeSphere (el) {
+    el.object3D.visible = false;
+    DB.free.push({ el: el, rad: parseFloat(el.getAttribute('radius')) });
+  }
+
+  function dbOp (kind) {
+    var act = activeServers();
+    var src = act.length ? act[Math.floor(Math.random() * act.length)].el.object3D
+      : document.getElementById('lb').object3D;
+    var from = src.getWorldPosition(vDb).clone();
+    from.y += 1.9;
+    var target = DB.primary;
+    if (kind === 'read') {
+      var live = DB.reps.filter(function (r) { return r.state === 'live'; });
+      if (live.length) { DB.rr = (DB.rr + 1) % live.length; target = live[DB.rr]; }
+    }
+    var el = dbSphere(kind === 'write' ? '#f59e0b' : '#22d3ee', 0.07);
+    DB.ops.push({ el: el, from: from, to: dbTop(target), t: 0,
+      dur: 620 + Math.random() * 260, kind: kind, target: target });
+  }
+
+  function dbReplicate () {
+    DB.reps.forEach(function (r) {
+      if (r.state !== 'live') { return; }
+      var dur = 140 + Math.random() * 220;
+      var el = dbSphere('#67e8f9', 0.045);
+      el.setAttribute('material', 'color: #67e8f9; shader: flat; opacity: .8; transparent: true');
+      DB.ops.push({ el: el, from: dbTop(DB.primary), to: dbTop(r), t: 0, dur: dur,
+        kind: 'repl', target: r });
+    });
+  }
+
+  function dbTick (now, dt) {
+    if (!dt) { dt = Math.min(400, Math.max(1, now - (DB.last || now))); }
+    DB.last = now;
+    for (var i = DB.ops.length - 1; i >= 0; i--) {
+      var o = DB.ops[i];
+      o.t += dt / o.dur;
+      if (o.t >= 1) {
+        if (o.kind === 'repl') { o.target.lagMs = o.dur; }
+        else {
+          o.target.ops++; o.target.load += 1; o.target.ledAt = nowMs();
+          if (o.kind === 'write') { DB.writes++; dbReplicate(); } else { DB.reads++; }
+        }
+        dbFreeSphere(o.el);
+        DB.ops.splice(i, 1);
+        continue;
+      }
+      vDb.lerpVectors(o.from, o.to, o.t);
+      vDb.y += Math.sin(Math.PI * o.t) * 0.25;
+      o.el.object3D.position.copy(vDb);
+    }
+    var k = Math.exp(-dt / 1400);
+    DB.primary.load *= k;
+    document.getElementById('dbp-heat').setAttribute('material', 'color',
+      lerpHex('#d9a514', '#f87171', Math.min(1, DB.primary.load / 6)));
+    DB.reps.forEach(function (r) {
+      r.load *= k;
+      if (r.state === 'dead') { return; }
+      r.ring.setAttribute('material', 'color', r.state === 'resync' ? '#f59e0b'
+        : lerpHex('#14b8a6', '#f87171', Math.min(1, r.load / 6)));
+    });
+    if (now - (DB.uiAt || 0) < 500) { return; }
+    DB.uiAt = now;
+    DB.primary.stat.setAttribute('value', 'ops ' + DB.primary.ops + ' · heat ' +
+      Math.round(Math.min(1, DB.primary.load / 6) * 100) + '%');
+    DB.primary.led.setAttribute('visible', String(now - DB.primary.ledAt < 260));
+    DB.reps.forEach(function (r) {
+      r.stat.setAttribute('value', r.state === 'live'
+        ? 'ops ' + r.ops + ' · lag ~' + Math.round(r.lagMs) + ' ms'
+        : r.state === 'resync' ? 'RESYNCING from primary' : 'DOWN - reads failed over');
+      r.led.setAttribute('visible', String(r.state === 'live' && now - r.ledAt < 260));
+      var f = Math.min(1, Math.max(0.04, r.lagMs / 400));
+      r.lag.object3D.scale.x = f;
+      r.lag.object3D.position.x = -0.47 + 0.47 * f;
+      r.lag.setAttribute('material', 'color', r.state === 'live'
+        ? lerpHex('#22d3ee', '#f59e0b', Math.min(1, r.lagMs / 400)) : '#3a3f46');
+    });
+    dbConsole();
+  }
+
+  function dbConsole () {
+    var c = document.getElementById('tex-dbconsole');
+    if (!c) { return; }
+    var g = c.getContext('2d');
+    g.fillStyle = '#1b1e22'; g.fillRect(0, 0, 1024, 640);
+    g.strokeStyle = '#d9a514'; g.lineWidth = 6; g.strokeRect(8, 8, 1008, 624);
+    g.fillStyle = '#fbbf24'; g.font = '700 44px system-ui, sans-serif';
+    g.fillText('DATABASE TIER - LIVE CONSOLE', 40, 74);
+    g.fillStyle = '#94a3b8'; g.font = '400 30px system-ui, sans-serif';
+    g.fillText('every finished request touches this corner', 40, 116);
+    g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
+    g.fillText('writes ' + DB.writes + '   reads ' + DB.reads +
+      '   read share ' + Math.round(DB.readShare * 100) + '%', 40, 178);
+    var row = function (y, name, state, ops, lag, load) {
+      g.fillStyle = '#e2e8f0'; g.font = '400 32px system-ui, sans-serif';
+      g.fillText(name + '  ' + state, 40, y);
+      g.fillText('ops ' + ops + (lag !== null ? '   lag ~' + Math.round(lag) + ' ms' : ''), 560, y);
+      g.fillStyle = '#22262b'; g.fillRect(40, y + 14, 940, 18);
+      g.fillStyle = name.indexOf('PRIMARY') === 0 ? '#d9a514' : '#14b8a6';
+      g.fillRect(40, y + 14, 940 * Math.min(1, load), 18);
+    };
+    row(250, 'PRIMARY', DB.primary.state, DB.primary.ops, null, Math.min(1, DB.primary.load / 6));
+    row(350, 'REPLICA 1', DB.reps[0].state, DB.reps[0].ops, DB.reps[0].lagMs, Math.min(1, DB.reps[0].load / 6));
+    row(450, 'REPLICA 2', DB.reps[1].state, DB.reps[1].ops, DB.reps[1].lagMs, Math.min(1, DB.reps[1].load / 6));
+    g.fillStyle = '#94a3b8'; g.font = '400 28px system-ui, sans-serif';
+    g.fillText('last event: ' + (DB.lastEvent || 'none yet - watch the sparks fly'), 40, 560);
+    g.fillText('gold = write path   teal = read path   pale teal = replication', 40, 604);
+    var plane = document.querySelector('#dbconsole a-plane');
+    if (plane && plane.components && plane.components.material &&
+        plane.components.material.material.map) {
+      plane.components.material.material.map.needsUpdate = true;
+    }
+  }
+
+  function dbLine () {
+    var live = DB.reps.filter(function (r) { return r.state === 'live'; });
+    var lag = live.reduce(function (a, r) { return a + r.lagMs; }, 0) / Math.max(1, live.length);
+    return 'db tier: ' + DB.writes + ' writes · ' + DB.reads + ' reads · ' +
+      live.length + '/2 replicas · lag ~' + Math.round(lag) + ' ms';
+  }
+
+  function dbSyncButtons () {
+    var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
+    document.getElementById('b-db').textContent = anyDead ? 'restore replica' : 'kill a replica';
+    var vt = document.getElementById('vm-db-t');
+    if (vt) { vt.setAttribute('value', anyDead ? 'restore replica' : 'kill a replica'); }
+  }
+
+  function dbKill () {
+    var live = DB.reps.filter(function (r) { return r.state === 'live'; });
+    if (!live.length) { setStatus('both replicas are already down'); return false; }
+    var r = live[live.length - 1];
+    r.state = 'dead';
+    DB.ops.forEach(function (o) {
+      if (o.kind === 'read' && o.target === r) { o.target = DB.primary; o.to = dbTop(DB.primary); }
+    });
+    r.ring.setAttribute('material', 'color', '#3a3f46');
+    r.label.setAttribute('value', 'REPLICA ' + r.id + ' - FAULT');
+    r.label.setAttribute('color', '#f87171');
+    setStatus('replica ' + r.id + ' killed - its reads fail over to ' +
+      (live.length > 1 ? 'the other replica' : 'the primary, watch it heat up'));
+    DB.lastEvent = 'replica ' + r.id + ' KILLED - reads fail over';
+    dbSyncButtons();
+    return true;
+  }
+
+  function dbRestore () {
+    var dead = DB.reps.filter(function (r) { return r.state !== 'live'; });
+    if (!dead.length) { setStatus('both replicas are healthy'); return false; }
+    var r = dead[0];
+    r.state = 'resync';
+    r.ring.setAttribute('material', 'color', '#f59e0b');
+    r.label.setAttribute('value', 'REPLICA ' + r.id + ' - RESYNCING');
+    r.label.setAttribute('color', '#fbbf24');
+    setStatus('replica ' + r.id + ' resyncs from the primary before taking reads again');
+    setTimeout(function () {
+      if (r.state !== 'resync') { return; }
+      r.state = 'live';
+      r.label.setAttribute('value', 'REPLICA ' + r.id + ' - serves reads');
+      r.label.setAttribute('color', '#5eead4');
+      DB.lastEvent = 'replica ' + r.id + ' RESYNCED - back in rotation';
+      setStatus('replica ' + r.id + ' caught up - back in the read rotation');
+      dbSyncButtons();
+    }, 3000);
+    dbSyncButtons();
+    return true;
+  }
+
+  window.dbTick = dbTick;
+  window.dbLine = dbLine;
+  window.dbOpAuto = function () {
+    if (DB.ready && DB.ops.length < 22) { dbOp(Math.random() < DB.readShare ? 'read' : 'write'); }
+  };
+  window.LBDB = {
+    kill: dbKill, restore: dbRestore,
+    setReadShare: function (v) { DB.readShare = v; },
+    stats: function () {
+      return { writes: DB.writes, reads: DB.reads, primaryOps: DB.primary.ops,
+        reps: DB.reps.map(function (r) { return { id: r.id, state: r.state, ops: r.ops }; }),
+        opsInFlight: DB.ops.length };
+    }
+  };
+
+  DB.primary = dbUnit('db-primary', 'dbp-heat', 'dbp-label', 'primary', 0);
+  DB.reps = [dbUnit('db-r1', 'dbr1-ring', 'dbr1-label', 'rep', 1),
+             dbUnit('db-r2', 'dbr2-ring', 'dbr2-label', 'rep', 2)];
+  DB.ready = true;
+
+  document.getElementById('b-db').addEventListener('click', function () {
+    var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
+    if (anyDead) { dbRestore(); } else { dbKill(); }
+  });
+  document.getElementById('vm-db').addEventListener('click', function () {
+    var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
+    if (anyDead) { dbRestore(); } else { dbKill(); }
+  });
+  document.getElementById('db-share').addEventListener('input', function (e) {
+    DB.readShare = Number(e.target.value) / 100;
+  });
+
+  document.getElementById('dbexplain-text').setAttribute('value',
+    'WHAT HAPPENS WHEN A REQUEST FINISHES\n' +
+    '1  server finishes -> the result must be stored:\n' +
+    '   RAM is volatile, the database is the record\n' +
+    '2  WRITE (gold): only the PRIMARY changes data,\n' +
+    '   then replays it down both cyan links - the bars\n' +
+    '   on the replicas time that replay (= lag)\n' +
+    '3  READ (teal, 4 of 5): any replica answers,\n' +
+    '   round-robin: cheap reads, one source of truth\n' +
+    '4  FAILURE: kill a replica -> reads fail over;\n' +
+    '   kill both -> the primary serves all and heats up\n' +
+    '5  RESTORE: a returning replica resyncs first,\n' +
+    '   then rejoins the read rotation\n' +
+    'try: read-share slider + kill/restore, TRAFFIC & POOL');
+  var dbExOn = false;
+  document.getElementById('b-dbex').addEventListener('click', function () {
+    dbExOn = !dbExOn;
+    document.getElementById('dbexplain').object3D.visible = dbExOn;
+    document.getElementById('b-dbex').textContent = dbExOn ? 'hide the explanation' : 'explain the db tier';
+    if (dbExOn) { setStatus('explanation board open beside the database tier'); }
+  });
+
+    wireUI();
+
+    /* main loop, driven by the lbsim component registered in <head> */
+    var sim = { tick: function (t, dt) {
+      var now = performance.now();
+      dt = Math.min(dt, 100);
+      acc += rate * dt / 1000;
+      while (acc >= 1) { acc -= 1; spawnRequest(now); }
+
+      for (var p = 0; p < pool.length; p++) {
+        var it = pool[p];
+        if (it.phase === 0) { continue; }
+        it.t += dt / 400;
+        if (it.t >= 1) {
+          if (it.phase === 1) {
+            it.phase = 2; it.t = 0;
+            it.from.copy(LB_TOP);
+            var srv = pickServer();
+            if (!srv) { it.phase = 0; it.el.object3D.visible = false; continue; }
+            it.srv = srv;
+            it.to.set(srv.el.object3D.position.x, 0.95, 0);
+          } else { arrive(it, now); continue; }
+        }
+        var k = it.t;
+        vA.lerpVectors(it.from, it.to, k);
+        vA.y += Math.sin(Math.PI * k) * 0.35;
+        it.el.object3D.position.copy(vA);
+      }
+
+      for (var i = 0; i < servers.length; i++) {
+        var s = servers[i];
+        if (s.state === 'hidden') { continue; }
+        for (var f = s.inFlight.length - 1; f >= 0; f--) {
+          if (s.inFlight[f].doneAt <= now) { s.inFlight.splice(f, 1); served++;
+            if (window.dbOpAuto) { window.dbOpAuto(); } }
+        }
+        while (s.inFlight.length < CAP && s.queue.length && s.state === 'active') {
+          startProc(s, s.queue.shift(), now);
+        }
+        if (s.state === 'draining' && s.load === 0 && s.inFlight.length === 0 && s.queue.length === 0) {
+          s.state = 'hidden'; s.el.object3D.visible = false; layoutRow();
+          caption = 'scaled IN - ' + activeServersCount() + ' active';
+          setStatus(caption, 'warn');
+        }
+        if (s.state === 'spawning') {
+          s.scaleT = Math.min(1, s.scaleT + dt / 500);
+          s.el.object3D.scale.setScalar(s.scaleT);
+          if (s.scaleT >= 1) { s.state = 'active'; }
+        }
+        var dx = s.homeX - s.el.object3D.position.x;
+        if (Math.abs(dx) > 0.002) { s.el.object3D.position.x += dx * Math.min(1, dt / 180); }
+        s.el.object3D.position.z = 0; s.el.object3D.position.y = 0;
+      }
+
+      if (now - lastText > 250) {
+        lastText = now;
+        var mean = metricsTick(now);
+        refreshLinks();
+        if (now - lastScaleCheck > 500) { lastScaleCheck = now; autoscaleTick(now, mean); }
+      }
+    } };
+    window.__lbSimTick = sim.tick;
+
+    setStatus('pool online - 2 servers, least-connections');
+    paintTextures();
+  window.LB = {
+      get servers () { return servers; }, get pool () { return pool; },
+      get rate () { return rate; }, set rate (v) { rate = v; },
+      get algo () { return algo; }, get autoOn () { return autoOn; },
+      get cooldownOn () { return cooldownOn; }, get served () { return served; },
+      get scaleEvents () { return scaleEvents; },
+      activeCount: function () { return activeServers().length; },
+      get waitSamples () { return waitSamples; },
+      pick: function () { var s = pickServer(); return s ? s.id : -1; },
+      setAlgo: function (a) { algo = a; syncUI(); },
+      setAuto: function (v) { autoOn = v; syncUI(); },
+      setCooldown: function (v) { cooldownOn = v; syncUI(); },
+      reset: doReset,
+      metricsText: function () { return document.getElementById('metrics-text').getAttribute('value'); }
+    };
+    window.LB.ready = true;
+  });
+
+  function syncUI () {
+    document.getElementById('b-algo').textContent =
+      'algorithm: ' + (algo === 'rr' ? 'round-robin' : 'least-connections');
+    document.getElementById('b-algo').classList.toggle('on', algo === 'lc');
+    document.getElementById('b-auto').textContent = 'auto-scaling: ' + (autoOn ? 'on' : 'off');
+    document.getElementById('b-auto').classList.toggle('on', autoOn);
+    document.getElementById('b-cd').textContent = 'cooldown: ' + (cooldownOn ? 'on' : 'off');
+    document.getElementById('b-cd').classList.toggle('on', cooldownOn);
+    document.getElementById('rateval').textContent = rate + ' req/s';
+    document.getElementById('rate').value = rate;
+    document.querySelector('#vm-algo a-text').setAttribute('value',
+      algo === 'rr' ? 'round-robin' : 'least-conn');
+    document.querySelector('#vm-auto a-text').setAttribute('value',
+      'autoscale ' + (autoOn ? 'on' : 'off'));
+    document.querySelector('#vm-cd a-text').setAttribute('value',
+      'cooldown ' + (cooldownOn ? 'on' : 'off'));
+  }
+
+  function toggleAlgo () { algo = algo === 'rr' ? 'lc' : 'rr'; rrIndex = -1;
+    caption = 'algorithm switched to ' + (algo === 'rr' ? 'round-robin' : 'least-connections');
+    setStatus(caption); syncUI(); }
+  function toggleAuto () { autoOn = !autoOn; aboveSince = 0; belowSince = 0;
+    setStatus('auto-scaling ' + (autoOn ? 'enabled' : 'disabled'), autoOn ? undefined : 'warn'); syncUI(); }
+  function toggleCd () { cooldownOn = !cooldownOn;
+    setStatus('cooldown ' + (cooldownOn ? 'enabled - scaling settles' : 'DISABLED - watch the pool flap'),
+      cooldownOn ? undefined : 'bad'); syncUI(); }
+  function bumpRate (d) { rate = Math.max(1, Math.min(30, rate + d)); syncUI();
+    setStatus('traffic ' + rate + ' req/s'); }
+  function toggleExplain () {
+    var e = document.getElementById('explain');
+    e.object3D.visible = !e.object3D.visible;
+    setStatus(e.object3D.visible ? 'explainer open' : 'explainer closed');
+  }
+  function doReset () {
+    for (var i = 0; i < servers.length; i++) {
+      servers[i].state = i < 2 ? 'active' : 'hidden';
+      servers[i].inFlight = []; servers[i].queue = [];
+      servers[i].el.object3D.visible = i < 2;
+      servers[i].el.object3D.scale.setScalar(1); servers[i].scaleT = 1;
+    }
+    for (var p = 0; p < pool.length; p++) { pool[p].phase = 0; pool[p].el.object3D.visible = false; }
+    rate = 4; algo = 'lc'; autoOn = true; cooldownOn = true;
+    rrIndex = -1; lastScale = 0; aboveSince = 0; belowSince = 0;
+    waitSamples = []; served = 0; acc = 0; caption = '';
+    layoutRow();
+    for (var j = 0; j < 2; j++) { servers[j].el.object3D.position.x = servers[j].homeX; }
+    syncUI(); setStatus('reset - 2 servers, least-connections, 4 req/s');
+  }
+
+  function wireUI () {
+    document.getElementById('rate').addEventListener('input', function (e) {
+      rate = +e.target.value; syncUI();
+    });
+    document.getElementById('b-algo').addEventListener('click', toggleAlgo);
+    document.getElementById('b-auto').addEventListener('click', toggleAuto);
+    document.getElementById('b-cd').addEventListener('click', toggleCd);
+    document.getElementById('b-explain').addEventListener('click', toggleExplain);
+    document.getElementById('b-reset').addEventListener('click', doReset);
+    document.getElementById('b-hub').addEventListener('click', function () { location.href = 'index.html'; });
+    document.getElementById('vm-algo').addEventListener('click', toggleAlgo);
+    document.getElementById('vm-auto').addEventListener('click', toggleAuto);
+    document.getElementById('vm-cd').addEventListener('click', toggleCd);
+    document.getElementById('vm-rate').addEventListener('click', function () { bumpRate(4); });
+    document.getElementById('vm-expl').addEventListener('click', toggleExplain);
+    document.getElementById('vm-exit').addEventListener('click', function () { scene.exitVR(); });
+    document.getElementById('metrics-board').addEventListener('click', function () {
+    openInfo('LIVE METRICS', 'active servers: cabinets taking traffic now\nmean utilisation: how busy they are on average\navg wait: time a request queued before a worker\nimbalance: spread of load between workers\nserved: requests completed this session',
+      new THREE.Vector3(0, 0, 2.5));
+  });
+  document.getElementById('lb-core').addEventListener('click', function () {
+    openInfo('LOAD BALANCER', 'L4/L7 reverse proxy · single entry point\nalgorithm: ' +
+      (algo === 'rr' ? 'round-robin' : 'least-connections') + '\npool MIN 2 / MAX 8 cabinets · cooldown ' +
+      (cooldownOn ? 'on' : 'off') + '\nclick a server cabinet for its stats', new THREE.Vector3(0, 0, 2.5));
+      setStatus('balancer · ' + (algo === 'rr' ? 'round-robin' : 'least-connections') +
+        ' · ' + rate + ' req/s in · ' + activeServers().length + ' servers out');
+    });
+    syncUI();
+  }
+})();
+</script>
+<script>
+window.HUDTAB = {
+  open: function (n) {
+    document.querySelectorAll('.tabpanel').forEach(function (p) {
+      p.classList.toggle('open', p.getAttribute('data-tab') === n);
+    });
+    document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tab') === n);
+    });
+  },
+  closeAll: function () { this.open(null); },
+  toggle: function (n) {
+    var p = document.querySelector('.tabpanel[data-tab="' + n + '"]');
+    if (p && p.classList.contains('open')) { this.closeAll(); } else { this.open(n); }
+  }
+};
+document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
+  b.addEventListener('click', function () { window.HUDTAB.toggle(b.getAttribute('data-tab')); });
+});
+</script>
+<script>
+/* thumb stick -> window.TOUCHJOY, consumed by rig-walk */
+(function () {
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+    document.documentElement.classList.add('coarse');
+  }
+  window.TOUCHJOY = { x: 0, y: 0 };
+  var stick = document.getElementById('stick');
+  var knob = document.getElementById('stick-knob');
+  if (!stick || !knob) { return; }
+  var R = 40;
+  function move (e) {
+    var r = stick.getBoundingClientRect();
+    var dx = e.clientX - (r.left + r.width / 2);
+    var dy = e.clientY - (r.top + r.height / 2);
+    var mm = Math.hypot(dx, dy);
+    if (mm > R) { dx *= R / mm; dy *= R / mm; }
+    knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+    window.TOUCHJOY.x = dx / R; window.TOUCHJOY.y = -dy / R;
+    window.STICK_ACTIVE = true;
+  }
+  function end (e) {
+    if (stick.hasPointerCapture && e.pointerId !== undefined &&
+        stick.hasPointerCapture(e.pointerId)) { stick.releasePointerCapture(e.pointerId); }
+    knob.style.transform = ''; window.TOUCHJOY.x = 0; window.TOUCHJOY.y = 0;
+    window.STICK_ACTIVE = false;
+    var c = document.getElementById('cam'); if (c) { c.setAttribute('look-controls', 'touchEnabled', 'true'); }
+  }
+  stick.addEventListener('pointerdown', function (e) {
+    stick.setPointerCapture(e.pointerId); move(e); e.preventDefault();
+    var c = document.getElementById('cam'); if (c) { c.setAttribute('look-controls', 'touchEnabled', 'false'); }
+  });
+  stick.addEventListener('pointermove', function (e) {
+    if (stick.hasPointerCapture(e.pointerId)) { move(e); }
+  });
+  stick.addEventListener('pointerup', end);
+  stick.addEventListener('pointercancel', end);
+})();
+</script>
+<script>
+/* While the thumb stick is steering, a second thumb dragging the canvas turns
+   the rig left/right (stock touch-look tracks only the first touch, so it goes
+   silent during multi-touch). Yaw on #rig - camera stays pristine. */
+(function () {
+  var last = null, cvEl = null;
+  function cv () { if (!cvEl) { cvEl = document.querySelector('canvas.a-canvas') || document.querySelector('canvas'); } return cvEl; }
+  document.addEventListener('touchmove', function (e) {
+    if (!window.STICK_ACTIVE || e.target !== cv()) { return; }
+    var t = e.changedTouches[0];
+    if (!last || last.id !== t.identifier) { last = { id: t.identifier, x: t.clientX }; return; }
+    var dx = t.clientX - last.x; last.x = t.clientX;
+    var r = document.getElementById('rig');
+    if (r) { r.object3D.rotation.y -= dx * 0.011; }
+  }, { passive: true, capture: true });
+  document.addEventListener('touchend', function (e) {
+    if (!last) { return; }
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === last.id) { last = null; }
+    }
+  }, { passive: true, capture: true });
+})();
+</script>
+<style>.a-enter-ar{display:none!important}</style>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 12</div>
+</body>
+</html>

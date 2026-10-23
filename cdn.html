@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>CDN and Edge Caching</title>
+
+<script src="vendor/aframe.min.js"></script>
+<script src="xr-quest.js"></script>
+<script>
+/* 3D text font. A-Frame fetches its default font from cdn.aframe.io, so all
+   a-text vanishes offline or on networks that block it. Prefer the bundled copy
+   in vendor/ when served over http(s); fall back to the CDN if it is missing. */
+(function () {
+  if (!window.AFRAME || !AFRAME.components.text) { return; }
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') { return; }
+  var LOCAL = 'vendor/Roboto-msdf.json';
+  var schema = AFRAME.components.text.schema;
+  schema.font.default = LOCAL;
+  function revert () {
+    schema.font.default = 'roboto';
+    document.querySelectorAll('[text], a-text').forEach(function (el) {
+      var t = el.getAttribute('text');
+      if (t && t.font === LOCAL) { el.setAttribute('text', 'font', 'roboto'); }
+    });
+  }
+  fetch(LOCAL, { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+    if (!r.ok) { throw new Error(String(r.status)); }
+  }).catch(function () {
+    window.__fontFallback = true;
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', revert); } else { revert(); }
+    var sc = document.querySelector('a-scene');
+    if (sc) { sc.addEventListener('loaded', revert); }
+    setTimeout(revert, 1500);
+  });
+})();
+</script>
+<script src="ne_110m_land.js"></script>
+
+<style>
+  html, body { margin: 0; padding: 0; background: #10151c; color: #e2e8f0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #overlay { position: fixed; left: 0; right: 0; top: 0; bottom: auto;
+    height: fit-content; z-index: 10; pointer-events: none;
+    padding: 9px 13px; background: rgba(23,26,31,.86); border-bottom: 1px solid #334155; }
+  #overlay button, #overlay input, #overlay label { pointer-events: auto; }
+  #overlay h1 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  #overlay h1 span { color: #22d3ee; }
+  #sub { font-size: 11.5px; color: #9aa2a9; margin-bottom: 6px; }
+  #hint { font-size: 12.5px; margin-bottom: 7px; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  button { font: inherit; font-size: 12.5px; padding: 6px 10px; cursor: pointer;
+    color: #e2e8f0; background: #3a3f45; border: 1px solid #565b60; border-radius: 6px; }
+  button:hover { background: #4a5058; }
+  button:active { background: #22d3ee; color: #0b1020; }
+  #ttlRow { margin-top: 7px; font-size: 12px; color: #9aa2a9; }
+  #ttl { width: 130px; vertical-align: middle; }
+  #ttlVal { color: #e2e8f0; }
+  a-scene canvas { touch-action: none; }
+  /* In AR the overlay is the WebXR dom-overlay and covers the whole screen,
+     so it must stay compact and must not duplicate the AR-only controls. */
+  #overlay.ar { padding: 6px 10px; background: rgba(23,26,31,.66); border-bottom: none; }
+  #overlay.ar h1, #overlay.ar #sub, #overlay.ar #ttlRow { display: none; }
+  #overlay.ar .deskOnly { display: none; }
+  #status { font-size: 11.5px; color: #34d399; margin-top: 6px; min-height: 1.15em; }
+  #status.warn { color: #fbbf24; }
+  #status.err { color: #f87171; }
+  #tourbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 12;
+    width: min(560px, 92vw); background: rgba(23,26,31,.94); border: 1px solid rgba(217,165,20,.5);
+    border-radius: 12px; padding: 12px 14px; display: none; color: #e2e8f0; }
+  #tourbar .tstep { color: #fbbf24; font-size: 10.5px; letter-spacing: .16em; font-weight: 800; }
+  #tourbar h3 { margin: 3px 0 5px; font-size: 15px; }
+  #tourbar p { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: #c9ced4; }
+  #tourbar .trow { display: flex; gap: 8px; justify-content: flex-end; }
+  #tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 12;
+    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96vw; }
+  .tab { font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; color: #e2e8f0;
+    background: rgba(23,26,31,.9); border: 1px solid rgba(217,165,20,.45); border-radius: 999px;
+    padding: 8px 13px; cursor: pointer; }
+  .tab.on { background: #d9a514; color: #17191c; border-color: #d9a514; }
+  #tabbar small { display: none; }
+  @media (max-width: 700px) {
+    #overlay { padding: 6px 8px; }
+    #overlay h1 { font-size: 14.5px; margin-bottom: 2px; }
+    #sub { font-size: 9.5px; margin-bottom: 3px; }
+    #hint { font-size: 10px; margin-bottom: 3px; }
+    #status { font-size: 10px; margin-top: 3px; }
+    #tabbar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; left: 6px; right: 6px;
+      transform: none; bottom: 6px; max-width: none; }
+    #tabbar .tab { text-align: center; font-size: 9px; padding: 7px 2px; letter-spacing: .02em; }
+    #tabbar #btnHub { grid-column: auto; }
+    #panCache.open, #panView.open, #panLearn.open { bottom: 46px; z-index: 45; max-height: 34vh; }
+    #tourbar { bottom: 50px; width: 94vw; padding: 8px 10px; }
+    #stick { bottom: 60px; }
+  }
+  #routedom { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 12;
+    display: none; background: rgba(6,10,22,.85); border: 1px solid rgba(217,165,20,.4);
+    border-radius: 9px; padding: 5px 12px; font-size: 11px; line-height: 1.5; color: #e2e8f0;
+    text-align: center; max-width: 94vw; box-sizing: border-box; pointer-events: none; }
+  .tabpanel { display: none; }
+  #overlay .tabpanel.open { display: flex; }
+  #panCache.open, #panView.open, #panLearn.open { position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: 86px; z-index: 11; background: rgba(23,26,31,.92); border: 1px solid rgba(217,165,20,.4);
+    border-radius: 10px; padding: 8px 10px; width: min(640px, 94vw); box-sizing: border-box;
+    justify-content: center; max-height: 40vh; overflow: auto; }
+
+/* ---- touch thumb stick (phones: no WASD out there) ---- */
+#stick{position:fixed;left:14px;bottom:132px;width:116px;height:116px;border-radius:50%;
+  background:rgba(23,26,31,.55);border:1px solid rgba(217,165,20,.5);display:none;
+  touch-action:none;z-index:40}
+#stick::after{content:"";position:absolute;inset:34px;border-radius:50%;
+  border:1px dashed rgba(226,232,240,.25)}
+#stick-knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;
+  border-radius:50%;background:rgba(34,211,238,.85);box-shadow:0 0 16px rgba(34,211,238,.55)}
+html.coarse #stick{display:block}
+</style>
+
+<script>
+/* Registered before <a-scene> is parsed. Later registration silently never attaches. */
+if (typeof AFRAME === 'undefined') {
+  console.error('A-Frame failed to load.');
+} else {
+
+AFRAME.registerComponent('door-zone', {
+  schema: { href: { type: 'string' }, radius: { default: 1.5 }, dwell: { default: 350 } },
+  init: function () {
+    this.since = 0;
+    this.el.addEventListener('click', function () {
+      window.doorGo(this.getAttribute('door-zone').href);
+    });
+  },
+  tick: function (t) {
+    var rig = this.el.sceneEl.querySelector('#rig');
+    if (!rig) { return; }
+    var p = rig.object3D.position, d = this.el.object3D.position;
+    var near = Math.hypot(p.x - d.x, p.z - d.z) < this.data.radius;
+    if (near && !this.since) { this.since = t; }
+    if (!near) { this.since = 0; }
+    if (this.since && t - this.since > this.data.dwell) { window.doorGo(this.data.href); }
+  }
+});
+AFRAME.registerComponent('rig-walk', {
+  schema: { speed: { default: 2.4 }, rbound: { default: 0 } },
+  init: function () {
+    this.keys = {};
+    this.cam = document.getElementById('cam');
+    var self = this;
+    window.addEventListener('keydown', function (e) { self.keys[e.code] = true; });
+    window.addEventListener('keyup', function (e) { self.keys[e.code] = false; });
+  },
+  tick: function (t, dt) {
+    var k = this.keys, d = dt / 1000, f = 0, sd = 0;
+    if (k.KeyW || k.ArrowUp) { f += 1; }
+    if (k.KeyS || k.ArrowDown) { f -= 1; }
+    if (k.KeyD || k.ArrowRight) { sd += 1; }
+    if (k.KeyA || k.ArrowLeft) { sd -= 1; }
+    var J = window.TOUCHJOY;
+    if (J) {
+      if (Math.abs(J.y) > 0.12) { f += J.y; }
+      if (Math.abs(J.x) > 0.12) { sd += J.x; }
+    }
+    if (!f && !sd) { return; }
+    var rig = this.el.object3D, v = this.cam.object3D.getWorldDirection(new THREE.Vector3());
+    v.y = 0; v.normalize(); v.negate();   /* cameras look down -Z; +Z is backwards */
+    var r = new THREE.Vector3(-v.z, 0, v.x);
+    var sp = this.data.speed * (k.ShiftLeft ? 1.8 : 1);
+    if (J && (J.x || J.y)) { sp *= 2.2; }   /* phone stick: brisk pace */
+    rig.position.addScaledVector(v, f * sp * d).addScaledVector(r, sd * sp * d);
+    if (this.data.rbound > 0) {
+      var len = Math.hypot(rig.position.x, rig.position.z);
+      if (len > this.data.rbound) {
+        rig.position.x *= this.data.rbound / len; rig.position.z *= this.data.rbound / len;
+      }
+    }
+    rig.position.y = 0;
+  }
+});
+/* thumbstick-locomotion now lives in xr-quest.js (build 12) */
+AFRAME.registerComponent('billboard', {
+  init: function () { this._v = new THREE.Vector3(); },
+  tick: function () {
+    var cam = this.el.sceneEl.camera;
+    if (!cam) { return; }
+    cam.getWorldPosition(this._v);
+    this.el.object3D.lookAt(this._v);
+  }
+});
+
+/* Pins an entity to the top or bottom edge of the viewport, whatever the FOV,
+   aspect or zoom. A fixed camera offset cannot do this: how much globe it covers
+   depends on the window shape. Also shrinks to fit a narrow portrait phone. */
+AFRAME.registerComponent('hud-item', {
+  schema: {
+    dist: { default: 1 },
+    align: { default: 'bottom', oneOf: ['top', 'bottom'] },
+    offset: { default: 0.05 },
+    fitWidth: { default: 0.46 }
+  },
+  tick: function () {
+    var cam = this.el.sceneEl.camera;
+    if (!cam || !cam.isPerspectiveCamera) { return; }
+    var d = this.data.dist;
+    var halfH = d * Math.tan(cam.fov * Math.PI / 360);
+    var halfW = halfH * (cam.aspect || 1);
+    var k = Math.min(1, halfW / this.data.fitWidth);
+    var pad = this.data.offset * k;
+    this.el.object3D.scale.setScalar(k);
+    this.el.object3D.position.set(
+      0,
+      this.data.align === 'top' ? halfH - pad : -halfH + pad,
+      -d
+    );
+  }
+});
+
+/* A globe is looked at from outside. look-controls turns your head instead,
+   which swings the globe off screen rather than orbiting it. */
+AFRAME.registerComponent('globe-orbit', {
+  schema: { enabled: { default: true }, spin: { default: false }, arMode: { default: false } },
+  init: function () {
+    var self = this, el = this.el;
+    this.rotX = 0; this.rotY = 0;
+    this.dragging = false; this.moved = 0; this.px = 0; this.py = 0;
+    this.lastDragEnd = 0;
+
+    this.pinching = false; this.pinchStart = 0; this.startScale = 1;
+
+    function pt (e) {
+      if (e.touches && e.touches.length) { return { x: e.touches[0].clientX, y: e.touches[0].clientY }; }
+      return { x: e.clientX, y: e.clientY };
+    }
+    /* TRAP: in AR, #overlay IS the WebXR dom-overlay and fills the screen, so
+       blocking every touch inside it killed drag and pinch in AR entirely.
+       Block only actual controls, not empty overlay space. */
+    function onOverlay (e) {
+      return e.target && e.target.closest &&
+             e.target.closest('button, input, select, textarea, a, #diag');
+    }
+    function touchDist (e) {
+      var a = e.touches[0], b = e.touches[1];
+      var dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    this.setZoom = function (k) {
+      /* In AR the globe's scale is owned by arScale, not by the orbit zoom. */
+      if (self.data.arMode) { if (window.__setArScale) { window.__setArScale(k); } return; }
+      el.object3D.scale.setScalar(Math.max(0.4, Math.min(2.4, k)));
+    };
+
+    /* True when the pointer is over the globe: only then does a drag spin it.
+       Anywhere else the same drag turns the camera (look-controls). */
+    this.hitGlobe = function (e) {
+      var sc = self.el.sceneEl; if (!sc || !sc.camera) { return false; }
+      var q = pt(e);
+      var v = new THREE.Vector2((q.x / window.innerWidth) * 2 - 1, -(q.y / window.innerHeight) * 2 + 1);
+      var rc = new THREE.Raycaster();
+      rc.setFromCamera(v, sc.camera);
+      return rc.intersectObject(self.el.object3D, true).length > 0;
+    };
+    this.lookOff = function () {
+      var c = document.getElementById('cam');
+      if (c) { c.setAttribute('look-controls', 'mouseEnabled', false); c.setAttribute('look-controls', 'touchEnabled', false); }
+    };
+    this.lookOn = function () {
+      var c = document.getElementById('cam');
+      if (c) { c.setAttribute('look-controls', 'mouseEnabled', true); c.setAttribute('look-controls', 'touchEnabled', true); }
+    };
+
+    this.down = function (e) {
+      if (!self.data.enabled || onOverlay(e)) { return; }
+      /* look-controls re-dispatches a coordinate-less mousedown; ignore it or it cancels the grab */
+      if (!e.touches && typeof e.clientX !== 'number') { return; }
+      if (self.data.arMode) { self.dragging = true; self.moved = 0; var qa = pt(e); self.px = qa.x; self.py = qa.y; if (e.touches && e.touches.length >= 2) { self.pinching = true; self.pinchStart = touchDist(e); self.startScale = el.object3D.scale.x; } return; }
+      if (e.touches && e.touches.length >= 2) {
+        if (!self.hitGlobe(e)) { return; }
+        self.pinching = true;
+        self.pinchStart = touchDist(e);
+        self.startScale = el.object3D.scale.x;
+        self.dragging = false;
+        self.lookOff();
+        return;
+      }
+      if (!self.hitGlobe(e)) { self.dragging = false; return; }   /* let the camera look */
+      self.lookOff();
+      self.dragging = true; self.moved = 0;
+      var q = pt(e); self.px = q.x; self.py = q.y;
+    };
+
+    this.move = function (e) {
+      if (!self.data.enabled) { return; }
+
+      if (self.pinching && e.touches && e.touches.length >= 2) {
+        var d = touchDist(e);
+        if (self.pinchStart > 0) {
+          /* setZoom routes to arScale when arMode is on, el scale otherwise. */
+          self.setZoom(self.startScale * (d / self.pinchStart));
+        }
+        if (e.cancelable) { e.preventDefault(); }
+        return;
+      }
+
+      if (!self.dragging) { return; }
+      var q = pt(e), dx = q.x - self.px, dy = q.y - self.py;
+      self.px = q.x; self.py = q.y;
+      self.moved += Math.abs(dx) + Math.abs(dy);
+      self.rotY += dx * 0.006;
+      self.rotX = Math.max(-1.25, Math.min(1.25, self.rotX + dy * 0.006));
+      if (e.touches && e.cancelable) { e.preventDefault(); }
+    };
+
+    this.up = function (e) {
+      if (self.moved > 6) { self.lastDragEnd = performance.now(); }
+      self.dragging = false;
+      if (!e || !e.touches || e.touches.length < 2) { self.pinching = false; }
+      if (self.data.enabled && !self.data.arMode) { self.lookOn(); }
+    };
+    this.wheel = function (e) {
+      if (!self.data.enabled || self.data.arMode || onOverlay(e)) { return; }
+      if (!self.hitGlobe(e)) { return; }   /* wheel zooms only over the globe */
+      e.preventDefault();
+      var k = el.object3D.scale.x * (e.deltaY > 0 ? 0.88 : 1.14);
+      el.object3D.scale.setScalar(Math.max(0.4, Math.min(2.4, k)));
+    };
+
+    window.addEventListener('mousedown', this.down, true);
+    window.addEventListener('mousemove', this.move);
+    window.addEventListener('mouseup', this.up);
+    window.addEventListener('touchstart', this.down, { passive: true, capture: true });
+    window.addEventListener('touchmove', this.move, { passive: false });
+    window.addEventListener('touchend', this.up);
+    window.addEventListener('wheel', this.wheel, { passive: false });
+  },
+  tick: function (t, dt) {
+    if (!this.data.enabled && !this.data.spin) { return; }
+    if (this.data.spin && dt) { this.rotY += dt * 0.00012; }
+    this.el.object3D.rotation.set(this.rotX, this.rotY, 0);
+  },
+  wasDragging: function () { return performance.now() - this.lastDragEnd < 250; },
+  reset: function () { this.rotX = 0; this.rotY = 0; }
+});
+
+}
+</script>
+<link rel="prefetch" href="loadbalancer.html">
+</head>
+
+<body>
+<div id="doorfade"></div>
+<div id="veil">loading chapter&hellip;</div>
+<style>
+#doorfade{position:fixed;inset:0;background:#10151c;opacity:0;transition:opacity .16s ease;
+  pointer-events:none;z-index:98}
+#doorfade.on{opacity:1;pointer-events:all}
+#veil{position:fixed;inset:0;background:#10151c;z-index:99;display:flex;align-items:center;
+  justify-content:center;color:#e2e8f0;font:600 13px/1 system-ui,sans-serif;letter-spacing:.08em}
+#veil.gone{display:none}
+</style>
+<script>
+window.doorGo = function (href) {
+  if (window.__dooring) { return; }
+  window.__dooring = true;
+  var f = document.getElementById('doorfade');
+  if (f) { f.classList.add('on'); }
+  var l = document.createElement('link'); l.rel = 'prefetch'; l.href = href;
+  document.head.appendChild(l);
+  var sc = document.querySelector('a-scene');
+  if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
+  setTimeout(function () { location.href = href; }, 170);
+};
+(function () {
+  var v = document.getElementById('veil');
+  if (!v) { return; }
+  var kill = function () { v.classList.add('gone'); };
+  var hook = function () {
+    var sc = document.querySelector('a-scene');
+    if (sc) { sc.addEventListener('loaded', function () { setTimeout(kill, 250); }); }
+  };
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', hook); }
+  else { hook(); }
+  setTimeout(kill, 9000);
+})();
+</script>
+
+
+<div id="tourbar">
+  <div class="tstep" id="tStep">STEP 1 / 7</div>
+  <h3 id="tTitle"></h3>
+  <p id="tText"></p>
+  <div class="trow"><button id="tNext">Next</button></div>
+</div>
+<div id="tabbar">
+  <button class="tab" data-tab="cache" id="tab-cache" type="button">CACHE TOOLS</button>
+  <button class="tab" data-tab="view" id="tab-view" type="button">GLOBE VIEW</button>
+  <button class="tab" data-tab="learn" id="tab-learn" type="button">TUTORIAL &amp; DEBUG</button>
+  <button id="btnHub" class="tab" type="button">CHAPTERS</button>
+</div>
+<div id="stick" aria-hidden="true"><div id="stick-knob"></div></div>
+<div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
+<div id="overlay" >
+  <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 12</b></div>
+  <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
+  <div class="row tabpanel" data-tab="cache" id="panCache">
+    <button id="btnClear">Clear all caches</button>
+  <div id="ttlRow">
+    Cache TTL <input type="range" id="ttl" min="0" max="60" step="5" value="0">
+    <span id="ttlVal">never expires</span>
+  </div>
+  </div>
+  <div class="row tabpanel" data-tab="view" id="panView">
+    <button id="btnLabels">Labels: on</button>
+    <button id="btnSpin" class="deskOnly">Spin: off</button>
+    <button id="btnHud">Readouts: on</button>
+    <button id="btnZoomOut" class="deskOnly">Zoom &minus;</button>
+    <button id="btnZoomIn" class="deskOnly">Zoom +</button>
+    <button id="btnRecentre" class="deskOnly">Recentre</button>
+  </div>
+  <div class="row tabpanel" data-tab="learn" id="panLearn">
+    <button id="btnTour">Tutorial: step-by-step</button>
+    <button id="btnDiag">Debug</button>
+  </div>
+  <div id="diag" style="display:none; margin-top:7px; font-size:11px; color:#94a3b8;
+       white-space:pre-line; max-height:32vh; overflow-y:auto;"></div>
+  <div class="row" id="arRow" style="display: none; margin-top: 6px;">
+    <button id="btnSmaller">Size &minus;</button>
+    <button id="btnBigger">Size +</button>
+    <button id="btnFront">Put it in front of me</button>
+    <button id="btnReplace">Re-place</button>
+  </div>
+  <div id="status">loading</div>
+</div>
+
+<a-scene
+  background="color: #10151c"
+  fog="type: linear; color: #10151c; near: 14; far: 40"
+  renderer="antialias: true; colorManagement: true"
+  xr-mode-ui="XRMode: xr"
+  quest-ar="hide: #room; env: false"
+  webxr="requiredFeatures: local-floor;
+         optionalFeatures: hit-test, anchors, dom-overlay;
+         overlayElement: #overlay"
+  ar-hit-test="type: map; mapSize: 0.5 0.5; enabled: false">
+
+  <a-entity id="ground" geometry="primitive: plane; width: 40; height: 40"
+            material="color: #4a5058; shader: flat" rotation="-90 0 0" position="0 0 0"></a-entity>
+
+  <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.8"></a-entity>
+  <a-entity light="type: directional; color: #fff4e0; intensity: 0.55" position="-2 4 3"></a-entity>
+
+  <a-entity id="globeRoot" position="0 1.5 -3.4" scale="0.8 0.8 0.8"></a-entity>
+
+  <canvas id="tex-takeaways" width="1024" height="512" style="display:none"></canvas>
+    <a-entity id="takeaways" position="-6.4 2.0 -6.4" rotation="0 45 0">
+      <a-plane geometry="width: 4.4; height: 2.2" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
+    </a-entity>
+    <a-entity id="room">
+    <a-cylinder radius="9.5" height="4.6" open-ended="true" position="0 2.3 0"
+                theta-start="10" theta-length="340"
+                material="color: #6a727c; shader: flat; side: double"></a-cylinder>
+    <a-circle radius="9.5" rotation="90 0 0" position="0 4.7 0"
+              material="color: #3a4048; shader: flat; side: double"></a-circle>
+    <a-torus radius="5.5" radius-tubular="0.05" rotation="90 0 0" position="0 4.5 0"
+             material="color: #fff4e0; shader: flat; opacity: .9; transparent: true"></a-torus>
+    <a-torus radius="2.6" radius-tubular="0.04" rotation="90 0 0" position="0 4.4 0"
+             material="color: #fff4e0; shader: flat; opacity: .8; transparent: true"></a-torus>
+  </a-entity>
+
+  <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html" position="0 0 9.2">
+    <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+           material="color: #d9a514; shader: flat"></a-box>
+    <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
+           material="color: #d9a514; shader: flat"></a-box>
+    <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
+           material="color: #d9a514; shader: flat"></a-box>
+    <a-plane position="0 1.3 -0.05" width="2.55" height="2.6"
+             material="color: #22d3ee; shader: flat; transparent: true; opacity: .3; side: double"></a-plane>
+    <a-text value="CHAPTER 2" position="0 3.35 -0.1" rotation="0 180 0" align="center"
+            width="4.2" color="#fbbf24" material="shader: flat"></a-text>
+    <a-text value="LOAD BALANCING - WALK IN TO GO BACK" position="0 3.02 -0.1"
+            rotation="0 180 0" align="center" width="3.4" wrap-count="36"
+            color="#e2e8f0" material="shader: flat"></a-text>
+  </a-entity>
+
+  <a-entity id="rig" position="0 0 0" rig-walk="rbound: 8.8" thumbstick-locomotion>
+    <a-entity id="cam" camera position="0 1.6 0"
+              look-controls="mouseEnabled: true; touchEnabled: true; magicWindowTrackingEnabled: true; reverseTouchDrag: true"
+              wasd-controls="enabled: false">
+      <a-entity id="hud"></a-entity>
+      <a-entity id="mouseCursor" cursor="rayOrigin: mouse; fuse: false"
+                raycaster="objects: .clickable; far: 30"></a-entity>
+      <a-entity id="arReticle" visible="false" position="0 0 -1"
+                geometry="primitive: ring; radiusInner: 0.006; radiusOuter: 0.011"
+                material="color: #22d3ee; shader: flat; opacity: 0.9"></a-entity>
+    </a-entity>
+    <a-entity id="handR" laser-controls="hand: right"
+              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+    <a-entity id="handL" laser-controls="hand: left"
+              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+  </a-entity>
+  <a-entity id="vrmenu" visible="false">
+    <a-plane geometry="width: 2.6; height: 1.5" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
+    <a-text value="CDN CONTROLS" position="0 0.62 0.01" align="center" color="#22d3ee" width="3.2"
+            material="shader: flat"></a-text>
+    <a-entity id="vm-clear" class="clickable" position="-0.72 0.42 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="clear caches" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-ttld" class="clickable" position="0.42 0.42 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="ttl -5 s" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-ttlu" class="clickable" position="-0.72 0.14 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="ttl +5 s" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-labels" class="clickable" position="0.42 0.14 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="labels" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-spin" class="clickable" position="-0.72 -0.14 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="spin" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-read" class="clickable" position="0.42 -0.14 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="readouts" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-tour" class="clickable" position="-0.72 -0.42 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="tutorial" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-exit" class="clickable" position="0.42 -0.42 0.01">
+      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
+      <a-text value="leave VR" align="center" color="#f87171" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+  </a-entity>
+</a-scene>
+
+<script>
+(function () {
+'use strict';
+
+var st = document.getElementById('status');
+var bootLog = [];
+
+['warn', 'error'].forEach(function (k) {
+  var orig0 = console[k].bind(console);
+  console[k] = function () {
+    bootLog.push(k.toUpperCase() + ': ' + Array.prototype.join.call(arguments, ' '));
+    if (bootLog.length > 12) { bootLog.shift(); }
+    orig0.apply(null, arguments);
+  };
+});
+window.addEventListener('error', function (e) { bootLog.push('JS ERROR: ' + e.message); });
+
+/* A-Frame needs a WebGL context. If the browser refuses one, the scene never
+   emits 'loaded' and the page sits on "loading" with no error anywhere. */
+function webglReport () {
+  try {
+    var c = document.createElement('canvas');
+    var gl = c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (!gl) { return 'WebGL: NOT AVAILABLE'; }
+    var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    return 'WebGL: ok' + (dbg ? ' (' + gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) + ')' : '');
+  } catch (err) { return 'WebGL: threw ' + err.message; }
+}
+
+setTimeout(function () {
+  var sceneEl = document.querySelector('a-scene');
+  if (sceneEl && sceneEl.hasLoaded && window.__cdnStarted) { return; }
+  var d = document.getElementById('diag');
+  d.style.display = 'block';
+  d.textContent =
+    'STARTUP DID NOT COMPLETE\n' +
+    'build 12\n' +
+    'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
+    'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
+    'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
+    'canvas: ' + (sceneEl && sceneEl.canvas ? sceneEl.canvas.clientWidth + 'x' + sceneEl.canvas.clientHeight : 'none') + '\n' +
+    webglReport() + '\n' +
+    'UA: ' + navigator.userAgent.slice(0, 110) + '\n' +
+    'log:\n' + (bootLog.join('\n') || 'nothing logged');
+  st.className = 'err';
+  st.textContent = 'Startup did not complete. The Debug panel below says why.';
+}, 6000);
+
+if (typeof AFRAME === 'undefined' || typeof THREE === 'undefined') {
+  st.className = 'err';
+  st.textContent = 'A-Frame did not load, so nothing on this page can run. ' +
+    'Either the browser blocked the script or there is no internet. ' +
+    'Open this page in Google Chrome.';
+  return;
+}
+
+if (!navigator.xr) {
+  setTimeout(function () {
+    if (st.className !== 'err') {
+      st.className = 'warn';
+      st.textContent = 'This browser has no WebXR, so there will be no VR button here. ' +
+        'The globe still works; use a headset browser for VR.';
+    }
+  }, 2500);
+}
+
+var PAL = {
+  bg: '#0b1020', floor: '#131a2e', accent: '#22d3ee', ok: '#34d399',
+  warn: '#fbbf24', danger: '#f87171', surface: '#334155', text: '#e2e8f0',
+  dim: '#94a3b8', edgeCold: '#3d6b5d'
+};
+
+var R = 1;
+
+var ORIGIN = { name: 'N. Virginia', lat: 39.04, lon: -77.49 };
+
+var EDGES = [
+  { name: 'London',       lat:  51.51, lon:   -0.13 },
+  { name: 'Frankfurt',    lat:  50.11, lon:    8.68 },
+  { name: 'Mumbai',       lat:  19.08, lon:   72.88 },
+  { name: 'Singapore',    lat:   1.35, lon:  103.82 },
+  { name: 'Tokyo',        lat:  35.68, lon:  139.69 },
+  { name: 'Sydney',       lat: -33.87, lon:  151.21 },
+  { name: 'Sao Paulo',    lat: -23.55, lon:  -46.63 },
+  { name: 'Los Angeles',  lat:  34.05, lon: -118.24 },
+  { name: 'Johannesburg', lat: -26.20, lon:   28.05 }
+];
+
+var USERS = [
+  { name: 'Chennai',   lat:  13.08, lon:   80.27, color: '#fbbf24' },
+  { name: 'Berlin',    lat:  52.52, lon:   13.40, color: '#a78bfa' },
+  { name: 'Auckland',  lat: -36.85, lon:  174.76, color: '#f472b6' },
+  { name: 'Lagos',     lat:   6.52, lon:    3.38, color: '#fb923c' },
+  { name: 'Vancouver', lat:  49.28, lon: -123.12, color: '#38bdf8' }
+];
+
+var KM_PER_MS = 200, ROUTE_FUDGE = 1.6, EDGE_PROC = 5, ORIGIN_PROC = 40;
+
+function latLonToVec3 (lat, lon, r) {
+  var phi   = (90 - lat) * Math.PI / 180;
+  var theta = (lon + 180) * Math.PI / 180;
+  return {
+    x: -r * Math.sin(phi) * Math.cos(theta),
+    y:  r * Math.cos(phi),
+    z:  r * Math.sin(phi) * Math.sin(theta)
+  };
+}
+
+function haversineKm (lat1, lon1, lat2, lon2) {
+  var Re = 6371, rad = Math.PI / 180;
+  var dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * Re * Math.asin(Math.sqrt(a));
+}
+
+function rttMs (km) { return (km / KM_PER_MS) * 2 * ROUTE_FUDGE; }
+
+function v3 (o) { return new THREE.Vector3(o.x, o.y, o.z); }
+
+var scene     = document.querySelector('a-scene');
+var globeRoot = document.getElementById('globeRoot');
+var reticle   = document.getElementById('arReticle');
+var ground    = document.getElementById('ground');
+var statusEl  = document.getElementById('status');
+var hintEl    = document.getElementById('hint');
+var arRow     = document.getElementById('arRow');
+
+function setStatus (msg, kind) { statusEl.textContent = msg; statusEl.className = kind || ''; }
+
+USERS.forEach(function (u) {
+  var best = null;
+  EDGES.forEach(function (e) {
+    var d = haversineKm(u.lat, u.lon, e.lat, e.lon);
+    if (!best || d < best.d) { best = { e: e, d: d }; }
+  });
+  u.edge = best.e;
+  u.distKm = best.d;
+  u.edgeOriginKm = haversineKm(best.e.lat, best.e.lon, ORIGIN.lat, ORIGIN.lon);
+  u.hitMs  = rttMs(u.distKm) + EDGE_PROC;
+  u.missMs = rttMs(u.distKm) + rttMs(u.edgeOriginKm) + ORIGIN_PROC + EDGE_PROC;
+});
+
+/* ---- cache with TTL ------------------------------------------------------ */
+var cache = {};          /* edge name -> expiry timestamp, or Infinity */
+var ttlSeconds = 0;      /* 0 means entries never expire */
+var stats = { total: 0, hits: 0 };
+
+function isCached (name) { var t = cache[name]; return !!t && t > Date.now(); }
+function setCached (name) {
+  cache[name] = ttlSeconds > 0 ? Date.now() + ttlSeconds * 1000 : Infinity;
+}
+
+var labelEls = [], clickableObjects = [], markerByName = {};
+var coastRings = 0;
+var originEl = null;
+
+function makeEntity (parent, tag, attrs) {
+  var el = document.createElement(tag);
+  Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+  parent.appendChild(el);
+  return el;
+}
+
+/* ---- globe --------------------------------------------------------------- */
+function buildGlobe () {
+  makeEntity(globeRoot, 'a-sphere', {
+    radius: 0.975, 'segments-width': 44, 'segments-height': 28,
+    material: 'color: #1d6a72; shader: flat'
+  });
+
+  /* Rim glow: a slightly larger sphere rendered from the inside. */
+  makeEntity(globeRoot, 'a-sphere', {
+    radius: 1.07, 'segments-width': 32, 'segments-height': 20,
+    material: 'color: ' + PAL.accent + '; shader: flat; opacity: 0.075; ' +
+              'transparent: true; side: back; depthWrite: false'
+  });
+
+  [-60, -30, 0, 30, 60].forEach(function (lat) {
+    var rad = R * Math.cos(lat * Math.PI / 180);
+    makeEntity(globeRoot, 'a-torus', {
+      radius: rad, 'radius-tubular': lat === 0 ? 0.0045 : 0.0022,
+      'segments-radial': 4, 'segments-tubular': 64,
+      rotation: '-90 0 0', position: '0 ' + (R * Math.sin(lat * Math.PI / 180)).toFixed(4) + ' 0',
+      material: 'color: ' + PAL.accent + '; shader: flat; opacity: ' +
+                (lat === 0 ? 0.38 : 0.15) + '; transparent: true'
+    });
+  });
+
+  for (var k = 0; k < 6; k++) {
+    makeEntity(globeRoot, 'a-torus', {
+      radius: R, 'radius-tubular': 0.0022,
+      'segments-radial': 4, 'segments-tubular': 64,
+      rotation: '0 ' + (k * 30) + ' 0',
+      material: 'color: ' + PAL.accent + '; shader: flat; opacity: 0.13; transparent: true'
+    });
+  }
+}
+
+/* Natural Earth 110m land outlines, drawn as generated line geometry so the
+   no-model-files, no-textures rule still holds. Falls back to a bare grid. */
+var COAST_URLS = [
+  'ne_110m_land.json',
+  'https://cdn.jsdelivr.net/gh/martynafford/natural-earth-geojson@master/110m/physical/ne_110m_land.json',
+  'https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/110m/physical/ne_110m_land.json'
+];
+
+function loadCoastlines () {
+  /* Bundled copy first: fetch() cannot read local files under file://. */
+  if (window.NE_LAND) { drawCoastlines(window.NE_LAND); return; }
+  var i = 0;
+  (function attempt () {
+    if (i >= COAST_URLS.length) {
+      setStatus('map data unavailable, showing the grid only', 'warn');
+      return;
+    }
+    fetch(COAST_URLS[i++])
+      .then(function (r) { if (!r.ok) { throw new Error(r.status); } return r.json(); })
+      .then(drawCoastlines)
+      .catch(function () { attempt(); });
+  })();
+}
+
+
+/* Equirectangular land/sea map painted from the same coastline GeoJSON, so the
+   globe reads as a real planet instead of a flat teal ball. */
+function paintGlobeMap (geo) {
+  var W = 2048, H = 1024, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  var g = c.getContext('2d');
+  var grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#0d4552'); grad.addColorStop(0.28, '#11606c');
+  grad.addColorStop(0.5, '#17787f'); grad.addColorStop(0.72, '#11606c');
+  grad.addColorStop(1, '#0d4552');
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  for (var i = 0; i < 220; i++) {          /* soft ocean swell patches */
+    var x = (i * 397) % W, y = (i * 613) % H, r = 40 + (i * 53) % 90;
+    var rg = g.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, i % 2 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.05)');
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg; g.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  function px (lon, lat) { return [(lon + 180) / 360 * W, (90 - lat) / 180 * H]; }
+  (geo.features || []).forEach(function (f) {
+    var gm = f.geometry; if (!gm) { return; }
+    var polys = gm.type === 'Polygon' ? [gm.coordinates]
+              : gm.type === 'MultiPolygon' ? gm.coordinates : [];
+    polys.forEach(function (poly) {
+      var latSum = 0, n = 0;
+      var path = new Path2D();
+      poly.forEach(function (ring) {
+        var start = true;
+        ring.forEach(function (pt) {
+          var p = px(pt[0], pt[1]); latSum += pt[1]; n++;
+          if (start) { path.moveTo(p[0], p[1]); start = false; } else { path.lineTo(p[0], p[1]); }
+        });
+        path.closePath();
+      });
+      var lat = latSum / Math.max(1, n), a = Math.abs(lat);
+      g.fillStyle = a > 66 ? '#6d8763' : a > 45 ? '#7d9b62' : a > 28 ? '#9aa065'
+                  : a > 15 ? '#c2a36b' : '#5f8f4a';
+      g.fill(path, 'evenodd');
+      g.strokeStyle = 'rgba(30,40,30,.55)'; g.lineWidth = 1.4; g.stroke(path);
+    });
+  });
+  g.fillStyle = '#e6ebea';                       /* polar caps */
+  g.fillRect(0, 0, W, H * 0.055); g.fillRect(0, H * 0.945, W, H * 0.055);
+  g.strokeStyle = 'rgba(255,255,255,.05)'; g.lineWidth = 1;   /* graticule */
+  for (var lo = 0; lo <= 12; lo++) { g.beginPath(); g.moveTo(lo * W / 12, 0); g.lineTo(lo * W / 12, H); g.stroke(); }
+  for (var la = 1; la < 6; la++) { g.beginPath(); g.moveTo(0, la * H / 6); g.lineTo(W, la * H / 6); g.stroke(); }
+  var ocean = globeRoot.querySelector('a-sphere');
+  if (ocean) {
+    var tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = 'srgb';
+    var m = ocean.object3D && ocean.object3D.material ? ocean.object3D.material
+            : (ocean.object3D && ocean.object3D.children[0] && ocean.object3D.children[0].material) || null;
+    if (m) { m.map = tex; m.color.set('#ffffff'); m.needsUpdate = true; }
+  }
+}
+
+function drawCoastlines (geo) {
+  var mat = new THREE.LineBasicMaterial({ color: 0x8fce8f, transparent: true, opacity: 1.0 });
+  var group = new THREE.Group();
+  var rings = 0;
+
+  (geo.features || []).forEach(function (f) {
+    var g = f.geometry;
+    if (!g) { return; }
+    var polys = g.type === 'Polygon' ? [g.coordinates]
+              : g.type === 'MultiPolygon' ? g.coordinates : [];
+    polys.forEach(function (poly) {
+      poly.forEach(function (ring) {
+        var pts = [];
+        for (var k = 0; k < ring.length; k++) {
+          var v = latLonToVec3(ring[k][1], ring[k][0], R * 1.004);
+          pts.push(new THREE.Vector3(v.x, v.y, v.z));
+        }
+        if (pts.length < 2) { return; }
+        group.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), mat));
+        rings++;
+      });
+    });
+  });
+
+  globeRoot.object3D.add(group);
+  coastRings = rings;
+  paintGlobeMap(geo);
+  setStatus('map drawn: ' + rings + ' coastline outlines. Ready.');
+}
+
+/* ---- markers ------------------------------------------------------------- */
+function addLabel (pos, text, color) {
+  var el = makeEntity(globeRoot, 'a-text', {
+    value: text, color: color, align: 'center',
+    width: 0.62, 'wrap-count': 16,
+    position: pos.x.toFixed(4) + ' ' + pos.y.toFixed(4) + ' ' + pos.z.toFixed(4),
+    billboard: ''
+  });
+  labelEls.push(el);
+  return el;
+}
+
+function faceOut (el, pos) {
+  function go () { if (el.object3D) { el.object3D.lookAt(0, 0, 0); } }
+  if (el.object3D) { go(); } else { el.addEventListener('loaded', go); }
+}
+
+function buildMarkers () {
+  var op = latLonToVec3(ORIGIN.lat, ORIGIN.lon, R * 1.02);
+  originEl = makeEntity(globeRoot, 'a-box', {
+    width: 0.08, height: 0.08, depth: 0.08,
+    position: op.x.toFixed(4) + ' ' + op.y.toFixed(4) + ' ' + op.z.toFixed(4),
+    material: 'color: ' + PAL.danger + '; shader: flat'
+  });
+  faceOut(originEl, op);
+  markerByName[ORIGIN.name] = originEl;
+  addLabel(latLonToVec3(ORIGIN.lat, ORIGIN.lon, R * 1.19), 'ORIGIN\nN. Virginia', PAL.danger);
+
+  EDGES.forEach(function (e) {
+    var p = latLonToVec3(e.lat, e.lon, R * 1.012);
+    var ps = p.x.toFixed(4) + ' ' + p.y.toFixed(4) + ' ' + p.z.toFixed(4);
+
+    e.el = makeEntity(globeRoot, 'a-sphere', {
+      radius: 0.028, position: ps,
+      material: 'color: ' + PAL.edgeCold + '; shader: flat'
+    });
+
+    /* Ring shows at a glance which edges are holding content. */
+    e.ring = makeEntity(globeRoot, 'a-torus', {
+      radius: 0.052, 'radius-tubular': 0.009,
+      'segments-radial': 4, 'segments-tubular': 20,
+      position: ps, visible: false,
+      material: 'color: ' + PAL.ok + '; shader: flat'
+    });
+    faceOut(e.ring, p);
+
+    markerByName[e.name] = e.el;
+    e.label = addLabel(latLonToVec3(e.lat, e.lon, R * 1.11), e.name, PAL.edgeCold);
+  });
+
+  USERS.forEach(function (u) {
+    var p = latLonToVec3(u.lat, u.lon, R * 1.02);
+    var ps = p.x.toFixed(4) + ' ' + p.y.toFixed(4) + ' ' + p.z.toFixed(4);
+
+    u.el = makeEntity(globeRoot, 'a-sphere', {
+      radius: 0.038, position: ps,
+      material: 'color: ' + u.color + '; shader: flat'
+    });
+    markerByName[u.name] = u.el;
+
+    var hit = makeEntity(globeRoot, 'a-sphere', {
+      radius: 0.09, class: 'clickable', position: ps,
+      material: 'opacity: 0; transparent: true; shader: flat'
+    });
+    hit.dataset.city = u.name;
+    hit.addEventListener('click', function () {
+      var orb = globeRoot.components['globe-orbit'];
+      if (orb && orb.wasDragging()) { return; }
+      request(u);
+    });
+    hit.addEventListener('mouseenter', function () { setHover(u, true); });
+    hit.addEventListener('mouseleave', function () { setHover(u, false); });
+    clickableObjects.push(hit.object3D);
+
+    u.label = addLabel(latLonToVec3(u.lat, u.lon, R * 1.13), u.name, u.color);
+  });
+}
+
+var hovered = null;
+function setHover (u, on) {
+  if (!u || !u.el || !u.el.object3D) { return; }
+  if (on && hovered && hovered !== u) { setHover(hovered, false); }
+  u.el.object3D.scale.setScalar(on ? 1.7 : 1);
+  if (u.label) { u.label.setAttribute('color', on ? '#ffffff' : u.color); }
+  hovered = on ? u : (hovered === u ? null : hovered);
+  if (on) { setStatus(u.name + ' -> nearest edge ' + u.edge.name + ', ' + Math.round(u.distKm) + ' km'); }
+}
+
+function refreshCacheVisuals () {
+  EDGES.forEach(function (e) {
+    var on = isCached(e.name);
+    if (e.ring) { e.ring.setAttribute('visible', on); }
+    if (e.el) { e.el.setAttribute('material', 'color', on ? PAL.ok : PAL.edgeCold); }
+    if (e.label) { e.label.setAttribute('color', on ? PAL.ok : PAL.edgeCold); }
+  });
+}
+
+/* ---- HUD ----------------------------------------------------------------- */
+var caption, panelLines = [], barFill, hudEl;
+
+function buildHud () {
+  hudEl = document.getElementById('hud');
+
+  caption = makeEntity(hudEl, 'a-text', {
+    value: 'Click a user city', color: PAL.text, align: 'center',
+    width: 0.62, 'wrap-count': 36,
+    'hud-item': 'align: top; offset: 0.055; dist: 1; fitWidth: 0.42'
+  });
+
+  var panel = makeEntity(hudEl, 'a-entity', {
+    'hud-item': 'align: bottom; offset: 0.135; dist: 1; fitWidth: 0.46'
+  });
+  if (window.matchMedia && matchMedia('(pointer: coarse)').matches) {
+    panel.object3D.visible = false;
+    var rd = document.getElementById('routedom');
+    if (rd) { rd.dataset.on = '1'; rd.style.display = 'block'; }
+  }
+
+  makeEntity(panel, 'a-plane', {
+    width: 0.80, height: 0.245, position: '0 -0.012 -0.006',
+    material: 'color: #060a16; opacity: 0.72; transparent: true; shader: flat'
+  });
+
+  var rows = [
+    { y:  0.083, w: 0.28, c: PAL.dim,  v: 'ROUTE',  wc: 14 },
+    { y:  0.033, w: 0.70, c: PAL.text, v: '-',      wc: 34 },
+    { y: -0.020, w: 0.62, c: PAL.text, v: '-',      wc: 30 },
+    { y: -0.088, w: 0.60, c: PAL.dim,  v: 'Cache hit ratio: 0 / 0', wc: 40 }
+  ];
+  rows.forEach(function (r) {
+    panelLines.push(makeEntity(panel, 'a-text', {
+      value: r.v, color: r.c, align: 'center', width: r.w, 'wrap-count': r.wc,
+      position: '0 ' + r.y + ' 0'
+    }));
+  });
+
+  /* Latency bar: 267 ms versus 22 ms should be felt, not read. */
+  makeEntity(panel, 'a-plane', {
+    width: 0.6, height: 0.014, position: '0 -0.052 0',
+    material: 'color: ' + PAL.surface + '; opacity: 0.55; transparent: true; shader: flat'
+  });
+  barFill = makeEntity(panel, 'a-plane', {
+    width: 1, height: 0.014, position: '-0.3 -0.052 0.001',
+    material: 'color: ' + PAL.ok + '; shader: flat'
+  });
+  barFill.object3D.scale.x = 0.001;
+
+  makeEntity(panel, 'a-text', {
+    value: 'Latencies are simulated from great-circle distance, not measured.',
+    color: PAL.dim, align: 'center', width: 0.52, 'wrap-count': 58,
+    position: '0 -0.125 0'
+  });
+
+  alwaysOnTop(hudEl);
+}
+
+function setBar (ms, isHit) {
+  var frac = Math.max(0.002, Math.min(1, ms / 400));
+  var w = frac * 0.6;
+  barFill.object3D.scale.x = w;
+  barFill.object3D.position.x = -0.3 + w / 2;
+  barFill.setAttribute('material', 'color', isHit ? PAL.ok : PAL.warn);
+}
+
+function alwaysOnTop (root) {
+  function apply () {
+    root.object3D.traverse(function (o) {
+      o.renderOrder = 9999;
+      if (o.material) { o.material.depthTest = false; o.material.depthWrite = false; }
+    });
+  }
+  apply();
+  [400, 1200, 3000].forEach(function (ms) { setTimeout(apply, ms); });
+}
+
+/* ---- flight visuals ------------------------------------------------------ */
+var spherePool = [], sphereGeo = null, sphereMat = {};
+
+function getSphere (color) {
+  if (!sphereGeo) { sphereGeo = new THREE.SphereGeometry(0.032, 12, 10); }
+  if (!sphereMat[color]) { sphereMat[color] = new THREE.MeshBasicMaterial({ color: color }); }
+  var m = spherePool.pop();
+  if (!m) { m = new THREE.Mesh(sphereGeo, sphereMat[color]); globeRoot.object3D.add(m); }
+  m.material = sphereMat[color];
+  m.visible = true;
+  return m;
+}
+function releaseSphere (m) { m.visible = false; spherePool.push(m); }
+
+function arcCurve (a, b) {
+  var mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+  var chord = a.distanceTo(b);
+  var lift = 0.09 + chord * 0.30;
+  if (mid.lengthSq() < 1e-8) { mid.set(0, 1, 0); }
+  mid.normalize().multiplyScalar(R + lift);
+  return new THREE.QuadraticBezierCurve3(a.clone(), mid, b.clone());
+}
+
+var SEG = 64;
+
+function flight (a, b, color, ms) {
+  return new Promise(function (resolve) {
+    var curve = arcCurve(a, b);
+    var geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(SEG));
+    var mat = new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: 0.95 });
+    var line = new THREE.Line(geo, mat);
+    geo.setDrawRange(0, 2);
+    globeRoot.object3D.add(line);
+
+    var s = getSphere(color);
+    var t0 = performance.now();
+
+    function step () {
+      var t = Math.min(1, (performance.now() - t0) / ms);
+      s.position.copy(curve.getPointAt(t));
+      geo.setDrawRange(0, Math.max(2, Math.floor(t * SEG) + 1));
+      if (t < 1) { requestAnimationFrame(step); return; }
+      releaseSphere(s);
+      fadeOut(line, mat, geo);
+      resolve();
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+function fadeOut (line, mat, geo) {
+  var t0 = performance.now(), dur = 1100;
+  function step () {
+    var t = (performance.now() - t0) / dur;
+    if (t >= 1) { globeRoot.object3D.remove(line); geo.dispose(); mat.dispose(); return; }
+    mat.opacity = 0.95 * (1 - t);
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* Expanding ring where a packet lands. */
+var ringGeo = null;
+function pulse (pos, color) {
+  if (!ringGeo) { ringGeo = new THREE.RingGeometry(0.5, 0.62, 24); }
+  var mat = new THREE.MeshBasicMaterial({
+    color: color, transparent: true, opacity: 0.9,
+    side: THREE.DoubleSide, depthWrite: false
+  });
+  var m = new THREE.Mesh(ringGeo, mat);
+  m.position.copy(pos);
+  m.lookAt(0, 0, 0);
+  globeRoot.object3D.add(m);
+
+  var t0 = performance.now(), dur = 620;
+  (function step () {
+    var t = (performance.now() - t0) / dur;
+    if (t >= 1) { globeRoot.object3D.remove(m); mat.dispose(); return; }
+    m.scale.setScalar(0.04 + t * 0.22);
+    mat.opacity = 0.9 * (1 - t);
+    requestAnimationFrame(step);
+  })();
+}
+
+function flash (el, color, ms) {
+  if (!el) { return Promise.resolve(); }
+  var base = el.getAttribute('material').color;
+  el.setAttribute('material', 'color', color);
+  var o = el.object3D, s0 = o.scale.x;
+  o.scale.setScalar(s0 * 2.1);
+  return new Promise(function (resolve) {
+    var t0 = performance.now();
+    (function step () {
+      var t = Math.min(1, (performance.now() - t0) / ms);
+      o.scale.setScalar(s0 * (2.1 - 1.1 * t));
+      if (t < 1) { requestAnimationFrame(step); return; }
+      el.setAttribute('material', 'color', base);
+      o.scale.setScalar(s0);
+      resolve();
+    })();
+  });
+}
+
+function wait (ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function travelMs (km) { return 320 + km * 0.115; }
+function surfacePos (o) { return v3(latLonToVec3(o.lat, o.lon, R * 1.02)); }
+
+/* ---- requests ------------------------------------------------------------ */
+var MAX_CONCURRENT = 3;
+var inFlight = 0;
+
+function request (u) {
+  if (u.busy) { return; }
+  if (inFlight >= MAX_CONCURRENT) {
+    setStatus('three requests already in flight, let them land', 'warn');
+    return;
+  }
+  u.busy = true;
+  inFlight++;
+
+  var e = u.edge;
+  var isHit = isCached(e.name);
+  var latency = isHit ? u.hitMs : u.missMs;
+
+  stats.total++;
+  if (isHit) { stats.hits++; }
+
+  var pu = surfacePos(u), pe = surfacePos(e), po = surfacePos(ORIGIN);
+
+  caption.setAttribute('value', u.name + ' requests content from edge ' + e.name);
+  caption.setAttribute('color', u.color);
+
+  var seq = flight(pu, pe, u.color, travelMs(u.distKm));
+
+  if (isHit) {
+    seq = seq
+      .then(function () { pulse(pe, PAL.ok); return flash(e.el, '#ffffff', 240); })
+      .then(function () { return flight(pe, pu, PAL.ok, travelMs(u.distKm)); })
+      .then(function () { pulse(pu, PAL.ok); finish(u, e, true, latency); });
+  } else {
+    seq = seq
+      .then(function () { pulse(pe, PAL.warn); return flash(e.el, PAL.warn, 280); })
+      .then(function () {
+        caption.setAttribute('value', 'Edge ' + e.name + ' has no copy. Fetching from the origin.');
+        caption.setAttribute('color', PAL.warn);
+        return flight(pe, po, PAL.warn, travelMs(u.edgeOriginKm));
+      })
+      .then(function () { pulse(po, PAL.danger); return flash(originEl, '#ffffff', 280); })
+      .then(function () { return wait(160); })
+      .then(function () { return flight(po, pe, PAL.accent, travelMs(u.edgeOriginKm)); })
+      .then(function () {
+        setCached(e.name);
+        refreshCacheVisuals();
+        pulse(pe, PAL.ok);
+        return flash(e.el, PAL.ok, 280);
+      })
+      .then(function () { return flight(pe, pu, PAL.ok, travelMs(u.distKm)); })
+      .then(function () { pulse(pu, PAL.ok); finish(u, e, false, latency); });
+  }
+
+  seq['catch'](function (err) {
+    u.busy = false; inFlight = Math.max(0, inFlight - 1);
+    setStatus('animation error: ' + err.message, 'err');
+  });
+}
+
+function finish (u, e, isHit, latency) {
+  setCached(e.name);
+  refreshCacheVisuals();
+  u.busy = false;
+  inFlight = Math.max(0, inFlight - 1);
+
+  var ms = Math.round(latency);
+  var totalKm = isHit ? Math.round(u.distKm) : Math.round(u.distKm + u.edgeOriginKm);
+
+  caption.setAttribute('value', isHit
+    ? 'CACHE HIT - served from the edge'
+    : 'CACHE MISS - the edge had to fetch from the origin');
+  caption.setAttribute('color', isHit ? PAL.ok : PAL.warn);
+
+  panelLines[1].setAttribute('value', u.name + '  to  ' + e.name + (isHit ? '' : '  to  N. Virginia'));
+  panelLines[1].setAttribute('color', u.color);
+  panelLines[2].setAttribute('value', (isHit ? 'HIT' : 'MISS') + '   ' + ms + ' ms   ' + totalKm + ' km');
+  panelLines[2].setAttribute('color', isHit ? PAL.ok : PAL.warn);
+  panelLines[3].setAttribute('value', 'Cache hit ratio: ' + stats.hits + ' / ' + stats.total +
+    '  (' + Math.round(100 * stats.hits / stats.total) + '%)' +
+    (ttlSeconds > 0 ? '   TTL ' + ttlSeconds + 's' : ''));
+
+  setBar(ms, isHit);
+  var rd = document.getElementById('routedom');
+  if (rd) {
+    rd.innerHTML = u.name + ' &rarr; ' + e.name + (isHit ? '' : ' &rarr; N. Virginia') +
+      '<br><b style="color:' + (isHit ? '#34d399' : '#fbbf24') + '">' + (isHit ? 'HIT' : 'MISS') +
+      ' ' + ms + ' ms</b> &middot; ' + totalKm + ' km &middot; ratio ' + stats.hits + '/' + stats.total;
+  }
+  setStatus(u.name + ' -> ' + e.name + '  ' + (isHit ? 'HIT' : 'MISS') + '  ' + ms + ' ms');
+}
+
+/* ---- controls ------------------------------------------------------------ */
+document.getElementById('btnClear').addEventListener('click', function () {
+  cache = {};
+  stats = { total: 0, hits: 0 };
+  refreshCacheVisuals();
+  panelLines[1].setAttribute('value', '-');
+  panelLines[1].setAttribute('color', PAL.text);
+  panelLines[2].setAttribute('value', '-');
+  panelLines[2].setAttribute('color', PAL.text);
+  var rd2 = document.getElementById('routedom');
+  if (rd2) { rd2.textContent = 'tap a coloured city to fire a request'; }
+  panelLines[3].setAttribute('value', 'Cache hit ratio: 0 / 0');
+  setBar(0, true);
+  caption.setAttribute('value', 'All edge caches cleared');
+  caption.setAttribute('color', PAL.text);
+  setStatus('caches cleared, every edge is cold again');
+});
+
+var labelsOn = true;
+document.getElementById('btnLabels').addEventListener('click', function () {
+  labelsOn = !labelsOn;
+  labelEls.forEach(function (el) { el.setAttribute('visible', labelsOn); });
+  this.textContent = 'Labels: ' + (labelsOn ? 'on' : 'off');
+});
+
+var spinning = false;
+document.getElementById('btnSpin').addEventListener('click', function () {
+  spinning = !spinning;
+  globeRoot.setAttribute('globe-orbit', 'spin', spinning);
+  this.textContent = 'Spin: ' + (spinning ? 'on' : 'off');
+});
+
+var hudOn = true;
+function toggleHud () {
+  hudOn = !hudOn;
+  hudEl.setAttribute('visible', hudOn);
+  document.getElementById('btnHud').textContent = 'Readouts: ' + (hudOn ? 'on' : 'off');
+}
+document.getElementById('btnHud').addEventListener('click', toggleHud);
+window.addEventListener('keydown', function (e) { if (e.key === 'h' || e.key === 'H') { toggleHud(); } });
+
+var ttlInput = document.getElementById('ttl'), ttlVal = document.getElementById('ttlVal');
+ttlInput.addEventListener('input', function () {
+  ttlSeconds = parseInt(this.value, 10) || 0;
+  ttlVal.textContent = ttlSeconds > 0 ? ttlSeconds + ' s' : 'never expires';
+  if (ttlSeconds > 0) {
+    Object.keys(cache).forEach(function (k) {
+      if (cache[k] === Infinity) { cache[k] = Date.now() + ttlSeconds * 1000; }
+    });
+  }
+});
+
+/* Expiry is time-based, so the rings need their own heartbeat. */
+setInterval(function () {
+  if (ttlSeconds <= 0) { return; }
+  var before = EDGES.filter(function (e) { return isCached(e.name); }).length;
+  refreshCacheVisuals();
+  var after = EDGES.filter(function (e) { return isCached(e.name); }).length;
+  if (after < before) { setStatus('a cached edge expired, the next request there is a miss', 'warn'); }
+}, 500);
+
+/* ---- XR modes ------------------------------------------------------------ */
+var DESKTOP = { pos: '0 1.5 -3.4', scale: 0.8 };
+var savedFog = null, placed = false, arScale = 0.35, placedFloorY = 0;
+var xrSelectBound = null, xrSession = null, arHoverTimer = null;
+
+function setLabelScale (k) { labelEls.forEach(function (el) { el.object3D.scale.setScalar(k); }); }
+function globeLift () { return 1.9 * arScale; }
+
+function placeGlobeAt (x, y, z) {
+  placedFloorY = y;
+  globeRoot.object3D.position.set(x, y + globeLift(), z);
+  globeRoot.object3D.rotation.set(0, 0, 0);
+  if (globeRoot.components['globe-orbit']) { globeRoot.components['globe-orbit'].reset(); }
+  globeRoot.object3D.scale.setScalar(arScale);
+  globeRoot.setAttribute('visible', true);
+  placed = true;
+  scene.setAttribute('ar-hit-test', 'enabled', false);
+  reticle.setAttribute('visible', true);
+  hintEl.textContent = 'Drag to spin. Pinch to resize. Aim the centre dot at a city and tap.';
+  setStatus('placed. Globe radius about ' + (0.975 * arScale).toFixed(2) + ' m');
+  if (!XRQ.headsetAR(scene)) {   /* phone: tap + centre dot. Quest: controller laser */
+    bindXRSelect();
+    startArHover();
+  } else {
+    hintEl.textContent = 'Point a controller at a city and pull the trigger.';
+  }
+}
+
+function placeInFront () {
+  var cam = scene.camera;
+  if (!cam) { return; }
+  var o = new THREE.Vector3(), q = new THREE.Quaternion();
+  cam.getWorldPosition(o);
+  cam.getWorldQuaternion(q);
+  var f = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
+  f.y = 0;
+  if (f.lengthSq() < 1e-6) { f.set(0, 0, -1); }
+  f.normalize();
+  placeGlobeAt(o.x + f.x * 1.6, 0, o.z + f.z * 1.6);
+}
+
+function setArScale (k) {
+  arScale = Math.min(1.4, Math.max(0.12, k));
+  if (placed) {
+    globeRoot.object3D.scale.setScalar(arScale);
+    globeRoot.object3D.position.y = placedFloorY + globeLift();
+  }
+  setStatus('globe radius about ' + (0.975 * arScale).toFixed(2) + ' m');
+}
+window.__setArScale = setArScale;   /* pinch in AR resizes the placed globe */
+
+function byCity (name) {
+  return USERS.filter(function (x) { return x.name === name; })[0] || null;
+}
+
+/* Fraction of the globe's apparent radius used as the aim tolerance. The
+   0.09-unit hit spheres subtend about 1 degree at arm's length, which no one
+   can hold steady on a handheld phone, so a strict ray test made the cities
+   effectively unselectable in AR.
+
+   Two cities CAN both fall inside this tolerance (worst case Berlin/Lagos,
+   3.5 deg apart when the globe is seen edge-on), but nearest-to-crosshair
+   wins, so the closer one is always chosen. Verified over 3900 viewpoints:
+   aiming at a city selected that city 3900/3900 times, and still 3900/3900
+   with 1.5 deg of aim error. Scales with globe size and viewing distance. */
+var AIM_FRACTION = 0.34;
+
+function arRaycast () {
+  var cam = scene.camera;
+  if (!cam) { return null; }
+  var o = new THREE.Vector3(), q = new THREE.Quaternion();
+  cam.getWorldPosition(o);
+  cam.getWorldQuaternion(q);
+  var dir = new THREE.Vector3(0, 0, -1).applyQuaternion(q).normalize();
+
+  /* Exact ray first. On desktop and at very close range this is what hits. */
+  var hits = new THREE.Raycaster(o, dir, 0, 40).intersectObjects(clickableObjects, true);
+  if (hits.length) {
+    var obj = hits[0].object;
+    while (obj && !obj.el) { obj = obj.parent; }
+    var el = obj && obj.el;
+    while (el && !el.dataset.city) { el = el.parentEl; }
+    if (el) { return byCity(el.dataset.city); }
+  }
+  if (!placed) { return null; }
+
+  /* Tolerant fallback: nearest city to the centre of view, near side only. */
+  var centre = new THREE.Vector3();
+  globeRoot.object3D.getWorldPosition(centre);
+  var toCam = new THREE.Vector3().subVectors(o, centre);
+  var dist = toCam.length();
+  if (dist < 1e-4) { return null; }
+  var globeR = 0.975 * globeRoot.object3D.scale.x;
+  var tol = Math.atan2(globeR, dist) * AIM_FRACTION;
+
+  var best = null, bestAng = tol;
+  USERS.forEach(function (u) {
+    if (!u.el || !u.el.object3D) { return; }
+    var pw = new THREE.Vector3();
+    u.el.object3D.getWorldPosition(pw);
+    /* Reject cities on the far side, which the globe would visually occlude. */
+    if (new THREE.Vector3().subVectors(pw, centre).dot(toCam) <= 0) { return; }
+    var ang = new THREE.Vector3().subVectors(pw, o).angleTo(dir);
+    if (ang < bestAng) { bestAng = ang; best = u; }
+  });
+  return best;
+}
+
+/* Hover in AR has no pointer events, so poll the centre dot instead. */
+function startArHover () {
+  stopArHover();
+  arHoverTimer = setInterval(function () {
+    if (!placed) { return; }
+    var u = arRaycast();
+    if (u !== hovered) {
+      if (hovered) { setHover(hovered, false); }
+      if (u) { setHover(u, true); }
+    }
+  }, 140);
+}
+function stopArHover () { if (arHoverTimer) { clearInterval(arHoverTimer); arHoverTimer = null; } }
+
+function enterAR () {
+  ground.setAttribute('visible', false);
+  scene.setAttribute('background', 'transparent', true);
+  if (scene.hasAttribute('fog')) { savedFog = scene.getAttribute('fog'); scene.removeAttribute('fog'); }
+  /* Rotation stays live in AR. Only scale ownership moves to arScale. */
+  globeRoot.setAttribute('globe-orbit', 'enabled', true);
+  globeRoot.setAttribute('globe-orbit', 'arMode', true);
+  globeRoot.setAttribute('globe-orbit', 'spin', false);
+  globeRoot.components['globe-orbit'].reset();
+  document.getElementById('overlay').classList.add('ar');
+  scene.setAttribute('ar-hit-test', 'enabled', !XRQ.headsetAR(scene));   /* Quest: no floor scan */
+  globeRoot.object3D.scale.setScalar(arScale);
+  globeRoot.setAttribute('visible', false);
+  setLabelScale(1.7);
+  reticle.setAttribute('visible', false);
+  arRow.style.display = 'flex';
+  placed = false;
+  hintEl.textContent = 'Aim at the floor and tap. If nothing is detected, press "Put it in front of me".';
+  setStatus('scanning for a floor');
+  /* build 12 - Quest passthrough: HTML buttons are invisible in a headset and
+     floor hit-testing needs Space Setup, so place the globe in front at once. */
+  if (XRQ.headsetAR(scene)) {
+    arScale = 0.5;
+    setStatus('passthrough AR: placing the globe in front of you');
+    setTimeout(function () { if (scene.is('ar-mode') && !placed) { placeInFront(); } }, 700);
+  }
+}
+
+function enterVR () {
+  ground.setAttribute('visible', true);
+  globeRoot.setAttribute('globe-orbit', 'enabled', false);
+  globeRoot.setAttribute('globe-orbit', 'arMode', false);
+  document.getElementById('overlay').classList.remove('ar');
+  arRow.style.display = 'none';
+  scene.setAttribute('background', 'transparent', false);
+  globeRoot.object3D.scale.setScalar(1.0);
+  globeRoot.setAttribute('position', '0 1.5 -3.0');
+  setLabelScale(1.0);
+  hintEl.textContent = 'Point a controller at a city and pull the trigger.';
+  setStatus('VR session active');
+}
+
+function restoreDesktop () {
+  stopArHover();
+  ground.setAttribute('visible', true);
+  scene.setAttribute('background', 'transparent', false);
+  if (savedFog) { scene.setAttribute('fog', savedFog); savedFog = null; }
+  scene.setAttribute('ar-hit-test', 'enabled', false);
+  globeRoot.setAttribute('visible', true);
+  globeRoot.setAttribute('position', DESKTOP.pos);
+  globeRoot.object3D.scale.setScalar(DESKTOP.scale);
+  globeRoot.setAttribute('globe-orbit', 'arMode', false);
+  globeRoot.setAttribute('globe-orbit', 'enabled', true);
+  globeRoot.components['globe-orbit'].reset();
+  document.getElementById('overlay').classList.remove('ar');
+  setLabelScale(1.0);
+  reticle.setAttribute('visible', false);
+  arRow.style.display = 'none';
+  hintEl.textContent = 'Drag to spin, pinch or scroll to zoom, tap a coloured user city.';
+  unbindXRSelect();
+  setStatus('desktop mode');
+}
+
+scene.addEventListener('enter-vr', function () {
+  if (scene.is('ar-mode')) { enterAR(); } else { enterVR(); }
+});
+scene.addEventListener('exit-vr', restoreDesktop);
+scene.addEventListener('ar-hit-test-start',    function () { setStatus('scanning for a surface'); });
+scene.addEventListener('ar-hit-test-achieved', function () { setStatus('surface found, tap to place', 'warn'); });
+
+scene.addEventListener('ar-hit-test-select', function (evt) {
+  if (placed || XRQ.headsetAR(scene)) { return; }
+  var d = evt.detail || {};
+
+  /* Measured on the vivo T4: the hit pose's Y axis is the surface normal
+     (floor Y=1.00, wall Y=0.00). The WebXR spec does not document this. */
+  if (d.orientation) {
+    var q = new THREE.Quaternion(d.orientation.x, d.orientation.y, d.orientation.z, d.orientation.w);
+    var up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+    if (Math.abs(up.y) < 0.75) {
+      setStatus('that is a wall. Aim lower, or press "Put it in front of me".', 'warn');
+      return;
+    }
+  }
+
+  if (d.position) { placeGlobeAt(d.position.x, d.position.y, d.position.z); }
+  else { placeInFront(); }
+});
+
+document.getElementById('btnSmaller').addEventListener('click', function () { setArScale(arScale / 1.3); });
+document.getElementById('btnBigger').addEventListener('click', function () { setArScale(arScale * 1.3); });
+document.getElementById('btnFront').addEventListener('click', placeInFront);
+document.getElementById('btnReplace').addEventListener('click', function () {
+  placed = false;
+  stopArHover();
+  globeRoot.setAttribute('visible', false);
+  reticle.setAttribute('visible', false);
+  scene.setAttribute('ar-hit-test', 'enabled', true);
+  setStatus('aim at the floor and tap, or press "Put it in front of me"');
+});
+
+/* In an AR session mouse clicks never fire. Input is the WebXR select event. */
+function bindXRSelect () {
+  var session = scene.renderer && scene.renderer.xr && scene.renderer.xr.getSession();
+  if (!session || xrSelectBound) { return; }
+  xrSession = session;
+  xrSelectBound = function () {
+    if (!placed) { return; }
+    var u = arRaycast();
+    if (!u) { setStatus('no city under the centre dot', 'warn'); return; }
+    request(u);
+  };
+  session.addEventListener('select', xrSelectBound);
+}
+
+function unbindXRSelect () {
+  if (xrSession && xrSelectBound) { xrSession.removeEventListener('select', xrSelectBound); }
+  xrSession = null;
+  xrSelectBound = null;
+}
+
+/* ---- diagnostics --------------------------------------------------------- */
+var diagEl = document.getElementById('diag'), diagOn = false, lastErr = '';
+
+['warn', 'error'].forEach(function (k) {
+  var orig = console[k].bind(console);
+  console[k] = function () {
+    lastErr = k.toUpperCase() + ': ' + Array.prototype.join.call(arguments, ' ');
+    orig.apply(null, arguments);
+  };
+});
+
+document.getElementById('btnDiag').addEventListener('click', function () {
+  diagOn = !diagOn;
+  diagEl.style.display = diagOn ? 'block' : 'none';
+  this.textContent = diagOn ? 'Debug: on' : 'Debug';
+});
+
+/* The one number that matters: the angle between where the camera is looking
+   and where the globe actually is. Over ~40 degrees and it is off screen. */
+setInterval(function () {
+  if (!diagOn) { return; }
+  var cam = scene.camera, cv = scene.canvas;
+  if (!cam || !cv) { diagEl.textContent = 'no camera yet'; return; }
+
+  var camPos = new THREE.Vector3(), camQ = new THREE.Quaternion(), gPos = new THREE.Vector3();
+  cam.getWorldPosition(camPos);
+  cam.getWorldQuaternion(camQ);
+  globeRoot.object3D.getWorldPosition(gPos);
+
+  var fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camQ);
+  var toGlobe = gPos.clone().sub(camPos);
+  var dist = toGlobe.length();
+  var offAxis = THREE.MathUtils.radToDeg(fwd.angleTo(toGlobe.normalize()));
+
+  diagEl.textContent =
+    'canvas ' + cv.clientWidth + ' x ' + cv.clientHeight +
+    '   aspect ' + (cam.aspect || 0).toFixed(2) + '   fov ' + cam.fov + '\n' +
+    'globe visible flag: ' + globeRoot.getAttribute('visible') +
+    '   scale ' + globeRoot.object3D.scale.x.toFixed(2) + '\n' +
+    'distance to globe: ' + dist.toFixed(2) + ' m\n' +
+    'OFF-AXIS ANGLE: ' + offAxis.toFixed(0) + ' deg' +
+    (offAxis > 40 ? '   <-- GLOBE IS OFF SCREEN, press Recentre' : '   (in view)') + '\n' +
+    'coastline rings: ' + coastRings + '\n' +
+    'last console message: ' + (lastErr || 'none');
+}, 500);
+
+function zoomGlobe (f) {
+  var orb = globeRoot.components['globe-orbit'];
+  if (!orb) { return; }
+  orb.setZoom(globeRoot.object3D.scale.x * f);
+  setStatus('zoom ' + globeRoot.object3D.scale.x.toFixed(2) + 'x');
+}
+document.getElementById('btnZoomOut').addEventListener('click', function () { zoomGlobe(1 / 1.25); });
+document.getElementById('btnZoomIn').addEventListener('click', function () { zoomGlobe(1.25); });
+
+document.getElementById('btnRecentre').addEventListener('click', function () {
+  var orb = globeRoot.components['globe-orbit'];
+  if (orb) { orb.reset(); }
+  globeRoot.object3D.scale.setScalar(DESKTOP.scale);
+  var cam = document.getElementById('cam');
+  cam.object3D.rotation.set(0, 0, 0);
+  var lc = cam.components && cam.components['look-controls'];
+  if (lc) {
+    if (lc.pitchObject) { lc.pitchObject.rotation.set(0, 0, 0); }
+    if (lc.yawObject) { lc.yawObject.rotation.set(0, 0, 0); }
+  }
+  setStatus('view recentred');
+});
+
+/* ---- startup ------------------------------------------------------------- */
+function reportSupport () {
+  if (!navigator.xr || !navigator.xr.isSessionSupported) {
+    setStatus('WebXR unavailable. Almost always an insecure context: the URL must be ' +
+              'localhost or https, never an IP address.', 'err');
+    return;
+  }
+  Promise.all([
+    navigator.xr.isSessionSupported('immersive-ar')['catch'](function () { return false; }),
+    navigator.xr.isSessionSupported('immersive-vr')['catch'](function () { return false; })
+  ]).then(function (r) {
+    var bits = [];
+    if (r[0]) { bits.push('AR available'); }
+    if (r[1]) { bits.push('VR available'); }
+    if (bits.length) { setStatus(bits.join(', ') + '. Ready.'); }
+  });
+}
+
+function start () {
+  paintBoard('tex-takeaways', 'WHAT THIS ROOM TEACHES', [
+    '1  move content close to users - distance is latency',
+    '2  a cache hit serves in milliseconds, a miss walks to origin',
+    '3  TTL trades freshness against speed',
+    '4  hit ratio is the number that pays the bills'], 74);
+  buildGlobe();
+  buildMarkers();
+  buildHud();
+  refreshCacheVisuals();
+  globeRoot.setAttribute('globe-orbit', 'enabled: true; spin: false');
+  document.querySelectorAll('[raycaster]').forEach(function (el) {
+    var rc = el.components && el.components.raycaster;
+    if (rc) { rc.refreshObjects(); }
+  });
+  reportSupport();
+  loadCoastlines();
+}
+
+function startOnce () { window.__cdnStarted = true; start(); }
+if (scene.hasLoaded) { startOnce(); } else { scene.addEventListener('loaded', startOnce); }
+window.addEventListener('error', function (e) { setStatus('JS error: ' + e.message, 'err'); });
+
+window.__cdn = {
+  latLonToVec3: latLonToVec3, haversineKm: haversineKm, rttMs: rttMs,
+  USERS: USERS, EDGES: EDGES, ORIGIN: ORIGIN
+};
+/* ---- guided tutorial: performs a sample interaction step by step ---------- */
+var TOUR = [
+  { t: 'THE EDGE NETWORK',
+    x: 'Spin the globe: the small bright dots are EDGE sites - servers placed in cities near users. The red block is the ORIGIN, the one place the real content lives. A CDN is simply many copies of content kept close to people.',
+    act: function () { globeRoot.setAttribute('globe-orbit', 'spin', true); setLabels(true); } },
+  { t: 'STEP: A USER ASKS (CACHE MISS)',
+    x: 'Watch Vancouver tap for content. The request flies to its nearest edge first. The edge has no copy - a MISS - so it fetches from the origin across the continent, stores a copy, and only then answers the user. Slow path: user, edge, origin, back.',
+    act: function () { clearCaches(); var u = USERS[4]; request(u); } },
+  { t: 'THE EDGE NOW HOLDS A COPY',
+    x: 'See the edge marker turn healthy: it cached the object. How long it keeps it is the TTL - the slider top left. Infinity means never expire; a short TTL means fresher content but more misses.',
+    act: function () { refreshCacheVisuals(); } },
+  { t: 'STEP: THE SAME USER ASKS AGAIN (CACHE HIT)',
+    x: 'Same city, same content, second time: the edge answers straight from its copy - a HIT. Compare the millis in the ROUTE panel: the hit is a fraction of the miss. That gap is the whole point of a CDN.',
+    act: function () { request(USERS[4]); } },
+  { t: 'TTL - HOW LONG A COPY COUNTS',
+    x: 'Setting the TTL to 10 seconds: after that the copy is stale and the next request misses again. Real CDNs pick TTLs per content: logos for days, stock prices for seconds.',
+    act: function () { var t = document.getElementById('ttl'); t.value = 10; t.dispatchEvent(new Event('input')); } },
+  { t: 'DISTANCE IS LATENCY',
+    x: 'Readouts on: every label shows the simulated round trip. Light in fibre is about 200,000 km/s, so Auckland can never beat Vancouver to a US origin. Caching is the only way to beat geography.',
+    act: function () { setReadouts(true); } },
+  { t: 'YOUR TURN',
+    x: 'Tap any coloured city to launch its request and watch hit or miss. Walk the room with WASD, leave through the gold door for chapter 2, or press AR to place the whole network on your desk and tap cities in your room.',
+    act: function () { globeRoot.setAttribute('globe-orbit', 'spin', false); } }
+];
+var tourI = -1;
+function tourShow () {
+  var bar = document.getElementById('tourbar');
+  if (tourI < 0) { bar.style.display = 'none'; return; }
+  var st = TOUR[tourI];
+  document.getElementById('tStep').textContent = 'STEP ' + (tourI + 1) + ' / ' + TOUR.length;
+  document.getElementById('tTitle').textContent = st.t;
+  document.getElementById('tText').textContent = st.x;
+  document.getElementById('tNext').textContent = tourI === TOUR.length - 1 ? 'Finish' : 'Next';
+  bar.style.display = 'block';
+  if (st.act) { try { st.act(); } catch (e) { setStatus('tutorial: ' + e.message, 'warn'); } }
+}
+document.getElementById('btnTour').addEventListener('click', function () {
+  tourI = 0; tourShow();
+});
+document.getElementById('tNext').addEventListener('click', function () {
+  tourI = tourI >= TOUR.length - 1 ? -1 : tourI + 1; tourShow();
+});
+})();
+
+
+
+function paintBoard (id, title, lines, step) {
+  var c = document.getElementById(id); if (!c) { return; }
+  var g = c.getContext('2d');
+  g.fillStyle = 'rgba(27,30,34,0.96)'; g.fillRect(0, 0, c.width, c.height);
+  g.strokeStyle = 'rgba(217,165,20,.55)'; g.lineWidth = 6; g.strokeRect(3, 3, c.width - 6, c.height - 6);
+  g.fillStyle = '#fbbf24'; g.font = '800 44px system-ui, sans-serif'; g.fillText(title, 40, 78);
+  g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
+  lines.forEach(function (ln, i) { g.fillText(ln, 40, 150 + i * (step || 74)); });
+}
+function clearCaches () { cache = {}; stats.hits = 0; stats.total = 0; refreshCacheVisuals(); }
+function setLabels (on) { var b = document.getElementById('btnLabels'); if (labelsOn !== on) { b.click(); } }
+function setReadouts (on) { var b = document.getElementById('btnHud'); if (hudOn !== on) { b.click(); } }
+
+
+
+document.getElementById('btnHub').addEventListener('click', function () { location.href = 'index.html'; });
+</script>
+<script>
+window.HUDTAB = {
+  open: function (n) {
+    document.querySelectorAll('.tabpanel').forEach(function (p) {
+      p.classList.toggle('open', p.getAttribute('data-tab') === n);
+    });
+    var rd = document.getElementById('routedom');
+    if (rd && rd.dataset.on === '1') { rd.style.display = n ? 'none' : 'block'; }
+    document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tab') === n);
+    });
+  },
+  closeAll: function () { this.open(null); },
+  toggle: function (n) {
+    var p = document.querySelector('.tabpanel[data-tab="' + n + '"]');
+    if (p && p.classList.contains('open')) { this.closeAll(); } else { this.open(n); }
+  }
+};
+document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
+  b.addEventListener('click', function () { window.HUDTAB.toggle(b.getAttribute('data-tab')); });
+});
+</script>
+<script>
+/* --- VR control wall: mirrors the tab HUD inside the headset ----------- */
+(function () {
+  var scn = document.querySelector('a-scene');
+  function place(show) {
+    var menu = document.getElementById('vrmenu');
+    if (!menu) { return; }
+    menu.object3D.visible = !!show;
+    if (!show) { return; }
+    XRQ.faceUser(menu, 2.1, 1.5);   /* build 12: was placed behind the user */
+  }
+  scn.addEventListener('enter-vr', function () { place(true); });
+  scn.addEventListener('exit-vr', function () { place(false); });
+  function sync() {
+    var set = function (id, txt) {
+      var t = document.querySelector('#' + id + ' a-text');
+      if (t) { t.setAttribute('value', txt); }
+    };
+    set('vm-labels', document.getElementById('btnLabels').textContent.trim().toLowerCase());
+    set('vm-spin', document.getElementById('btnSpin').textContent.trim().toLowerCase());
+    set('vm-read', document.getElementById('btnHud').textContent.trim().toLowerCase());
+    var ttl = document.getElementById('ttl');
+    set('vm-ttlu', 'ttl ' + (ttl.value === '0' ? 'off' : ttl.value + 's') + ' +');
+  }
+  function wire(id, fn) {
+    document.getElementById(id).addEventListener('click', function () { fn(); sync(); });
+  }
+  wire('vm-clear', function () { document.getElementById('btnClear').click(); });
+  wire('vm-ttld', function () {
+    var t = document.getElementById('ttl');
+    t.value = String(Math.max(0, Number(t.value) - 5));
+    t.dispatchEvent(new Event('input'));
+  });
+  wire('vm-ttlu', function () {
+    var t = document.getElementById('ttl');
+    t.value = String(Math.min(60, Number(t.value) + 5));
+    t.dispatchEvent(new Event('input'));
+  });
+  wire('vm-labels', function () { document.getElementById('btnLabels').click(); });
+  wire('vm-spin', function () { document.getElementById('btnSpin').click(); });
+  wire('vm-read', function () { document.getElementById('btnHud').click(); });
+  wire('vm-tour', function () { document.getElementById('btnTour').click(); });
+  wire('vm-exit', function () { scn.exitVR(); });
+})();
+</script>
+<script>
+/* thumb stick -> window.TOUCHJOY, consumed by rig-walk */
+(function () {
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+    document.documentElement.classList.add('coarse');
+  }
+  window.TOUCHJOY = { x: 0, y: 0 };
+  var stick = document.getElementById('stick');
+  var knob = document.getElementById('stick-knob');
+  if (!stick || !knob) { return; }
+  var R = 40;
+  function move (e) {
+    var r = stick.getBoundingClientRect();
+    var dx = e.clientX - (r.left + r.width / 2);
+    var dy = e.clientY - (r.top + r.height / 2);
+    var mm = Math.hypot(dx, dy);
+    if (mm > R) { dx *= R / mm; dy *= R / mm; }
+    knob.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+    window.TOUCHJOY.x = dx / R; window.TOUCHJOY.y = -dy / R;
+    window.STICK_ACTIVE = true;
+  }
+  function end (e) {
+    if (stick.hasPointerCapture && e.pointerId !== undefined &&
+        stick.hasPointerCapture(e.pointerId)) { stick.releasePointerCapture(e.pointerId); }
+    knob.style.transform = ''; window.TOUCHJOY.x = 0; window.TOUCHJOY.y = 0;
+    window.STICK_ACTIVE = false;
+    var c = document.getElementById('cam'); if (c) { c.setAttribute('look-controls', 'touchEnabled', 'true'); }
+  }
+  stick.addEventListener('pointerdown', function (e) {
+    stick.setPointerCapture(e.pointerId); move(e); e.preventDefault();
+    var c = document.getElementById('cam'); if (c) { c.setAttribute('look-controls', 'touchEnabled', 'false'); }
+  });
+  stick.addEventListener('pointermove', function (e) {
+    if (stick.hasPointerCapture(e.pointerId)) { move(e); }
+  });
+  stick.addEventListener('pointerup', end);
+  stick.addEventListener('pointercancel', end);
+})();
+</script>
+<script>
+/* While the thumb stick is steering, a second thumb dragging the canvas turns
+   the rig left/right (stock touch-look tracks only the first touch, so it goes
+   silent during multi-touch). Yaw on #rig - camera stays pristine. */
+(function () {
+  var last = null, cvEl = null;
+  function cv () { if (!cvEl) { cvEl = document.querySelector('canvas.a-canvas') || document.querySelector('canvas'); } return cvEl; }
+  document.addEventListener('touchmove', function (e) {
+    if (!window.STICK_ACTIVE || e.target !== cv()) { return; }
+    var t = e.changedTouches[0];
+    if (!last || last.id !== t.identifier) { last = { id: t.identifier, x: t.clientX }; return; }
+    var dx = t.clientX - last.x; last.x = t.clientX;
+    var r = document.getElementById('rig');
+    if (r) { r.object3D.rotation.y -= dx * 0.011; }
+  }, { passive: true, capture: true });
+  document.addEventListener('touchend', function (e) {
+    if (!last) { return; }
+    for (var i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === last.id) { last = null; }
+    }
+  }, { passive: true, capture: true });
+})();
+</script>
+<style>.a-enter-ar{display:none!important}</style>
+</body>
+</html>
