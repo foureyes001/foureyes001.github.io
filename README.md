@@ -67,6 +67,24 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 33 (25 Oct 2026) - chapter 1: every rod, pipe and conduit connected, dense ceiling services
+- Nothing in chapter 1 stops in mid-air any more:
+  - the aisle-tray hangers reach their trays, and the trays run as far as their cables
+  - the cables rise into the ladder racks, and the north cross tray runs to the network core
+  - the power-room conduits end in a new tray over the cabinets; the generator exhaust runs to a wall flange
+  - the CRAC pipes join the coolant mains, whose ends turn up into the ceiling
+  - the rack-row trays and busway ends rise to the ladders
+- Much fuller overhead network (decorative, not a real design):
+  - 11 east-west and 4 north-south ladder racks with cable bundles
+  - wall trays on all four walls, with conduits down the walls to pull boxes
+  - drops into the UPS, ATS, transformer, generator, CRACs and network core
+  - red sprinkler branches; extra blue / yellow / teal pipe runs
+  - 110 seeded criss-cross cable runs ending at junction boxes
+- **Performance:**
+  - one new builder, `wiring()`, merged per material: about 4,000 pieces, +8 draw calls (chapter 1 now 209, still below the other pages), +57k triangles in the busiest view
+  - `?wiring=0` turns it off
+- Stamps read "build 33". The chapter 3 debug card stamp, left at 31b, is fixed.
+
 ## Build 32 (25 Oct 2026) - Quest app packaging (2D), no page changes
 - The site is packaged as a 2D Meta Quest app with Meta's Bubblewrap CLI: package `io.github.foureyes001.insidethecloud`, launcher name "Inside Cloud", targetSdk 32, sideload only. Steps in `QUEST-APP-GUIDE.md`; build/install scripts in `tools/quest-app/`.
 - `/.well-known/assetlinks.json` published with the release key's SHA-256 fingerprint (Digital Asset Links), so the app opens the site without a browser bar.
