@@ -25,7 +25,7 @@ The scripts are in `tools/quest-app/` in this repo. The laptop copy is `C:\Users
 - `1-build.bat` runs `package-quest.ps1 -Step build`:
   1. Installs Meta's Bubblewrap CLI (`npm i -g @meta-quest/bubblewrap-cli`). Its first run downloads JDK 17 and the Android SDK.
   2. Runs `bubblewrap init --manifest=https://foureyes001.github.io/manifest.json --metaquest`, only if there's no project yet. Answers are in `CHEATSHEET.txt`.
-  3. Turns off Meta's Platform SDK: it's only for Store features, and init writes app ID `0`. Then runs `bubblewrap update --skipVersionUpgrade`.
+  3. Keeps Meta's original init settings. Turning the Platform SDK off also removes Meta's `horizonpermissions` library, so it stays on (decided 25 Oct). If an older run removed them, it restores them with `bubblewrap update --skipVersionUpgrade`.
   4. Edits Gradle: `targetSdkVersion 32` with `//noinspection ExpiredTargetSdkVersion`; `jcenter()` becomes `mavenCentral()`.
   5. Checks the SDK (build-tools, the compile platform) and installs anything missing.
   6. Builds with `gradlew.bat assembleRelease`, then `zipalign`, then `apksigner sign`. **YOU** type the keystore password, then the key password if asked.

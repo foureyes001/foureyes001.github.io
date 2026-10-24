@@ -89,7 +89,7 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - The site is packaged as a 2D Meta Quest app with Meta's Bubblewrap CLI: package `io.github.foureyes001.insidethecloud`, launcher name "Inside Cloud", targetSdk 32, sideload only. Steps in `QUEST-APP-GUIDE.md`; build/install scripts in `tools/quest-app/`.
 - `/.well-known/assetlinks.json` published with the release key's SHA-256 fingerprint (Digital Asset Links), so the app opens the site without a browser bar.
 - `bubblewrap build` fails on Windows with newer Node ("spawn EINVAL": Node no longer starts .bat files directly), so the script runs the same Gradle, zipalign and apksigner steps itself.
-- Meta's Platform SDK (Store features; init wrote app ID 0) is turned off for the sideloaded app.
+- Meta's Platform SDK stays on, as `init` set it. Turning it off also removed Meta's `horizonpermissions` library, so the original settings are kept.
 - Page stamps stay "build 31c": no page changed. The app loads the live site, so site updates need no rebuild.
 
 ## Build 31c (24 Oct 2026) - AR with the Immersive Web Emulator (all pages)

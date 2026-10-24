@@ -163,21 +163,25 @@ if ($Step -eq 'build') {
   $cfg = Get-BwConfig; Use-Jdk $cfg
   Say ('JDK: {0}   Android SDK: {1}' -f $cfg.jdkPath, $cfg.androidSdkPath)
 
-  # Meta's Platform SDK is only for Store features (purchases, entitlements); with no App ID
-  # init writes OCULUS_APP_ID 0. Remove it and regenerate the Android project from twa-manifest.json.
-  $raw = Get-Content 'twa-manifest.json' -Raw | ConvertFrom-Json
-  if ($raw.features -and $raw.features.PSObject.Properties['horizonPlatformSDK']) {
-    Say 'Turning off Meta Platform SDK (not needed for a sideloaded app) and regenerating the project' 'Yellow'
-    $raw.features.PSObject.Properties.Remove('horizonPlatformSDK')
-    [IO.File]::WriteAllText((Join-Path $Proj 'twa-manifest.json'), ($raw | ConvertTo-Json -Depth 20))
+  # Keep Meta's original init settings (Platform SDK + horizonpermissions libraries).
+  # Turning the Platform SDK off also drops horizonpermissions, so it stays on (decided 25 Oct).
+  # If the generated project lacks it (an earlier script removed it), restore and regenerate.
+  $gr = [IO.File]::ReadAllText((Join-Path $Proj 'app\build.gradle'))
+  if ($gr -notmatch 'horizonplatformsdk') {
+    $raw = Get-Content 'twa-manifest.json' -Raw | ConvertFrom-Json
+    if (-not $raw.features) { $raw | Add-Member -NotePropertyName features -NotePropertyValue ([pscustomobject]@{}) }
+    if (-not $raw.features.PSObject.Properties['horizonPlatformSDK']) {
+      $raw.features | Add-Member -NotePropertyName horizonPlatformSDK -NotePropertyValue ([pscustomobject]@{ enabled = $true })
+      [IO.File]::WriteAllText((Join-Path $Proj 'twa-manifest.json'), ($raw | ConvertTo-Json -Depth 20))
+    }
+    Say 'Restoring Meta''s original project settings (bubblewrap update)' 'Yellow'
     & $bw update --skipVersionUpgrade
     if ($LASTEXITCODE -ne 0) { Fail 'bubblewrap update failed - read the message above and tell Claude' }
     $tm = Get-Content 'twa-manifest.json' -Raw | ConvertFrom-Json
+    $gr = [IO.File]::ReadAllText((Join-Path $Proj 'app\build.gradle'))
+    if ($gr -notmatch 'horizonplatformsdk') { Fail 'Meta libraries still missing after update. Tell Claude.' }
   }
-  $mf = [IO.File]::ReadAllText((Join-Path $Proj 'app\src\main\AndroidManifest.xml'))
-  $gr = [IO.File]::ReadAllText((Join-Path $Proj 'app\build.gradle'))
-  if ($mf -match 'OCULUS_APP_ID' -or $gr -match 'horizonplatformsdk') { Fail 'Platform SDK still in the project after update. Tell Claude.' }
-  Say 'Platform SDK: off'
+  Say 'Meta libraries: present (original settings)'
 
   Say 'Step 3/6: edit the Gradle files'
   Patch-Gradle
