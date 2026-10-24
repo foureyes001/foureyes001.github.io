@@ -67,6 +67,17 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 22 (24 Oct 2026) - chapter 1: cabling, containment, realistic cooling units
+- Cabling:
+  - Steel cable trays run over both rack rows, with blue, black and fibre-yellow bundles inside.
+  - A cable drop goes into each of the 72 cabinets, and links climb up to the trays above the aisle.
+  - Everything is merged into 4 draw calls.
+- Cold-aisle containment: a lightly tinted glass roof sits on the rack tops, with steel frames. Each end has sliding glass doors, left part-open so the aisle stays walkable.
+- Cooling units, shown with Guides on:
+  - The cartoon fan icons are now real-looking fans: a steel ring, 6 dark swept blades and a wire guard.
+  - The cyan panel is now a steel slatted intake grille, and the olive panel is now a steel return duct.
+  - Fans still spin and stop on failure. Drill colours now show on the status light, label and alarm ring instead of the panels.
+
 ## Build 21 (24 Oct 2026) - chapter 1: photo textures, guides, fuller room
 - B, photo textures (CC0): raised-floor tiles, perforated aisle grates, painted wall panels, office ceiling tiles and brushed steel (trays, beams, ducts, insulated pipes). Small JPGs in `assets/tex/`; the hand-drawn version shows until each photo has loaded. `?photo=0` turns them off.
 - C, guides: teaching helpers (teleport rings, info spheres, CRAC fan icons and labels, coloured floor washes and lines) are hidden by default. The **Guides** button in MOVE & VIEW, the VR menu or the G key shows them. Rack names are smaller grey plates; the dark row plinths are gone.

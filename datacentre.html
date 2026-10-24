@@ -3226,7 +3226,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 21</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 22</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3774,12 +3774,156 @@ function canvasPainter(w, h) {
     addMesh(quadGeo(pq, 0.02), pool, 'look-pool lights-rig', 2);
   }
 
+
+  /* ===================== build 22: CABLING, CONTAINMENT, REAL FANS ===========
+     All built straight in three.js and merged per material (a few draw calls). */
+  var UPV = new THREE.Vector3(0, 1, 0);
+  function gBox (w, h, d, x, y, z) { return new THREE.BoxGeometry(w, h, d).translate(x, y, z); }
+  function gCyl (a, b, r, seg) {                     /* open cylinder from point a to point b */
+    var A = new THREE.Vector3(a[0], a[1], a[2]), B = new THREE.Vector3(b[0], b[1], b[2]);
+    var dir = B.clone().sub(A), len = dir.length();
+    var g = new THREE.CylinderGeometry(r, r, len, seg || 6, 1, true);
+    g.applyMatrix4(new THREE.Matrix4().compose(A.clone().add(B).multiplyScalar(0.5),
+      new THREE.Quaternion().setFromUnitVectors(UPV, dir.normalize()), new THREE.Vector3(1, 1, 1)));
+    return g;
+  }
+  function bake (id, parts, extraClass) {           /* {matKey: [geometries]} -> one mesh per material */
+    var holder = document.createElement('a-entity');
+    holder.setAttribute('id', id); if (extraClass) { holder.setAttribute('class', extraClass); }
+    world.appendChild(holder);
+    parts.forEach(function (p) {
+      if (!p.geos.length) { return; }
+      var one = THREE.BufferGeometryUtils.mergeGeometries(p.geos, false);
+      var m = new THREE.Mesh(one, p.mat); m.renderOrder = p.order || 0;
+      holder.object3D.add(m);
+    });
+    return holder;
+  }
+
+  /* cable trays over each rack row, bundles inside, a drop into every cabinet,
+     and links up to the trays above the cold aisle */
+  function cabling () {
+    var M = looks(), steel = [], c = [[], [], []];
+    [-1, 1].forEach(function (sx) {
+      var xt = sx * 1.72, y = 2.3;
+      steel.push(gBox(0.30, 0.012, 22.2, xt, y - 0.03, 0));             /* tray floor */
+      steel.push(gBox(0.012, 0.07, 22.2, xt - 0.15, y, 0));             /* side rails */
+      steel.push(gBox(0.012, 0.07, 22.2, xt + 0.15, y, 0));
+      for (var z = -10.5; z <= 10.6; z += 3) {                           /* hanger rods */
+        steel.push(gBox(0.016, 4.6 - y, 0.016, xt - 0.13, (4.6 + y) / 2, z + 1.5));
+        steel.push(gBox(0.016, 4.6 - y, 0.016, xt + 0.13, (4.6 + y) / 2, z + 1.5));
+      }
+      [-0.08, 0, 0.08].forEach(function (dx, k) {                         /* bundles in the tray */
+        c[k].push(gCyl([xt + dx, y, -11.05], [xt + dx, y, 11.05], 0.03, 8));
+      });
+      for (var j = 0; j < 36; j++) {                                      /* a drop per cabinet */
+        var z2 = -10.5 + j * 0.6, k2 = j % 3;
+        c[k2].push(gCyl([xt + (k2 - 1) * 0.05, y - 0.02, z2], [xt + (k2 - 1) * 0.05, 2.0, z2], 0.02, 6));
+      }
+      [-9, -3, 3, 9].forEach(function (z3, i) {                           /* links to the aisle trays */
+        c[i % 2 ? 1 : 0].push(gCyl([sx * 0.66, 3.37, z3], [xt - sx * 0.1, y + 0.02, z3], 0.035, 8));
+      });
+    });
+    bake('cabling', [{ geos: steel, mat: M.tray }, { geos: c[0], mat: M.cable[0] },
+                     { geos: c[1], mat: M.cable[1] }, { geos: c[2], mat: M.cable[2] }]);
+  }
+
+  /* cold-aisle containment: glass roof on the rack tops + sliding glass doors
+     at both ends, left part-open so the aisle stays walkable */
+  function containment () {
+    var M = looks(), frame = [], glass = [];
+    var X = 1.5, Y = 2.04, Z = 10.85;
+    frame.push(gBox(0.06, 0.06, 2 * Z, -X, Y, 0), gBox(0.06, 0.06, 2 * Z, X, Y, 0));
+    for (var z = -Z; z <= Z + 0.01; z += 1.55) { frame.push(gBox(2 * X, 0.04, 0.05, 0, Y + 0.01, z)); }
+    glass.push(new THREE.PlaneGeometry(2 * X, 2 * Z).rotateX(-Math.PI / 2).translate(0, Y + 0.02, 0));
+    [-Z, Z].forEach(function (zd) {
+      frame.push(gBox(0.06, Y, 0.06, -X, Y / 2, zd), gBox(0.06, Y, 0.06, X, Y / 2, zd));   /* posts */
+      frame.push(gBox(2 * X, 0.1, 0.08, 0, Y - 0.05, zd));                                  /* header + track */
+      [-1, 1].forEach(function (s2) {                                                         /* two sliding leaves */
+        var cx = s2 * 1.07, w = 0.76, zz = zd + (zd > 0 ? 0.05 : -0.05) * (s2 > 0 ? 1 : 2);
+        glass.push(new THREE.PlaneGeometry(w, Y - 0.16).translate(cx, (Y - 0.16) / 2 + 0.03, zz));
+        frame.push(gBox(w, 0.04, 0.04, cx, 0.03, zz), gBox(w, 0.04, 0.04, cx, Y - 0.12, zz));
+        frame.push(gBox(0.04, Y - 0.12, 0.04, cx - w / 2, (Y - 0.12) / 2 + 0.01, zz));
+        frame.push(gBox(0.04, Y - 0.12, 0.04, cx + w / 2, (Y - 0.12) / 2 + 0.01, zz));
+        frame.push(gBox(0.03, 0.3, 0.05, cx - s2 * (w / 2 - 0.06), 1.05, zz));               /* handle */
+      });
+    });
+    var gm = new THREE.MeshBasicMaterial({ color: '#d6e6ef', transparent: true, opacity: 0.16,
+                                           depthWrite: false, side: THREE.DoubleSide });
+    bake('containment', [{ geos: frame, mat: M.tray }, { geos: glass, mat: gm, order: 3 }]);
+  }
+
+  /* realistic CRAC fans (shown with Guides): steel housing, dark swept blades,
+     wire guard; the old louvre / top box become a steel grille and return duct */
+  function grilleTex () {
+    var cv = canvas(256, 256), g = cv.getContext('2d'), i;
+    g.strokeStyle = '#fff'; g.lineWidth = 5;
+    for (i = 1; i <= 7; i++) { g.beginPath(); g.arc(128, 128, i * 17.5, 0, 6.2832); g.stroke(); }
+    for (i = 0; i < 8; i++) { var a = i * Math.PI / 4; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 + Math.cos(a) * 124, 128 + Math.sin(a) * 124); g.stroke(); }
+    var t = new THREE.CanvasTexture(cv); return t;
+  }
+  function slatTex () {
+    var cv = canvas(128, 128), g = cv.getContext('2d');
+    g.fillStyle = '#7d848b'; g.fillRect(0, 0, 128, 128);
+    for (var y = 0; y < 128; y += 16) {
+      g.fillStyle = '#23272b'; g.fillRect(4, y + 3, 120, 7);
+      g.fillStyle = '#a7adb3'; g.fillRect(4, y + 10, 120, 2);
+    }
+    var t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  }
+  function realCracs () {
+    var M = looks();
+    var bladeM = new THREE.MeshLambertMaterial({ color: '#41464d', side: THREE.DoubleSide });
+    var hubM = new THREE.MeshLambertMaterial({ color: '#2a2d31' });
+    var backM = new THREE.MeshBasicMaterial({ color: '#111315' });
+    var ringM = new THREE.MeshLambertMaterial({ color: '#5b6168', side: THREE.DoubleSide });
+    var guardM = new THREE.MeshLambertMaterial({ color: '#b3b9bf', alphaMap: grilleTex(), alphaTest: 0.5, transparent: false, side: THREE.DoubleSide });
+    var slatM = new THREE.MeshLambertMaterial({ map: slatTex() });
+    /* one blade: a swept, widening paddle in the plane facing +x, pitched 32 deg */
+    var sh = new THREE.Shape();
+    sh.moveTo(-0.025, 0.07); sh.lineTo(0.025, 0.07); sh.quadraticCurveTo(0.09, 0.22, 0.075, 0.365);
+    sh.quadraticCurveTo(0.0, 0.395, -0.06, 0.35); sh.quadraticCurveTo(-0.045, 0.2, -0.025, 0.07);
+    var blades = [];
+    for (var k = 0; k < 6; k++) {
+      blades.push(new THREE.ShapeGeometry(sh, 6).rotateY(Math.PI / 2 + 0.56).rotateX(k * Math.PI / 3));
+    }
+    var bladeGeo = THREE.BufferGeometryUtils.mergeGeometries(blades, false);
+    (DC.refs.cracs || []).forEach(function (r) {
+      var fan = r.fan, g = fan && fan.parentEl; if (!fan || !g) { return; }
+      /* spinning part: blades + hub; the cartoon parts are hidden */
+      each(fan.children, function (ch) { if (ch.object3D) { ch.object3D.visible = false; } });
+      fan.object3D.add(new THREE.Mesh(bladeGeo, bladeM));
+      fan.object3D.add(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.07, 16).rotateZ(Math.PI / 2), hubM));
+      /* fixed part: housing ring, dark back plate, wire guard */
+      var fr = document.createElement('a-entity');
+      fr.setAttribute('class', 'crac-fan-frame');
+      g.appendChild(fr);
+      var p = fan.object3D.position;
+      fr.object3D.position.set(p.x, p.y, p.z);
+      fr.object3D.add(new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.43, 0.08, 32, 1, true).rotateZ(Math.PI / 2), ringM));
+      fr.object3D.add(new THREE.Mesh(new THREE.CircleGeometry(0.43, 32).rotateY(Math.PI / 2).translate(-0.035, 0, 0), backM));
+      fr.object3D.add(new THREE.Mesh(new THREE.CircleGeometry(0.43, 32).rotateY(Math.PI / 2).translate(0.045, 0, 0), guardM));
+      /* intake louvre -> steel grille; top box -> steel return duct. Drill colours
+         go to a hidden stand-in (the beacon, label and alarm ring still show state). */
+      var lv = r.louvre, lm = lv && lv.getObject3D('mesh');
+      if (lm) { lm.material = slatM; }
+      var it = r.intake;
+      if (it) {
+        it.setAttribute('height', 0.5); it.object3D.position.y = 2.45;
+        var im = it.getObject3D('mesh'); if (im) { im.material = M.duct; }
+      }
+      var stand = document.createElement('a-entity');
+      r.louvre = stand; r.intake = stand;
+    });
+    DC.setGuides(DC.guidesOn);
+  }
+
   /* ===================== build 21: GUIDES (part C) ==========================
      Teaching helpers (teleport rings, info spheres, fan icons, coloured floor
      washes and lines, CRAC labels) are hidden by default so the hall reads as
      a real room; "Guides" in MOVE & VIEW, the VR menu or the G key shows them.
      Hidden things are not clickable (raycaster patch skips hidden objects). */
-  var GUIDES = '.hs, .wp, .crac-fan, .crac-louvre, .crac-intake, .crac-label, #hotzone-w, #hotzone-e, .guide-mark';
+  var GUIDES = '.hs, .wp, .crac-fan, .crac-fan-frame, .crac-louvre, .crac-intake, .crac-label, #hotzone-w, #hotzone-e, .guide-mark';
   function markGuides () {
     each(document.querySelectorAll('#floor-markings > *, #shell > *'), function (el) {
       var m = el.getAttribute && el.getAttribute('material');
@@ -3821,6 +3965,8 @@ function canvasPainter(w, h) {
     airflowBatch();
     /* merge + restyle only once the models have hidden the shapes they replace */
     ready.then(function () { mergeWhenTextured(0); }, function () { mergeWhenTextured(0); });
+    cabling(); containment();
+    ready.then(function () { setTimeout(realCracs, 0); }, function () { setTimeout(realCracs, 0); });
     /* after the rack heat panels got their model-mode opacity */
     ready.then(function () { setTimeout(function () { batchStatus(0); }, 300); },
                function () { batchStatus(0); });
