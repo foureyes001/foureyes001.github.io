@@ -120,6 +120,14 @@ html.coarse #stick{display:block}
 /* build 31: chapter 3 opens in VR like chapters 1 and 2 (A-Frame accepts the session the
    browser hands over on arrival). AR is one button away on the in-headset panel:
    "Switch to AR" / "Back to VR". The build 30 'sessiongranted' block is gone. */
+/* build 31b: A-Frame offers a VR session to the browser (navigator.xr.offerSession) as soon as
+   the page loads and whenever a session ends. An outstanding offer can count as a pending
+   immersive session and block our own AR request, so this page never offers: A-Frame then
+   treats offers as unsupported. Entering VR/AR still works through requestSession. */
+if (navigator.xr) {
+  try { Object.defineProperty(navigator.xr, 'offerSession', { value: undefined, configurable: true, writable: true }); }
+  catch (e) { window.__offerPatchFailed = String(e); }
+}
 if (typeof AFRAME === 'undefined') {
   console.error('A-Frame failed to load.');
 } else {
@@ -1908,10 +1916,11 @@ var arUI = (function () {
       'TTL: ' + ttlText() + '   labels ' + (labelsOn ? 'on' : 'off') + '   spin ' + (spinning ? 'on' : 'off'),
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
-      'build 31'
+      'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
+      'build 31b'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
-    lines.forEach(function (ln, i) { g.fillText(ln, 26, 96 + i * 42); });
+    lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */
     ui.dt.needsUpdate = true;
   }
   function placeCard () {
@@ -1969,7 +1978,13 @@ function setVrScale (f) {
   globeRoot.object3D.scale.setScalar(vrScale);
   setStatus('globe radius about ' + (0.975 * vrScale).toFixed(2) + ' m');
 }
-var modeSwitch = { busy: false, last: null };
+var modeSwitch = { busy: false, last: null, history: [] };
+/* the headset's real session: A-Frame forgets its own reference before the session has ended */
+function liveSession () {
+  var xr = scene.renderer && scene.renderer.xr;
+  return scene.xrSession || (xr && xr.getSession && xr.getSession()) || null;
+}
+function note (txt) { modeSwitch.history.push(Math.round(performance.now()) + ' ' + txt); if (modeSwitch.history.length > 12) { modeSwitch.history.shift(); } }
 /* A-Frame's VR/AR buttons react to 'exit-vr' by OFFERING a new session to the browser
    (navigator.xr.offerSession). An outstanding offer would count as a pending immersive
    session and could make our own request fail, so offers are skipped mid-switch (and while
@@ -1982,7 +1997,8 @@ scene.enterVR = function (useAR, useOffer) {
 function switchMode (mode) {
   if (modeSwitch.busy) { return; }
   modeSwitch.last = { mode: mode, t: Date.now(), result: 'pending' };
-  var s = scene.xrSession;
+  note('switch to ' + mode);
+  var s = liveSession();
   if (!s || !XRQ.inXR(scene)) { startMode(mode); return; }
   modeSwitch.busy = true;
   setStatus('switching to ' + mode.toUpperCase());
@@ -1996,7 +2012,22 @@ function switchMode (mode) {
   setTimeout(go, 2500);                                    /* in case 'end' never arrives */
   try { scene.exitVR(); } catch (e2) { go(); }
 }
-function startMode (mode) {
+function startMode (mode, tries) {
+  tries = tries || 0;
+  var live = liveSession();
+  if (live && tries < 2) {
+    /* a session is still running (or still ending): end it first. A click's permission to
+       start a session lasts a few seconds, which covers this wait. */
+    if (XRQ.inXR(scene)) { note('still in ' + (scene.is('ar-mode') ? 'AR' : 'VR') + ': ending it first'); modeSwitch.busy = false; switchMode(mode); return; }
+    note('session still ending: waiting');
+    var done = false, again = function () { if (done) { return; } done = true; startMode(mode, tries + 1); };
+    try { live.addEventListener('end', again, { once: true }); var pe = live.end(); if (pe && pe.catch) { pe.catch(function () {}); } } catch (e0) {}
+    setTimeout(again, 1500);
+    return;
+  }
+  /* stale VR/AR flags (session gone) would make A-Frame answer "Already in VR." and do nothing */
+  if (XRQ.inXR(scene)) { note('clearing stale mode flags'); scene.removeState('vr-mode'); scene.removeState('ar-mode'); }
+  note('request ' + mode);
   var p;
   try { p = mode === 'ar' ? scene.enterAR() : scene.enterVR(); }
   catch (e) { switchFailed(mode, e); return; }
@@ -2008,13 +2039,15 @@ function startMode (mode) {
   }
 }
 function switchFailed (mode, e) {
-  if (modeSwitch.last) { modeSwitch.last.result = 'failed: ' + ((e && e.message) || e); }
-  console.warn('mode switch to ' + mode + ' failed:', e && e.message);
+  var why = (e && e.cause && (e.cause.name + ': ' + e.cause.message)) || (e && e.message) || String(e);
+  if (modeSwitch.last) { modeSwitch.last.result = 'failed: ' + why; }
+  note('failed: ' + why);
+  console.warn('mode switch to ' + mode + ' failed:', why);
   var h = arUI.state.pendingHref;
   if (h) { arUI.state.pendingHref = ''; location.href = h; return; }   /* leaving anyway */
-  showSwitchPrompt(mode);
+  showSwitchPrompt(mode, why);
 }
-function showSwitchPrompt (mode) {
+function showSwitchPrompt (mode, why) {
   var old = document.getElementById('switchPrompt'); if (old) { old.remove(); }
   var other = mode === 'ar' ? 'vr' : 'ar', M = mode.toUpperCase(), O = other.toUpperCase();
   var box = document.createElement('div');
@@ -2031,13 +2064,15 @@ function showSwitchPrompt (mode) {
     '<button data-go="' + other + '" style="font:600 15px system-ui;margin-top:12px;padding:12px 16px;border-radius:10px;' +
     'border:1px solid #475569;background:transparent;color:#e2e8f0;cursor:pointer;width:100%">Start ' + O + ' instead</button>' +
     '<button data-go="" style="font:500 13px system-ui;margin-top:10px;padding:8px 14px;border:none;' +
-    'background:transparent;color:#94a3b8;cursor:pointer">Stay on this page</button></div>';
+    'background:transparent;color:#94a3b8;cursor:pointer">Stay on this page</button>' +
+    '<div style="margin-top:12px;font:400 11px ui-monospace,Consolas,monospace;color:#64748b;word-break:break-word">' +
+    'reason: ' + String(why || 'unknown').replace(/[<>&]/g, '') + '</div></div>';
   document.body.appendChild(box);
   Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) {
     b.addEventListener('click', function () { var m = b.getAttribute('data-go'); box.remove(); if (m) { startMode(m); } });
   });
 }
-window.__modeSwitch = { switchMode: switchMode, state: modeSwitch, prompt: showSwitchPrompt };
+window.__modeSwitch = { switchMode: switchMode, startMode: startMode, state: modeSwitch, prompt: showSwitchPrompt, live: liveSession };
 
 /* ---- startup ------------------------------------------------------------- */
 function reportSupport () {

@@ -67,6 +67,11 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 31b (24 Oct 2026) - chapter 3 "Start AR" fix
+- After a refused switch, the "Start AR" card did nothing when the page still believed VR was on (A-Frame answers "Already in VR."). The switch now checks the headset's real session: if one is still running it is ended first, and leftover VR/AR flags are cleared before AR is requested.
+- Chapter 3 never offers sessions to the browser (navigator.xr.offerSession disabled for this page), since an outstanding offer can block the AR request.
+- The fallback card shows the browser's own error ("reason: ..."); the Debug card shows the last switch result. Chapter 3's stamp reads "build 31b".
+
 ## Build 31 (24 Oct 2026) - sounds, and chapter 3 opens in VR with a VR <-> AR switch
 - Sound effects on every page, generated with Web Audio (no audio files, nothing to license, works offline; `?sound=0` mutes):
   - quiet footsteps whenever you move with the thumb stick, WASD or the touch joystick (about one per 0.8 m; none for real walking in AR, snap turns or teleport jumps);
