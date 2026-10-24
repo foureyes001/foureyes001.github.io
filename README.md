@@ -67,6 +67,16 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 29 (24 Oct 2026) - lobby final design pass
+- Floor: 2 m tiles with engraved geometric (circuit-like) patterns - concentric chamfered grooves, corner links, via pads and lit cyan/amber inlays - shaded so the grooves read as depth.
+- Walls: classic raised frames with recessed panels, engraved inset lines, rivets, a lit dado rail and vent panels. Ceiling: coffered bays. All depth comes from light/shadow in the textures (no extra geometry).
+- Neon: tubes are now real tubes with soft halos; the outer ones curve outward and down near the back (as in the concept) and end in lamp fittings; the centre pair stops above the title.
+- Gates are more vibrant: brighter rims, a pulsing glow band, a lit outer edge, stronger halo, spill and floor pads.
+- Light particles (not in the reference): motes orbit all three gates; sparks rise and drift along the amber floor line; motes flow along the cyan floor lanes towards the gates.
+- Hazy floor reflections: soft wet-floor streaks under each gate and under each neon tube replace the mirror-sharp copies.
+- Tank: darker water, a glossy copper coil (highlight along the tube), and 320 matte (non-glowing) specks drifting in the water alongside the bright bubbles.
+- All graph screens removed; the two consoles show a rack-status light grid; above the side gates there are lit vent boxes, and the back corners get tall amber light columns.
+
 ## Build 28 (24 Oct 2026) - lobby rebuilt as a sci-fi corridor
 - index.html + new lobby.js: a 13 x 17 m corridor after the user's concept image - ribbed sloped ceiling with converging cyan/orange neon tubes, panelled walls with pilasters, pipes and drooping cable bundles, a circuit-pattern floor with soft reflections (mirrored glow under a semi-transparent floor), and an "INSIDE THE CLOUD" title wall.
 - Three chapter gates (Ch 1 yellow, Ch 2 cyan, Ch 3 teal): chamfered metal frames, glowing rims, animated energy portals with pulsing tunnel rings, a label plate (chapter, title, one-line teaser) and floor light pads. Walk into a gate or click it with the laser - same behaviour as before.

@@ -176,7 +176,7 @@ AFRAME.registerComponent('rig-walk', {
   }
 });
 /* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
-/* build 28: a panel that hangs to the lower-left of where you look and drifts after you
+/* build 29: a panel that hangs to the lower-left of where you look and drifts after you
    only when you turn or walk away from it (not on every small head movement). */
 AFRAME.registerComponent('lazy-follow', {
   schema: { dist: { default: 0.8 }, side: { default: -0.30 }, down: { default: 0.32 },
@@ -218,7 +218,7 @@ AFRAME.registerComponent('lazy-follow', {
     o.lookAt(this.h);                                   /* +z (the panel face) turns toward your eyes */
   }
 });
-/* build 28: turn to face the viewer about the vertical axis only (AR readout card) */
+/* build 29: turn to face the viewer about the vertical axis only (AR readout card) */
 AFRAME.registerComponent('yaw-face', {
   init: function () { this._v = new THREE.Vector3(); this._p = new THREE.Vector3(); },
   tick: function () {
@@ -450,7 +450,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 28</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 29</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -508,7 +508,7 @@ window.doorGo = function (href) {
     <a-entity id="takeaways" position="-5.2 2.0 -5.2" rotation="0 45 0">
       <a-plane geometry="width: 4.4; height: 2.2" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
     </a-entity>
-    <a-entity id="room"><!-- build 28: chapter-2 style hall, built by buildHall() --></a-entity>
+    <a-entity id="room"><!-- build 29: chapter-2 style hall, built by buildHall() --></a-entity>
 
   <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html" position="0 0 9.2">
     <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
@@ -542,7 +542,7 @@ window.doorGo = function (href) {
     <a-entity id="handL" laser-controls="hand: left"
               raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
   </a-entity>
-  <!-- build 28: chapter 3 is AR-only; the in-headset controls are #arPanel on the left controller -->
+  <!-- build 29: chapter 3 is AR-only; the in-headset controls are #arPanel on the left controller -->
 </a-scene>
 
 <script>
@@ -581,7 +581,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 28\n' +
+    'build 29\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -710,7 +710,7 @@ function makeEntity (parent, tag, attrs) {
   return el;
 }
 
-/* ---- build 28: the hall (chapter 2's look, scaled to this room) ---------- */
+/* ---- build 29: the hall (chapter 2's look, scaled to this room) ---------- */
 function hallTex (c, rep) {
   var t = new THREE.CanvasTexture(c); t.colorSpace = 'srgb'; t.anisotropy = 4;
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
@@ -837,7 +837,7 @@ function buildHall () {
 function buildGlobe () {
   makeEntity(globeRoot, 'a-sphere', {
     radius: 0.975, 'segments-width': 44, 'segments-height': 28,
-    material: 'color: #14335e; roughness: 0.85; metalness: 0.05'   /* build 28: navy, as in the original cdn.html */
+    material: 'color: #14335e; roughness: 0.85; metalness: 0.05'   /* build 29: navy, as in the original cdn.html */
   });
 
   /* Rim glow: a slightly larger sphere rendered from the inside. */
@@ -975,7 +975,7 @@ function drawCoastlines (geo) {
 
   globeRoot.object3D.add(group);
   coastRings = rings;
-  /* build 28: no painted land - plain navy ocean with cyan coastlines, like the original */
+  /* build 29: no painted land - plain navy ocean with cyan coastlines, like the original */
   setStatus('map drawn: ' + rings + ' coastline outlines. Ready.');
 }
 
@@ -1085,11 +1085,11 @@ function buildHud () {
   caption = makeEntity(hudEl, 'a-text', {
     value: 'Click a user city', color: PAL.text, align: 'center',
     width: 0.62, 'wrap-count': 36,
-    'hud-item': 'align: bottom; offset: 0.40; dist: 1; fitWidth: 0.42'   /* build 28: was hidden under the top bar */
+    'hud-item': 'align: bottom; offset: 0.40; dist: 1; fitWidth: 0.42'   /* build 29: was hidden under the top bar */
   });
 
   var panel = makeEntity(hudEl, 'a-entity', {
-    'hud-item': 'align: bottom; offset: 0.235; dist: 1; fitWidth: 0.46'   /* build 28: clear of the tab bar */
+    'hud-item': 'align: bottom; offset: 0.235; dist: 1; fitWidth: 0.46'   /* build 29: clear of the tab bar */
   });
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches) {
     panel.object3D.visible = false;
@@ -1458,7 +1458,7 @@ function setArScale (k) {
   arScale = Math.min(1.4, Math.max(0.12, k));
   if (placed) {
     globeRoot.object3D.scale.setScalar(arScale);
-    if (XRQ.headsetAR(scene)) {          /* build 28: Quest - grow/shrink in place, never into the floor */
+    if (XRQ.headsetAR(scene)) {          /* build 29: Quest - grow/shrink in place, never into the floor */
       var gp = globeRoot.object3D.position;
       gp.y = Math.max(gp.y, placedFloorY + 0.975 * arScale + 0.08);
     } else {
@@ -1747,7 +1747,7 @@ document.getElementById('btnRecentre').addEventListener('click', function () {
   setStatus('view recentred');
 });
 
-/* ---- build 28: Quest AR controls ------------------------------------------
+/* ---- build 29: Quest AR controls ------------------------------------------
    One panel on the LEFT controller (point with the right one and pull the
    trigger), a readout card that floats above the globe and turns to face you,
    and a debug card beside the panel. Everything is drawn on canvases in the
@@ -1845,7 +1845,7 @@ var arUI = (function () {
     ui.last = ''; refresh(true);
   }
   function buildPanel () {
-    /* build 28: floats ~0.8 m away, lower-left of your view, follows you lazily.
+    /* build 29: floats ~0.8 m away, lower-left of your view, follows you lazily.
        Point EITHER controller at it and pull the trigger. Y (left controller) hides/shows it. */
     var P = document.createElement('a-entity');
     P.setAttribute('id', 'arPanel');
@@ -1942,7 +1942,7 @@ var arUI = (function () {
       'TTL: ' + ttlText() + '   labels ' + (labelsOn ? 'on' : 'off') + '   spin ' + (spinning ? 'on' : 'off'),
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
-      'build 28'
+      'build 29'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 96 + i * 42); });
