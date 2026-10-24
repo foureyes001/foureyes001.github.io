@@ -176,6 +176,16 @@ AFRAME.registerComponent('rig-walk', {
   }
 });
 /* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
+/* build 26: turn to face the viewer about the vertical axis only (AR readout card) */
+AFRAME.registerComponent('yaw-face', {
+  init: function () { this._v = new THREE.Vector3(); this._p = new THREE.Vector3(); },
+  tick: function () {
+    var cam = this.el.sceneEl.camera;
+    if (!cam || !this.el.object3D.visible) { return; }
+    cam.getWorldPosition(this._v); this.el.object3D.getWorldPosition(this._p);
+    this.el.object3D.rotation.set(0, Math.atan2(this._v.x - this._p.x, this._v.z - this._p.z), 0);
+  }
+});
 AFRAME.registerComponent('billboard', {
   init: function () { this._v = new THREE.Vector3(); },
   tick: function () {
@@ -398,7 +408,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 25</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 26</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -434,19 +444,18 @@ window.doorGo = function (href) {
 </div>
 
 <a-scene
-  background="color: #10151c"
-  fog="type: linear; color: #10151c; near: 14; far: 40"
+  background="color: #03060c"
+  fog="type: linear; color: #03060c; near: 16; far: 40"
   renderer="antialias: true; colorManagement: true; multiviewStereo: true"
-  xr-mode-ui="XRMode: xr"
-  quest-ar="hide: #room; env: false"
-  ar-model="mode: custom; tap: false"
+  xr-mode-ui="XRMode: ar"
+  quest-ar="hide: #room, #door-ch2, #takeaways; env: false"
   webxr="requiredFeatures: local-floor;
          optionalFeatures: hit-test, anchors, dom-overlay;
          overlayElement: #overlay"
   ar-hit-test="type: map; mapSize: 0.5 0.5; enabled: false">
 
   <a-entity id="ground" geometry="primitive: plane; width: 40; height: 40"
-            material="color: #4a5058; shader: flat" rotation="-90 0 0" position="0 0 0"></a-entity>
+            material="color: #060b14; shader: flat" rotation="-90 0 0" position="0 0 0"></a-entity>
 
   <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.8"></a-entity>
   <a-entity light="type: directional; color: #fff4e0; intensity: 0.55" position="-2 4 3"></a-entity>
@@ -454,20 +463,10 @@ window.doorGo = function (href) {
   <a-entity id="globeRoot" position="0 1.5 -3.4" scale="0.8 0.8 0.8"></a-entity>
 
   <canvas id="tex-takeaways" width="1024" height="512" style="display:none"></canvas>
-    <a-entity id="takeaways" position="-6.4 2.0 -6.4" rotation="0 45 0">
+    <a-entity id="takeaways" position="-5.2 2.0 -5.2" rotation="0 45 0">
       <a-plane geometry="width: 4.4; height: 2.2" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
     </a-entity>
-    <a-entity id="room">
-    <a-cylinder radius="9.5" height="4.6" open-ended="true" position="0 2.3 0"
-                theta-start="10" theta-length="340"
-                material="color: #6a727c; shader: flat; side: double"></a-cylinder>
-    <a-circle radius="9.5" rotation="90 0 0" position="0 4.7 0"
-              material="color: #3a4048; shader: flat; side: double"></a-circle>
-    <a-torus radius="5.5" radius-tubular="0.05" rotation="90 0 0" position="0 4.5 0"
-             material="color: #fff4e0; shader: flat; opacity: .9; transparent: true"></a-torus>
-    <a-torus radius="2.6" radius-tubular="0.04" rotation="90 0 0" position="0 4.4 0"
-             material="color: #fff4e0; shader: flat; opacity: .8; transparent: true"></a-torus>
-  </a-entity>
+    <a-entity id="room"><!-- build 26: chapter-2 style hall, built by buildHall() --></a-entity>
 
   <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html" position="0 0 9.2">
     <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
@@ -501,43 +500,7 @@ window.doorGo = function (href) {
     <a-entity id="handL" laser-controls="hand: left"
               raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
   </a-entity>
-  <a-entity id="vrmenu" visible="false">
-    <a-plane geometry="width: 2.6; height: 1.5" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
-    <a-text value="CDN CONTROLS" position="0 0.62 0.01" align="center" color="#22d3ee" width="3.2"
-            material="shader: flat"></a-text>
-    <a-entity id="vm-clear" class="clickable" position="-0.72 0.42 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="clear caches" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-ttld" class="clickable" position="0.42 0.42 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="ttl -5 s" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-ttlu" class="clickable" position="-0.72 0.14 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="ttl +5 s" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-labels" class="clickable" position="0.42 0.14 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="labels" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-spin" class="clickable" position="-0.72 -0.14 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="spin" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-read" class="clickable" position="0.42 -0.14 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="readouts" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-tour" class="clickable" position="-0.72 -0.42 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="tutorial" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="vm-exit" class="clickable" position="0.42 -0.42 0.01">
-      <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-      <a-text value="leave VR" align="center" color="#f87171" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
-    </a-entity>
-  </a-entity>
+  <!-- build 26: chapter 3 is AR-only; the in-headset controls are #arPanel on the left controller -->
 </a-scene>
 
 <script>
@@ -576,7 +539,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 25\n' +
+    'build 26\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -705,11 +668,134 @@ function makeEntity (parent, tag, attrs) {
   return el;
 }
 
+/* ---- build 26: the hall (chapter 2's look, scaled to this room) ---------- */
+function hallTex (c, rep) {
+  var t = new THREE.CanvasTexture(c); t.colorSpace = 'srgb'; t.anisotropy = 4;
+  if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+  return t;
+}
+function hallCanvas (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+var HALL_GLOW = (function () {
+  var c = hallCanvas(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.55)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return hallTex(c);
+})();
+var HALL_RINGFADE = (function () {
+  var c = hallCanvas(256, 256), g = c.getContext('2d'), gr = g.createRadialGradient(128, 128, 60, 128, 128, 128);
+  gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.62, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.8, 'rgba(255,255,255,.85)'); gr.addColorStop(0.86, 'rgba(255,255,255,.4)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return hallTex(c);
+})();
+function buildHall () {
+  var RH = 9.5, HH = 4.7, TAU = Math.PI * 2, roomEl = document.getElementById('room'), room = roomEl.object3D, i;
+  function basicM (o) { o.toneMapped = false; return new THREE.MeshBasicMaterial(o); }
+  function addM (color, op, map) {
+    return new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: op, map: map || null,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  }
+  function put (o) { room.add(o); return o; }
+  /* floor: dark, with a grid drawn as real lines (crisp at any angle) */
+  /* (the floor itself is #ground, recoloured; a second big floor disc z-fought with the globe) */
+  function grid (step, color, op, y) {
+    var pts = [], lim = RH - 0.2;
+    for (var x = -lim; x <= lim + 1e-6; x += step) {
+      var h = Math.sqrt(Math.max(0, lim * lim - x * x));
+      for (var t0 = -h; t0 < h; t0 += 1) {               /* short pieces: huge lines under the camera z-fight */
+        var t1 = Math.min(h, t0 + 1);
+        pts.push(x, y, t0, x, y, t1, t0, y, x, t1, y, x);
+      }
+    }
+    var gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    put(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: color, transparent: true, opacity: op, toneMapped: false })));
+  }
+  grid(0.2375, '#3878be', 0.10, 0.015);
+  grid(0.95, '#3878be', 0.32, 0.018);
+  /* glow pool under the globe */
+  put(new THREE.Mesh(new THREE.CircleGeometry(2.6, 48).rotateX(-Math.PI / 2).translate(0, 0.03, -3.4),
+    addM('#22d3ee', 0.22, HALL_GLOW)));
+  put(new THREE.Mesh(new THREE.RingGeometry(1.2, 2.2, 64).rotateX(-Math.PI / 2).translate(0, 0.045, -3.4),
+    addM('#38bdf8', 0.55, HALL_RINGFADE)));
+  /* curved wall: dark panels with cyan light lines */
+  var wc = hallCanvas(1024, 512), g = wc.getContext('2d');
+  var wg = g.createLinearGradient(0, 0, 0, 512);
+  wg.addColorStop(0, '#04070e'); wg.addColorStop(0.6, '#071022'); wg.addColorStop(1, '#050913');
+  g.fillStyle = wg; g.fillRect(0, 0, 1024, 512);
+  g.fillStyle = 'rgba(70,130,200,.10)'; for (i = 0; i < 8; i++) { g.fillRect(i * 128, 0, 2, 512); }
+  g.fillStyle = 'rgba(80,190,255,.9)'; g.fillRect(0, 168, 1024, 3);
+  g.fillStyle = 'rgba(80,190,255,.25)'; g.fillRect(0, 164, 1024, 11);
+  g.fillStyle = 'rgba(80,190,255,.55)'; g.fillRect(0, 60, 1024, 2);
+  for (i = 0; i < 16; i++) { g.fillStyle = i % 5 === 0 ? 'rgba(251,191,36,.8)' : 'rgba(80,190,255,.6)'; g.fillRect(i * 64 + 20, 120, 24, 3); }
+  var wt = hallTex(wc, true); wt.repeat.set(7, 1);
+  put(new THREE.Mesh(new THREE.CylinderGeometry(RH, RH, HH, 72, 1, true).translate(0, HH / 2, 0),
+    basicM({ map: wt, side: THREE.BackSide })));
+  /* ceiling + concentric light rings */
+  put(new THREE.Mesh(new THREE.CircleGeometry(RH, 72).rotateX(Math.PI / 2).translate(0, HH, 0), basicM({ color: '#03060c' })));
+  [[8.4, 0.045, '#7dd3fc'], [5.9, 0.032, '#38bdf8'], [3.5, 0.028, '#38bdf8']].forEach(function (r) {
+    put(new THREE.Mesh(new THREE.TorusGeometry(r[0], r[1], 6, 120).rotateX(Math.PI / 2).translate(0, HH - 0.12, 0), basicM({ color: r[2] })));
+    put(new THREE.Mesh(new THREE.RingGeometry(r[0] - 0.45, r[0] + 0.45, 96).rotateX(Math.PI / 2).translate(0, HH - 0.14, 0),
+      addM(r[2], 0.35, HALL_RINGFADE)));
+  });
+  var ribGeo = new THREE.BoxGeometry(0.06, 0.04, 4.9), ribA = basicM({ color: '#143a63' }), ribB = basicM({ color: '#0d2a4a' });
+  for (i = 0; i < 24; i++) {
+    var a = i / 24 * TAU, rib = put(new THREE.Mesh(ribGeo, i % 2 ? ribB : ribA));
+    rib.position.set(Math.sin(a) * 6.0, HH - 0.1, Math.cos(a) * 6.0); rib.rotation.y = a;
+  }
+  put(new THREE.Mesh(new THREE.TorusGeometry(RH - 0.12, 0.03, 6, 120).rotateX(Math.PI / 2).translate(0, 0.06, 0), basicM({ color: '#38bdf8' })));
+  /* distant LED "bokeh" across the rack wall */
+  function dots (n, size, op, fn) {
+    var pos = new Float32Array(n * 3), col = new Float32Array(n * 3), c3 = new THREE.Color();
+    for (var k = 0; k < n; k++) { fn(k, pos, c3); col[k * 3] = c3.r; col[k * 3 + 1] = c3.g; col[k * 3 + 2] = c3.b; }
+    var pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); pg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    put(new THREE.Points(pg, new THREE.PointsMaterial({ size: size, map: HALL_GLOW, vertexColors: true, transparent: true,
+      opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
+  }
+  dots(420, 0.11, 0.9, function (k, p, c3) {
+    var th = Math.random() * TAU, rr = RH - 0.85 - Math.random() * 0.2, y = 0.25 + Math.random() * 1.75;
+    if (Math.cos(th) > 0.96) { y += 2.4; }                 /* keep the doorway clear */
+    p[k * 3] = Math.sin(th) * rr; p[k * 3 + 1] = y; p[k * 3 + 2] = Math.cos(th) * rr;
+    c3.set(Math.random() < 0.18 ? '#fbbf24' : (Math.random() < 0.5 ? '#38bdf8' : '#7dd3fc'));
+  });
+  dots(70, 0.8, 0.35, function (k, p, c3) {
+    var th = Math.random() * TAU, rr = RH - 0.4;
+    p[k * 3] = Math.sin(th) * rr; p[k * 3 + 1] = 2.4 + Math.random() * 2.1; p[k * 3 + 2] = Math.cos(th) * rr;
+    c3.set(Math.random() < 0.25 ? '#f59e0b' : '#1d6fb8');
+  });
+  /* ring of server racks facing in (chapter 1's model), with LED strips */
+  var targets = [], n = 0;
+  for (i = 0; i < 94; i++) {
+    var th = i / 94 * TAU;
+    if (-Math.cos(th) > 0.975) { continue; }               /* the chapter 2 door at +z */
+    var o = new THREE.Object3D(), rr = RH - 0.55;
+    o.position.set(Math.sin(th) * rr, 0, -Math.cos(th) * rr); o.rotation.y = -th;
+    room.add(o); targets.push({ object3D: o }); n++;
+  }
+  var strip = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.025, 0.02), basicM({ color: '#ffffff' }), n * 2);
+  var m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s1 = new THREE.Vector3(1, 1, 1), cc = new THREE.Color(), kk = 0;
+  targets.forEach(function (t) {
+    var ob = t.object3D;
+    [1.92, 0.62 + Math.random() * 0.9].forEach(function (y, j) {
+      var p = new THREE.Vector3(0, y, 0.52).applyEuler(ob.rotation).add(ob.position);
+      q.setFromEuler(ob.rotation); m4.compose(p, q, s1); strip.setMatrixAt(kk, m4);
+      strip.setColorAt(kk, cc.set(j === 0 ? '#38bdf8' : (Math.random() < 0.3 ? '#fbbf24' : '#22d3ee'))); kk++;
+    });
+  });
+  strip.instanceMatrix.needsUpdate = true; strip.instanceColor.needsUpdate = true;
+  put(strip);
+  if (window.XRQ && XRQ.instanceModel) {
+    XRQ.instanceModel('assets/server_rack_plain.glb', roomEl, targets,
+      { height: 2.0, width: 0.6, depth: 1.0, yaw: -90, fitSrc: 'assets/server_rack_plain.glb' })
+      .then(function (r) {
+        r.holder.traverse(function (o2) { if (o2.material) { o2.material = o2.material.clone(); o2.material.color.set('#7f93b0'); } });
+      })['catch'](function (e) { console.warn('racks', e && e.message); });
+  }
+}
+
 /* ---- globe --------------------------------------------------------------- */
 function buildGlobe () {
   makeEntity(globeRoot, 'a-sphere', {
     radius: 0.975, 'segments-width': 44, 'segments-height': 28,
-    material: 'color: #1d6a72; shader: flat'
+    material: 'color: #14335e; roughness: 0.85; metalness: 0.05'   /* build 26: navy, as in the original cdn.html */
   });
 
   /* Rim glow: a slightly larger sphere rendered from the inside. */
@@ -822,7 +908,7 @@ function paintGlobeMap (geo) {
 }
 
 function drawCoastlines (geo) {
-  var mat = new THREE.LineBasicMaterial({ color: 0x8fce8f, transparent: true, opacity: 1.0 });
+  var mat = new THREE.LineBasicMaterial({ color: 0x7ee8fa, transparent: true, opacity: 0.9 });
   var group = new THREE.Group();
   var rings = 0;
 
@@ -847,7 +933,7 @@ function drawCoastlines (geo) {
 
   globeRoot.object3D.add(group);
   coastRings = rings;
-  paintGlobeMap(geo);
+  /* build 26: no painted land - plain navy ocean with cyan coastlines, like the original */
   setStatus('map drawn: ' + rings + ' coastline outlines. Ready.');
 }
 
@@ -957,11 +1043,11 @@ function buildHud () {
   caption = makeEntity(hudEl, 'a-text', {
     value: 'Click a user city', color: PAL.text, align: 'center',
     width: 0.62, 'wrap-count': 36,
-    'hud-item': 'align: top; offset: 0.055; dist: 1; fitWidth: 0.42'
+    'hud-item': 'align: bottom; offset: 0.40; dist: 1; fitWidth: 0.42'   /* build 26: was hidden under the top bar */
   });
 
   var panel = makeEntity(hudEl, 'a-entity', {
-    'hud-item': 'align: bottom; offset: 0.135; dist: 1; fitWidth: 0.46'
+    'hud-item': 'align: bottom; offset: 0.235; dist: 1; fitWidth: 0.46'   /* build 26: clear of the tab bar */
   });
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches) {
     panel.object3D.visible = false;
@@ -1330,7 +1416,12 @@ function setArScale (k) {
   arScale = Math.min(1.4, Math.max(0.12, k));
   if (placed) {
     globeRoot.object3D.scale.setScalar(arScale);
-    globeRoot.object3D.position.y = placedFloorY + globeLift();
+    if (XRQ.headsetAR(scene)) {          /* build 26: Quest - grow/shrink in place, never into the floor */
+      var gp = globeRoot.object3D.position;
+      gp.y = Math.max(gp.y, placedFloorY + 0.975 * arScale + 0.08);
+    } else {
+      globeRoot.object3D.position.y = placedFloorY + globeLift();
+    }
   }
   setStatus('globe radius about ' + (0.975 * arScale).toFixed(2) + ' m');
 }
@@ -1442,6 +1533,7 @@ function enterAR () {
     setStatus('passthrough AR: placing the globe in front of you');
     setTimeout(function () { if (scene.is('ar-mode') && !placed) { placeInFront(); } }, 700);
   }
+  arUI.enter();
 }
 
 function enterVR () {
@@ -1459,6 +1551,7 @@ function enterVR () {
 }
 
 function restoreDesktop () {
+  arUI.exit();
   stopArHover();
   ground.setAttribute('visible', true);
   scene.setAttribute('background', 'transparent', false);
@@ -1612,6 +1705,238 @@ document.getElementById('btnRecentre').addEventListener('click', function () {
   setStatus('view recentred');
 });
 
+/* ---- build 26: Quest AR controls ------------------------------------------
+   One panel on the LEFT controller (point with the right one and pull the
+   trigger), a readout card that floats above the globe and turns to face you,
+   and a debug card beside the panel. Everything is drawn on canvases in the
+   original cdn.html button style. Phones keep the HTML bar (dom-overlay). */
+var arUI = (function () {
+  var PW = 0.27, PH = 0.36, CW = 600, CH = 800;        /* panel: metres / canvas px */
+  var ui = { on: false, hover: '', panel: null, card: null, dbg: null, zones: {}, timer: null, last: '', pendingHref: '' };
+  var BTN = {
+    clear:   [30, 92, 540, 66,  function () { return 'Clear all caches'; }],
+    labels:  [30, 172, 265, 66, function () { return 'Labels: ' + (labelsOn ? 'on' : 'off'); }],
+    spin:    [305, 172, 265, 66, function () { return 'Spin: ' + (spinning ? 'on' : 'off'); }],
+    hud:     [30, 252, 265, 66, function () { return 'Readouts: ' + (hudOn ? 'on' : 'off'); }],
+    diag:    [305, 252, 265, 66, function () { return 'Debug: ' + (diagOn ? 'on' : 'off'); }],
+    smaller: [30, 332, 265, 66, function () { return 'Size −'; }],
+    bigger:  [305, 332, 265, 66, function () { return 'Size +'; }],
+    ttlDown: [30, 462, 70, 62,  function () { return '−'; }],
+    ttlBar:  [112, 462, 376, 62, null],
+    ttlUp:   [500, 462, 70, 62, function () { return '+'; }],
+    lobby:   [30, 584, 175, 64, function () { return 'Lobby'; }],
+    ch1:     [212, 584, 176, 64, function () { return 'Ch 1'; }],
+    ch2:     [395, 584, 175, 64, function () { return 'Ch 2'; }],
+    exit:    [30, 680, 540, 80, function () { return 'Exit AR'; }]
+  };
+  function canvasOf (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function texOf (c) { var t = new THREE.CanvasTexture(c); t.colorSpace = 'srgb'; t.anisotropy = 4; return t; }
+  function rr (g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+  }
+  function ttlText () { return ttlSeconds > 0 ? ttlSeconds + ' s' : 'never expires'; }
+
+  /* ---- the panel ---- */
+  function paintPanel () {
+    var g = ui.pg, k;
+    g.clearRect(0, 0, CW, CH);
+    rr(g, 4, 4, CW - 8, CH - 8, 26); g.fillStyle = 'rgba(11,16,32,.94)'; g.fill();
+    g.lineWidth = 3; g.strokeStyle = 'rgba(34,211,238,.55)'; g.stroke();
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.fillStyle = '#22d3ee'; g.font = '700 34px system-ui, sans-serif'; g.fillText('CDN CONTROLS', 32, 60);
+    g.fillStyle = '#94a3b8'; g.font = '400 20px system-ui, sans-serif'; g.textAlign = 'right';
+    g.fillText('point + trigger (right hand)', CW - 32, 58);
+    g.textAlign = 'left'; g.fillStyle = '#94a3b8'; g.font = '400 24px system-ui, sans-serif';
+    g.fillText('Cache TTL', 32, 448); g.fillStyle = '#e2e8f0'; g.textAlign = 'right'; g.fillText(ttlText(), CW - 32, 448);
+    g.textAlign = 'left'; g.fillStyle = '#94a3b8'; g.fillText('Chapters', 32, 572);
+    for (k in BTN) {
+      var b = BTN[k], hov = ui.hover === k;
+      if (k === 'ttlBar') {                              /* slider: track, fill, knob */
+        var tx = b[0] + 14, tw = b[2] - 28, ty = b[1] + b[3] / 2, f = ttlSeconds / 60;
+        rr(g, b[0], b[1], b[2], b[3], 12); g.fillStyle = hov ? '#1e293b' : 'rgba(30,41,59,.6)'; g.fill();
+        rr(g, tx, ty - 6, tw, 12, 6); g.fillStyle = '#475569'; g.fill();
+        if (f > 0) { rr(g, tx, ty - 6, Math.max(12, tw * f), 12, 6); g.fillStyle = '#22d3ee'; g.fill(); }
+        g.beginPath(); g.arc(tx + tw * f, ty, 17, 0, Math.PI * 2); g.fillStyle = '#3b82f6'; g.fill();
+        g.lineWidth = 3; g.strokeStyle = '#e2e8f0'; g.stroke();
+        continue;
+      }
+      var exit = k === 'exit';
+      rr(g, b[0], b[1], b[2], b[3], 12);
+      g.fillStyle = exit ? (hov ? '#b91c1c' : '#7f1d1d') : (hov ? '#475569' : '#334155'); g.fill();
+      g.lineWidth = hov ? 4 : 2; g.strokeStyle = hov ? '#22d3ee' : (exit ? '#f87171' : '#475569'); g.stroke();
+      g.fillStyle = '#e2e8f0'; g.font = (exit ? '700 ' : '500 ') + (b[3] > 70 ? 34 : 30) + 'px system-ui, sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b[4](), b[0] + b[2] / 2, b[1] + b[3] / 2 + 1);
+      g.textBaseline = 'alphabetic';
+    }
+    ui.pt.needsUpdate = true;
+  }
+  function act (k, ev) {
+    if (k === 'clear') { document.getElementById('btnClear').click(); }
+    else if (k === 'labels') { document.getElementById('btnLabels').click(); }
+    else if (k === 'spin') { document.getElementById('btnSpin').click(); }
+    else if (k === 'hud') { document.getElementById('btnHud').click(); }
+    else if (k === 'diag') { document.getElementById('btnDiag').click(); }
+    else if (k === 'smaller') { setArScale(arScale / 1.3); }
+    else if (k === 'bigger') { setArScale(arScale * 1.3); }
+    else if (k === 'ttlDown' || k === 'ttlUp' || k === 'ttlBar') {
+      var v = ttlSeconds;
+      if (k === 'ttlDown') { v -= 5; } else if (k === 'ttlUp') { v += 5; }
+      else {
+        var p = ev && ev.detail && ev.detail.intersection && ev.detail.intersection.point;
+        if (p) {
+          var loc = ui.zones.ttlBar.object3D.worldToLocal(p.clone()), b = BTN.ttlBar;
+          var wTrack = (b[2] - 28) / CW * PW, frac = (loc.x + wTrack / 2) / wTrack;
+          v = Math.round(Math.max(0, Math.min(1, frac)) * 12) * 5;
+        }
+      }
+      var t = document.getElementById('ttl');
+      t.value = String(Math.max(0, Math.min(60, v))); t.dispatchEvent(new Event('input'));
+    }
+    else if (k === 'lobby' || k === 'ch1' || k === 'ch2') {
+      /* leave AR first, so the next chapter opens normally for VR (no "continue in AR" prompt) */
+      ui.pendingHref = { lobby: 'index.html', ch1: 'datacentre.html', ch2: 'loadbalancer.html' }[k];
+      try { scene.exitVR(); } catch (e) {}
+      setTimeout(function () { if (ui.pendingHref) { var h = ui.pendingHref; ui.pendingHref = ''; location.href = h; } }, 1500);
+    }
+    else if (k === 'exit') { try { scene.exitVR(); } catch (e2) {} }
+    ui.last = ''; refresh(true);
+  }
+  function buildPanel () {
+    var hand = document.getElementById('handL');
+    var P = document.createElement('a-entity');
+    P.setAttribute('id', 'arPanel');
+    P.setAttribute('position', '0 0.215 -0.03');     /* floats just above the left controller, tilted to face you */
+    P.setAttribute('rotation', '-40 0 0');
+    P.setAttribute('visible', 'false');
+    hand.appendChild(P);
+    ui.panel = P;
+    ui.pc = canvasOf(CW, CH); ui.pg = ui.pc.getContext('2d'); ui.pt = texOf(ui.pc);
+    /* object3D exists from creation; adding now avoids missing an early 'loaded' event */
+    P.object3D.add(new THREE.Mesh(new THREE.PlaneGeometry(PW, PH),
+      new THREE.MeshBasicMaterial({ map: ui.pt, transparent: true, toneMapped: false, depthWrite: false })));
+    Object.keys(BTN).forEach(function (k) {
+      var b = BTN[k], z = document.createElement('a-plane');
+      var w = b[2] / CW * PW, h = b[3] / CH * PH;
+      z.setAttribute('class', 'clickable');
+      z.setAttribute('width', w.toFixed(4)); z.setAttribute('height', h.toFixed(4));
+      z.setAttribute('position', ((b[0] + b[2] / 2) / CW * PW - PW / 2).toFixed(4) + ' ' +
+                                 (PH / 2 - (b[1] + b[3] / 2) / CH * PH).toFixed(4) + ' 0.002');
+      z.setAttribute('material', 'visible: false');
+      z.dataset.arBtn = k;
+      z.addEventListener('click', function (ev) { if (ev && ev.stopPropagation) { ev.stopPropagation(); } act(k, ev); });
+      z.addEventListener('mouseenter', function () { ui.hover = k; paintPanel(); });
+      z.addEventListener('mouseleave', function () { if (ui.hover === k) { ui.hover = ''; paintPanel(); } });
+      P.appendChild(z); ui.zones[k] = z;
+    });
+    /* debug card: to the right of the panel */
+    var D = document.createElement('a-entity');
+    D.setAttribute('position', (PW / 2 + 0.165).toFixed(3) + ' 0.05 0');
+    D.setAttribute('visible', 'false');
+    P.appendChild(D); ui.dbg = D;
+    ui.dc = canvasOf(640, 560); ui.dg = ui.dc.getContext('2d'); ui.dt = texOf(ui.dc);
+    D.object3D.add(new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.2625),
+      new THREE.MeshBasicMaterial({ map: ui.dt, transparent: true, toneMapped: false, depthWrite: false })));
+    paintPanel();
+  }
+  /* ---- readout card above the globe ---- */
+  function buildCard () {
+    var C = document.createElement('a-entity');
+    C.setAttribute('id', 'arCard');
+    C.setAttribute('visible', 'false');
+    C.setAttribute('yaw-face', '');
+    scene.appendChild(C);
+    ui.card = C;
+    ui.cc = canvasOf(900, 430); ui.cg = ui.cc.getContext('2d'); ui.ct = texOf(ui.cc);
+    C.object3D.add(new THREE.Mesh(new THREE.PlaneGeometry(0.80, 0.382),
+      new THREE.MeshBasicMaterial({ map: ui.ct, transparent: true, toneMapped: false, depthWrite: false, side: THREE.DoubleSide })));
+  }
+  function paintCard () {
+    var g = ui.cg, W = 900, H = 430;
+    g.clearRect(0, 0, W, H);
+    rr(g, 4, 4, W - 8, H - 8, 24); g.fillStyle = 'rgba(6,10,22,.86)'; g.fill();
+    g.lineWidth = 3; g.strokeStyle = 'rgba(34,211,238,.45)'; g.stroke();
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    var cap = caption.getAttribute('value') || '', capC = caption.getAttribute('color') || '#e2e8f0';
+    if (cap === 'Click a user city') { cap = 'Point at a coloured city and pull the trigger'; }
+    g.fillStyle = capC; g.font = '600 32px system-ui, sans-serif'; g.fillText(cap.slice(0, 52), W / 2, 62);
+    g.fillStyle = '#94a3b8'; g.font = '700 26px system-ui, sans-serif'; g.fillText('ROUTE', W / 2, 118);
+    g.fillStyle = panelLines[1].getAttribute('color') || '#e2e8f0'; g.font = '600 34px system-ui, sans-serif';
+    g.fillText(panelLines[1].getAttribute('value') || '-', W / 2, 168);
+    g.fillStyle = panelLines[2].getAttribute('color') || '#e2e8f0'; g.font = '800 44px system-ui, sans-serif';
+    g.fillText(panelLines[2].getAttribute('value') || '-', W / 2, 228);
+    var bx = 110, bw = W - 220, frac = Math.min(1, barFill.object3D.scale.x / 0.6);
+    rr(g, bx, 256, bw, 16, 8); g.fillStyle = 'rgba(51,65,85,.8)'; g.fill();
+    if (frac > 0.003) { rr(g, bx, 256, Math.max(16, bw * frac), 16, 8);
+      g.fillStyle = barFill.getAttribute('material').color || '#34d399'; g.fill(); }
+    g.fillStyle = '#cbd5e1'; g.font = '500 28px system-ui, sans-serif';
+    g.fillText(panelLines[3].getAttribute('value') || '', W / 2, 320);
+    g.fillStyle = '#64748b'; g.font = '400 22px system-ui, sans-serif';
+    g.fillText('TTL ' + ttlText() + '  ·  latencies simulated from great-circle distance', W / 2, 380);
+    ui.ct.needsUpdate = true;
+  }
+  function paintDebug () {
+    var g = ui.dg, W = 640, H = 560;
+    g.clearRect(0, 0, W, H);
+    rr(g, 4, 4, W - 8, H - 8, 20); g.fillStyle = 'rgba(11,16,32,.94)'; g.fill();
+    g.lineWidth = 3; g.strokeStyle = 'rgba(251,191,36,.6)'; g.stroke();
+    g.textAlign = 'left'; g.fillStyle = '#fbbf24'; g.font = '700 28px system-ui, sans-serif'; g.fillText('DEBUG', 26, 46);
+    var gp = new THREE.Vector3(), cp = new THREE.Vector3();
+    globeRoot.object3D.getWorldPosition(gp); if (scene.camera) { scene.camera.getWorldPosition(cp); }
+    var s = scene.renderer && scene.renderer.xr && scene.renderer.xr.getSession && scene.renderer.xr.getSession();
+    var lines = [
+      'mode: ' + (XRQ.headsetAR(scene) ? 'headset AR (world-space)' : 'phone AR'),
+      'session: ' + (s ? (s.environmentBlendMode || 'active') : 'none'),
+      'globe placed: ' + placed + '   radius ' + (0.975 * arScale).toFixed(2) + ' m',
+      'globe at ' + gp.x.toFixed(2) + ', ' + gp.y.toFixed(2) + ', ' + gp.z.toFixed(2),
+      'you are ' + cp.distanceTo(gp).toFixed(2) + ' m from it',
+      'cached edges: ' + EDGES.filter(function (e) { return isCached(e.name); }).length + ' / ' + EDGES.length,
+      'requests: ' + stats.total + '  hits ' + stats.hits + '  in flight ' + inFlight,
+      'TTL: ' + ttlText() + '   labels ' + (labelsOn ? 'on' : 'off') + '   spin ' + (spinning ? 'on' : 'off'),
+      'coastline rings: ' + coastRings,
+      'last console: ' + (lastErr || 'none').slice(0, 40),
+      'build 26'
+    ];
+    g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
+    lines.forEach(function (ln, i) { g.fillText(ln, 26, 96 + i * 42); });
+    ui.dt.needsUpdate = true;
+  }
+  function placeCard () {
+    var gp = new THREE.Vector3(); globeRoot.object3D.getWorldPosition(gp);
+    ui.card.object3D.position.set(gp.x, gp.y + 0.975 * arScale + 0.36, gp.z);
+  }
+  function refresh (force) {
+    if (!ui.on) { return; }
+    var key = [labelsOn, spinning, hudOn, diagOn, ttlSeconds, ui.hover].join('|');
+    if (force || key !== ui.last) { ui.last = key; paintPanel(); }
+    ui.card.object3D.visible = placed && hudOn;
+    if (ui.card.object3D.visible) { placeCard(); paintCard(); }
+    ui.dbg.object3D.visible = diagOn;
+    if (diagOn) { paintDebug(); }
+    if (hudEl) { hudEl.object3D.visible = false; }   /* no head-locked HUD in the headset */
+  }
+  function enter () {
+    if (!XRQ.headsetAR(scene)) { return; }            /* phones keep their HTML bar */
+    if (!ui.panel) { buildPanel(); buildCard(); }
+    ui.on = true; ui.hover = '';
+    ui.panel.setAttribute('visible', true);          /* the attribute, or A-Frame's visible component wins */
+    XRQ.arModel = true;                               /* thumb sticks never slide you in AR: walk for real */
+    clearInterval(ui.timer); ui.timer = setInterval(function () { refresh(false); }, 250);
+    refresh(true);
+  }
+  function exit () {
+    if (!ui.on) { return; }
+    ui.on = false;
+    XRQ.arModel = false;
+    clearInterval(ui.timer); ui.timer = null;
+    ui.panel.setAttribute('visible', false); ui.card.object3D.visible = false; ui.dbg.object3D.visible = false;
+    if (hudEl) { hudEl.object3D.visible = hudOn; }
+    if (ui.pendingHref) { var h = ui.pendingHref; ui.pendingHref = ''; setTimeout(function () { location.href = h; }, 60); }
+  }
+  return { enter: enter, exit: exit, refresh: refresh, state: ui, act: act, BTN: BTN };
+})();
+window.__arUI = arUI;
+
 /* ---- startup ------------------------------------------------------------- */
 function reportSupport () {
   if (!navigator.xr || !navigator.xr.isSessionSupported) {
@@ -1636,6 +1961,7 @@ function start () {
     '2  a cache hit serves in milliseconds, a miss walks to origin',
     '3  TTL trades freshness against speed',
     '4  hit ratio is the number that pays the bills'], 74);
+  buildHall();
   buildGlobe();
   buildMarkers();
   buildHud();
@@ -1647,6 +1973,7 @@ function start () {
   });
   reportSupport();
   loadCoastlines();
+  if (window.XRQ && XRQ.maybeResume) { XRQ.maybeResume(scene); }   /* was done by ar-model */
 }
 
 function startOnce () { window.__cdnStarted = true; start(); }
@@ -1741,51 +2068,6 @@ window.HUDTAB = {
 document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   b.addEventListener('click', function () { window.HUDTAB.toggle(b.getAttribute('data-tab')); });
 });
-</script>
-<script>
-/* --- VR control wall: mirrors the tab HUD inside the headset ----------- */
-(function () {
-  var scn = document.querySelector('a-scene');
-  function place(show) {
-    var menu = document.getElementById('vrmenu');
-    if (!menu) { return; }
-    menu.object3D.visible = !!show;
-    if (!show) { return; }
-    XRQ.faceUser(menu, 2.1, 1.5);   /* build 12: was placed behind the user */
-  }
-  scn.addEventListener('enter-vr', function () { place(true); });
-  scn.addEventListener('exit-vr', function () { place(false); });
-  function sync() {
-    var set = function (id, txt) {
-      var t = document.querySelector('#' + id + ' a-text');
-      if (t) { t.setAttribute('value', txt); }
-    };
-    set('vm-labels', document.getElementById('btnLabels').textContent.trim().toLowerCase());
-    set('vm-spin', document.getElementById('btnSpin').textContent.trim().toLowerCase());
-    set('vm-read', document.getElementById('btnHud').textContent.trim().toLowerCase());
-    var ttl = document.getElementById('ttl');
-    set('vm-ttlu', 'ttl ' + (ttl.value === '0' ? 'off' : ttl.value + 's') + ' +');
-  }
-  function wire(id, fn) {
-    document.getElementById(id).addEventListener('click', function () { fn(); sync(); });
-  }
-  wire('vm-clear', function () { document.getElementById('btnClear').click(); });
-  wire('vm-ttld', function () {
-    var t = document.getElementById('ttl');
-    t.value = String(Math.max(0, Number(t.value) - 5));
-    t.dispatchEvent(new Event('input'));
-  });
-  wire('vm-ttlu', function () {
-    var t = document.getElementById('ttl');
-    t.value = String(Math.min(60, Number(t.value) + 5));
-    t.dispatchEvent(new Event('input'));
-  });
-  wire('vm-labels', function () { document.getElementById('btnLabels').click(); });
-  wire('vm-spin', function () { document.getElementById('btnSpin').click(); });
-  wire('vm-read', function () { document.getElementById('btnHud').click(); });
-  wire('vm-tour', function () { document.getElementById('btnTour').click(); });
-  wire('vm-exit', function () { scn.exitVR(); });
-})();
 </script>
 <script>
 /* thumb stick -> window.TOUCHJOY, consumed by rig-walk */

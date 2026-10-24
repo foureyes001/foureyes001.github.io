@@ -67,6 +67,16 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 26 (24 Oct 2026) - chapter 3 becomes AR-only for the Quest app
+- Chapter 3 (cdn.html) offers **AR only**: the VR button, the in-VR control wall and the shared AR MODEL panel are gone on this page (chapters 1 and 2 and the lobby are unchanged, VR as before).
+- Globe recoloured to the original navy (#14335e, lit) with cyan coastlines (#7ee8fa); no painted land.
+- Normal page: the grey room became a chapter-2 style hall (rack ring with LED strips, lit wall, ceiling light rings, LED bokeh, line-drawn floor grid, glow ring under the globe). The "Click a user city" caption and ROUTE panel moved clear of the top bar and tab bar.
+- Quest AR controls, one panel on the **left controller** (point with the right controller, pull the trigger): Clear all caches, Labels on/off, Spin on/off, Readouts on/off, Debug on/off, Size -/+, Cache TTL slider (click the bar or use -/+), Lobby / Ch 1 / Ch 2, Exit AR. Chapter buttons leave AR first, so the next chapter opens normally for VR.
+- The globe is placed in front of you automatically, stays fixed in the room and you walk around it (thumb sticks do not move you in AR). Size grows/shrinks it in place, never into the floor.
+- Readout card (route, HIT/MISS, latency bar, hit ratio, TTL) floats above the globe and turns to face you; debug info shows as a card beside the panel.
+- In AR the hall, the chapter 2 door and the teaching board are hidden: only the globe, its labels, the readout card and your panel.
+- Phone AR is unchanged (HTML button bar via dom-overlay).
+
 ## Build 25 (24 Oct 2026) - chapter 2 final touches
 - Users-to-balancer fibres now really start at the Users panel's edge (they were bunching at the balancer), with 360 streaming fibre dots.
 - Ceiling halo above the beam: bigger ring, warmer and lighter glow.
