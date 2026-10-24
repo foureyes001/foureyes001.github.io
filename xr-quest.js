@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 31).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 31c).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 31';
+  var BUILD = 'build 31c';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -95,6 +95,82 @@
     return xr && xr.getSession ? xr.getSession() : null;
   }
   XRQ.inXR = function (sc) { return sc.is('vr-mode') || sc.is('ar-mode'); };
+
+  /* ---------- build 31c: live XR support (all pages) ------------------------------
+     A-Frame asks the browser ONCE, when its script loads, whether VR/AR are supported,
+     and keeps that answer. With the Immersive Web Emulator the extension can install its
+     emulated headset AFTER that moment; A-Frame then remembers the PC's own answer
+     (often "VR yes, AR no" with the Quest Link software installed), and every later
+     enterAR() fails with "immersive-ar mode not supported" although AR works.
+     Fix: ask the browser again at the moment of use, and refresh the answer a few times
+     after load. A real Quest answers the same both times, so nothing changes there. */
+  XRQ.support = { vr: null, ar: null };
+  function refreshSupport () {
+    var x = navigator.xr;
+    if (!x || !x.isSessionSupported) { return Promise.resolve(XRQ.support); }
+    var ask = function (m) { try { return x.isSessionSupported(m).catch(function () { return false; }); } catch (e) { return Promise.resolve(false); } };
+    return Promise.all([ask('immersive-vr'), ask('immersive-ar')]).then(function (r) {
+      XRQ.support.vr = !!r[0]; XRQ.support.ar = !!r[1];
+      showXRButtons();
+      return XRQ.support;
+    });
+  }
+  XRQ.refreshSupport = refreshSupport;
+  /* A-Frame hides its AR button when its stale flag says "no AR": show it again if the browser says yes */
+  function showXRButtons () {
+    var sc = document.querySelector('a-scene');
+    if (!sc || XRQ.inXR(sc)) { return; }
+    if (XRQ.support.ar) {
+      Array.prototype.forEach.call(document.querySelectorAll('.a-enter-ar'), function (el) { el.classList.remove('a-hidden'); });
+    }
+    if (XRQ.support.vr) {
+      Array.prototype.forEach.call(document.querySelectorAll('.a-enter-vr'), function (el) { el.classList.remove('a-hidden'); });
+    }
+  }
+  var SceneCtor = window.customElements && customElements.get('a-scene');
+  if (SceneCtor && SceneCtor.prototype && !SceneCtor.prototype.__xrqLive) {
+    var SP = SceneCtor.prototype, origCheck = SP.checkHeadsetConnected, origEnterAR = SP.enterAR;
+    SP.__xrqLive = true;
+    SP.checkHeadsetConnected = function () {
+      return origCheck.call(this) || !!XRQ.support.vr || !!XRQ.support.ar;
+    };
+    SP.enterAR = function () {
+      var self = this;
+      if (!navigator.xr || !navigator.xr.isSessionSupported) { return origEnterAR.call(this); }
+      return refreshSupport().then(function (s) {
+        if (!s.ar) { throw new Error('This browser or device reports no immersive-ar support right now.'); }
+        return self.enterVR(true);                  /* what A-Frame's own enterAR does after its (stale) check */
+      });
+    };
+  }
+  refreshSupport();
+  document.addEventListener('DOMContentLoaded', function () {
+    refreshSupport();
+    [1500, 4000].forEach(function (ms) { setTimeout(refreshSupport, ms); });   /* catch a late emulator */
+    if (navigator.xr && navigator.xr.addEventListener) { navigator.xr.addEventListener('devicechange', refreshSupport); }
+    var sc = document.querySelector('a-scene');
+    if (!sc) { return; }
+    /* A-Frame re-hides its buttons on enter/exit; re-apply after it */
+    ['enter-vr', 'exit-vr', 'loaded'].forEach(function (ev) { sc.addEventListener(ev, function () { setTimeout(showXRButtons, 0); }); });
+    /* A-Frame's AR hit-test helpers keep listening for EVERY later session start and call
+       requestHitTestSourceForTransientInput, which the emulator does not implement: that throw
+       broke three.js's session start, so "Back to VR" never finished. Supply a rejecting stand-in
+       (A-Frame already handles a rejection). Registered at load, so it runs before A-Frame's. */
+    var guard = function () {
+      var xr = sc.renderer && sc.renderer.xr;
+      if (!xr || xr.__xrqGuard) { return; }
+      xr.__xrqGuard = true;
+      xr.addEventListener('sessionstart', function () {
+        var s = xr.getSession && xr.getSession();
+        if (s && typeof s.requestHitTestSourceForTransientInput !== 'function') {
+          s.requestHitTestSourceForTransientInput = function () {
+            return Promise.reject(new Error('transient-input hit test not available in this session'));
+          };
+        }
+      });
+    };
+    if (sc.renderer) { guard(); } else { sc.addEventListener('renderstart', guard); sc.addEventListener('loaded', guard); }
+  });
   /* build 14: true while the user types in a text field (incl. inside shadow DOM,
      e.g. the Immersive Web Emulator's panels) - page shortcuts must ignore it. */
   XRQ.typing = function (e) {
