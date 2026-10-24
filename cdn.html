@@ -176,7 +176,49 @@ AFRAME.registerComponent('rig-walk', {
   }
 });
 /* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
-/* build 26: turn to face the viewer about the vertical axis only (AR readout card) */
+/* build 27: a panel that hangs to the lower-left of where you look and drifts after you
+   only when you turn or walk away from it (not on every small head movement). */
+AFRAME.registerComponent('lazy-follow', {
+  schema: { dist: { default: 0.8 }, side: { default: -0.30 }, down: { default: 0.32 },
+            maxMove: { default: 0.30 }, maxAngle: { default: 40 } },
+  init: function () {
+    this.h = new THREE.Vector3(); this.f = new THREE.Vector3(); this.t = new THREE.Vector3();
+    this.d = new THREE.Vector3(); this.moving = false; this.wasVisible = false;
+  },
+  target: function (cam) {
+    cam.getWorldPosition(this.h); cam.getWorldDirection(this.f);
+    this.f.y = 0; if (this.f.lengthSq() < 1e-6) { this.f.set(0, 0, -1); } this.f.normalize();
+    var D = this.data;
+    this.t.copy(this.h).addScaledVector(this.f, D.dist);
+    this.t.x += -this.f.z * D.side; this.t.z += this.f.x * D.side;    /* right = (-f.z, 0, f.x) */
+    this.t.y = this.h.y - D.down;
+    return this.t;
+  },
+  snap: function (cam) {
+    var o = this.el.object3D;
+    o.position.copy(this.target(cam)); o.lookAt(this.h); this.moving = false;
+  },
+  tick: function (t, dt) {
+    var cam = this.el.sceneEl.camera, o = this.el.object3D;
+    if (!cam) { return; }
+    var vis = o.visible;
+    if (vis && !this.wasVisible) { this.snap(cam); }
+    this.wasVisible = vis;
+    if (!vis) { return; }
+    var tg = this.target(cam);
+    if (!this.moving) {
+      this.d.subVectors(o.position, this.h).setY(0);
+      var ang = this.d.lengthSq() > 1e-6 ? THREE.MathUtils.radToDeg(this.d.angleTo(this.f)) : 0;
+      if (o.position.distanceTo(tg) > this.data.maxMove || ang > this.data.maxAngle + 30) { this.moving = true; }
+    }
+    if (this.moving) {
+      o.position.lerp(tg, Math.min(1, (dt || 16) / 1000 * 4));
+      if (o.position.distanceTo(tg) < 0.02) { this.moving = false; }
+    }
+    o.lookAt(this.h);                                   /* +z (the panel face) turns toward your eyes */
+  }
+});
+/* build 27: turn to face the viewer about the vertical axis only (AR readout card) */
 AFRAME.registerComponent('yaw-face', {
   init: function () { this._v = new THREE.Vector3(); this._p = new THREE.Vector3(); },
   tick: function () {
@@ -408,7 +450,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 26</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 27</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -466,7 +508,7 @@ window.doorGo = function (href) {
     <a-entity id="takeaways" position="-5.2 2.0 -5.2" rotation="0 45 0">
       <a-plane geometry="width: 4.4; height: 2.2" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
     </a-entity>
-    <a-entity id="room"><!-- build 26: chapter-2 style hall, built by buildHall() --></a-entity>
+    <a-entity id="room"><!-- build 27: chapter-2 style hall, built by buildHall() --></a-entity>
 
   <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html" position="0 0 9.2">
     <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
@@ -500,7 +542,7 @@ window.doorGo = function (href) {
     <a-entity id="handL" laser-controls="hand: left"
               raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
   </a-entity>
-  <!-- build 26: chapter 3 is AR-only; the in-headset controls are #arPanel on the left controller -->
+  <!-- build 27: chapter 3 is AR-only; the in-headset controls are #arPanel on the left controller -->
 </a-scene>
 
 <script>
@@ -539,7 +581,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 26\n' +
+    'build 27\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -668,7 +710,7 @@ function makeEntity (parent, tag, attrs) {
   return el;
 }
 
-/* ---- build 26: the hall (chapter 2's look, scaled to this room) ---------- */
+/* ---- build 27: the hall (chapter 2's look, scaled to this room) ---------- */
 function hallTex (c, rep) {
   var t = new THREE.CanvasTexture(c); t.colorSpace = 'srgb'; t.anisotropy = 4;
   if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
@@ -795,7 +837,7 @@ function buildHall () {
 function buildGlobe () {
   makeEntity(globeRoot, 'a-sphere', {
     radius: 0.975, 'segments-width': 44, 'segments-height': 28,
-    material: 'color: #14335e; roughness: 0.85; metalness: 0.05'   /* build 26: navy, as in the original cdn.html */
+    material: 'color: #14335e; roughness: 0.85; metalness: 0.05'   /* build 27: navy, as in the original cdn.html */
   });
 
   /* Rim glow: a slightly larger sphere rendered from the inside. */
@@ -933,7 +975,7 @@ function drawCoastlines (geo) {
 
   globeRoot.object3D.add(group);
   coastRings = rings;
-  /* build 26: no painted land - plain navy ocean with cyan coastlines, like the original */
+  /* build 27: no painted land - plain navy ocean with cyan coastlines, like the original */
   setStatus('map drawn: ' + rings + ' coastline outlines. Ready.');
 }
 
@@ -1043,11 +1085,11 @@ function buildHud () {
   caption = makeEntity(hudEl, 'a-text', {
     value: 'Click a user city', color: PAL.text, align: 'center',
     width: 0.62, 'wrap-count': 36,
-    'hud-item': 'align: bottom; offset: 0.40; dist: 1; fitWidth: 0.42'   /* build 26: was hidden under the top bar */
+    'hud-item': 'align: bottom; offset: 0.40; dist: 1; fitWidth: 0.42'   /* build 27: was hidden under the top bar */
   });
 
   var panel = makeEntity(hudEl, 'a-entity', {
-    'hud-item': 'align: bottom; offset: 0.235; dist: 1; fitWidth: 0.46'   /* build 26: clear of the tab bar */
+    'hud-item': 'align: bottom; offset: 0.235; dist: 1; fitWidth: 0.46'   /* build 27: clear of the tab bar */
   });
   if (window.matchMedia && matchMedia('(pointer: coarse)').matches) {
     panel.object3D.visible = false;
@@ -1416,7 +1458,7 @@ function setArScale (k) {
   arScale = Math.min(1.4, Math.max(0.12, k));
   if (placed) {
     globeRoot.object3D.scale.setScalar(arScale);
-    if (XRQ.headsetAR(scene)) {          /* build 26: Quest - grow/shrink in place, never into the floor */
+    if (XRQ.headsetAR(scene)) {          /* build 27: Quest - grow/shrink in place, never into the floor */
       var gp = globeRoot.object3D.position;
       gp.y = Math.max(gp.y, placedFloorY + 0.975 * arScale + 0.08);
     } else {
@@ -1705,7 +1747,7 @@ document.getElementById('btnRecentre').addEventListener('click', function () {
   setStatus('view recentred');
 });
 
-/* ---- build 26: Quest AR controls ------------------------------------------
+/* ---- build 27: Quest AR controls ------------------------------------------
    One panel on the LEFT controller (point with the right one and pull the
    trigger), a readout card that floats above the globe and turns to face you,
    and a debug card beside the panel. Everything is drawn on canvases in the
@@ -1746,7 +1788,7 @@ var arUI = (function () {
     g.textAlign = 'left'; g.textBaseline = 'alphabetic';
     g.fillStyle = '#22d3ee'; g.font = '700 34px system-ui, sans-serif'; g.fillText('CDN CONTROLS', 32, 60);
     g.fillStyle = '#94a3b8'; g.font = '400 20px system-ui, sans-serif'; g.textAlign = 'right';
-    g.fillText('point + trigger (right hand)', CW - 32, 58);
+    g.fillText('point + trigger  \u00b7  Y hides', CW - 32, 58);
     g.textAlign = 'left'; g.fillStyle = '#94a3b8'; g.font = '400 24px system-ui, sans-serif';
     g.fillText('Cache TTL', 32, 448); g.fillStyle = '#e2e8f0'; g.textAlign = 'right'; g.fillText(ttlText(), CW - 32, 448);
     g.textAlign = 'left'; g.fillStyle = '#94a3b8'; g.fillText('Chapters', 32, 572);
@@ -1803,13 +1845,18 @@ var arUI = (function () {
     ui.last = ''; refresh(true);
   }
   function buildPanel () {
-    var hand = document.getElementById('handL');
+    /* build 27: floats ~0.8 m away, lower-left of your view, follows you lazily.
+       Point EITHER controller at it and pull the trigger. Y (left controller) hides/shows it. */
     var P = document.createElement('a-entity');
     P.setAttribute('id', 'arPanel');
-    P.setAttribute('position', '0 0.215 -0.03');     /* floats just above the left controller, tilted to face you */
-    P.setAttribute('rotation', '-40 0 0');
+    P.setAttribute('scale', '1.25 1.25 1.25');
+    P.setAttribute('lazy-follow', '');
     P.setAttribute('visible', 'false');
-    hand.appendChild(P);
+    scene.appendChild(P);
+    var hand = document.getElementById('handL');
+    ['ybuttondown', 'ybuttonup'].forEach(function (evName) {
+      hand.addEventListener(evName, function () { if (evName === 'ybuttondown') { toggleHidden(); } });
+    });
     ui.panel = P;
     ui.pc = canvasOf(CW, CH); ui.pg = ui.pc.getContext('2d'); ui.pt = texOf(ui.pc);
     /* object3D exists from creation; adding now avoids missing an early 'loaded' event */
@@ -1831,7 +1878,7 @@ var arUI = (function () {
     });
     /* debug card: to the right of the panel */
     var D = document.createElement('a-entity');
-    D.setAttribute('position', (PW / 2 + 0.165).toFixed(3) + ' 0.05 0');
+    D.setAttribute('position', (-(PW / 2 + 0.165)).toFixed(3) + ' 0.05 0');   /* left of the panel: keeps the globe clear */
     D.setAttribute('visible', 'false');
     P.appendChild(D); ui.dbg = D;
     ui.dc = canvasOf(640, 560); ui.dg = ui.dc.getContext('2d'); ui.dt = texOf(ui.dc);
@@ -1895,7 +1942,7 @@ var arUI = (function () {
       'TTL: ' + ttlText() + '   labels ' + (labelsOn ? 'on' : 'off') + '   spin ' + (spinning ? 'on' : 'off'),
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
-      'build 26'
+      'build 27'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 96 + i * 42); });
@@ -1915,10 +1962,16 @@ var arUI = (function () {
     if (diagOn) { paintDebug(); }
     if (hudEl) { hudEl.object3D.visible = false; }   /* no head-locked HUD in the headset */
   }
+  function toggleHidden () {
+    if (!ui.on) { return; }
+    ui.hidden = !ui.hidden;
+    ui.panel.setAttribute('visible', !ui.hidden);
+    setStatus(ui.hidden ? 'controls hidden - press Y to bring them back' : 'controls shown');
+  }
   function enter () {
     if (!XRQ.headsetAR(scene)) { return; }            /* phones keep their HTML bar */
     if (!ui.panel) { buildPanel(); buildCard(); }
-    ui.on = true; ui.hover = '';
+    ui.on = true; ui.hover = ''; ui.hidden = false;
     ui.panel.setAttribute('visible', true);          /* the attribute, or A-Frame's visible component wins */
     XRQ.arModel = true;                               /* thumb sticks never slide you in AR: walk for real */
     clearInterval(ui.timer); ui.timer = setInterval(function () { refresh(false); }, 250);
@@ -1933,7 +1986,7 @@ var arUI = (function () {
     if (hudEl) { hudEl.object3D.visible = hudOn; }
     if (ui.pendingHref) { var h = ui.pendingHref; ui.pendingHref = ''; setTimeout(function () { location.href = h; }, 60); }
   }
-  return { enter: enter, exit: exit, refresh: refresh, state: ui, act: act, BTN: BTN };
+  return { enter: enter, exit: exit, refresh: refresh, state: ui, act: act, BTN: BTN, toggleHidden: function () { toggleHidden(); } };
 })();
 window.__arUI = arUI;
 

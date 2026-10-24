@@ -67,6 +67,11 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 27 (24 Oct 2026) - chapter 3 AR panel floats instead of riding the controller
+- The AR control panel is no longer attached to the left controller (it blocked the view and was hard to aim at). It now floats about 0.8 m away at the lower-left of where you look, faces you, and drifts after you only when you turn or walk away (`lazy-follow`).
+- Point EITHER controller at it and pull the trigger. Press **Y** on the left controller to hide/show it.
+- The debug card sits to the left of the panel so the globe stays clear.
+
 ## Build 26 (24 Oct 2026) - chapter 3 becomes AR-only for the Quest app
 - Chapter 3 (cdn.html) offers **AR only**: the VR button, the in-VR control wall and the shared AR MODEL panel are gone on this page (chapters 1 and 2 and the lobby are unchanged, VR as before).
 - Globe recoloured to the original navy (#14335e, lit) with cyan coastlines (#7ee8fa); no painted land.
