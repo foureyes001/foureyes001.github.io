@@ -1021,6 +1021,7 @@ window.doorGo = function (href) {
     P.mesh.renderOrder = 4;
     var back = add(holder, new THREE.Mesh(new THREE.PlaneGeometry(w * 1.02, h * 1.03), basic({ color: '#06122a' })));
     back.rotation.y = Math.PI; back.position.z = -0.03;      /* solid from behind */
+    if (key === 'db') { back.material.side = THREE.DoubleSide; }   /* the teach panel sits behind it in view 3 - don't let it show through */
     var hm = halo(root, new V3(pos.x, 0.03, pos.z).lerp(new V3(0, 0, pos.z), 0), Math.max(w, 1.5) * 1.1, P.accent, 0.18);
     hm.position.y = 0.05; hm.scale.y = 0.35 * hm.scale.y;
     var ent = document.createElement('a-entity');      /* click overlay frame for this panel */
@@ -1186,44 +1187,36 @@ window.doorGo = function (href) {
     up(P);
   }
   function drawDb () {
-    var P = PANELS.db, g = P.g, W = P.W, H = P.H;
+    var P = PANELS.db, g = P.g, W = P.W, H = P.H;          /* canvas is 1080 x 396 - everything must fit inside */
     panelBg(g, W, H, '', '#fbbf24');
     txt(g, 'DATABASE TIER - LIVE CONSOLE', 44, 70, 40, '#fde68a', 700);
     txt(g, 'Every finished request touches this tier', 44, 112, 26, '#c9d8ea');
-    txt(g, 'writes', 44, 176, 28, '#c9d8ea'); txt(g, String(DB.writes), 140, 178, 38, '#ffffff', 700);
-    txt(g, 'reads', 290, 176, 28, '#c9d8ea'); txt(g, String(DB.reads), 368, 178, 38, '#ffffff', 700);
-    txt(g, 'read share ' + Math.round(DB.readShare * 100) + '%', 44, 228, 28, '#c9d8ea');
+    txt(g, 'writes', 44, 172, 28, '#c9d8ea'); txt(g, String(DB.writes), 140, 174, 38, '#ffffff', 700);
+    txt(g, 'reads', 280, 172, 28, '#c9d8ea'); txt(g, String(DB.reads), 370, 174, 38, '#ffffff', 700);
+    txt(g, 'read share ' + Math.round(DB.readShare * 100) + '%', 44, 218, 28, '#c9d8ea');
     var cols = [['REPLICA 1', DB.reps[0]], ['PRIMARY', DB.primary], ['REPLICA 2', DB.reps[1]]];
     cols.forEach(function (c, i) {
-      var x = 560 + i * 200, u = c[1], prim = c[0] === 'PRIMARY';
+      var cx = 615 + i * 180, u = c[1], prim = c[0] === 'PRIMARY';     /* column centres 615 / 795 / 975 */
       var col = u.state === 'dead' ? '#f87171' : u.state === 'resync' ? '#fbbf24' : prim ? '#fbbf24' : '#2dd4bf';
-      g.beginPath(); g.arc(x - 12, 156, 9, 0, TAU); g.fillStyle = col; g.fill();
-      txt(g, c[0], x, 166, 27, col, 700);
-      txt(g, 'ops ' + u.ops, x, 206, 25, '#dbeeff');
+      g.font = '700 24px ' + FONT; var tw = g.measureText(c[0]).width;
+      g.beginPath(); g.arc(cx - tw / 2 - 14, 147, 8, 0, TAU); g.fillStyle = col; g.fill();
+      txt(g, c[0], cx + 6, 156, 24, col, 700, 'center');
+      txt(g, 'ops ' + u.ops, cx, 194, 23, '#dbeeff', 400, 'center');
       txt(g, prim ? 'heat ' + Math.round(Math.min(1, u.load / 6) * 100) + '%' :
-        (u.state === 'live' ? 'lag ~' + Math.round(u.lagMs) + ' ms' : u.state === 'dead' ? 'DOWN' : 'RESYNC'), x, 240, 25, '#dbeeff');
-      var cyx = x + 50, cyy = 300;
-      g.fillStyle = 'rgba(20,40,70,.95)'; g.fillRect(cyx - 34, cyy, 68, 70);
-      g.beginPath(); g.ellipse(cyx, cyy, 34, 11, 0, 0, TAU); g.fillStyle = col; g.fill();
-      g.beginPath(); g.ellipse(cyx, cyy + 70, 34, 11, 0, 0, Math.PI); g.fillStyle = 'rgba(20,40,70,.95)'; g.fill();
+        (u.state === 'live' ? 'lag ~' + Math.round(u.lagMs) + ' ms' : u.state === 'dead' ? 'DOWN' : 'RESYNC'), cx, 226, 23, '#dbeeff', 400, 'center');
+      var cyy = 268;
+      g.fillStyle = 'rgba(20,40,70,.95)'; g.fillRect(cx - 32, cyy, 64, 66);
+      g.beginPath(); g.ellipse(cx, cyy, 32, 10, 0, 0, TAU); g.fillStyle = col; g.fill();
+      g.beginPath(); g.ellipse(cx, cyy + 66, 32, 10, 0, 0, Math.PI); g.fillStyle = 'rgba(20,40,70,.95)'; g.fill();
     });
-    txt(g, '←', 742, 345, 44, '#7dd3fc', 700, 'center'); txt(g, '→', 922, 345, 44, '#7dd3fc', 700, 'center');
-    var cx = 1060, cw = W - cx - 40;
-    txt(g, 'Replication Lag (ms)', cx, 166, 25, '#cde8ff', 600);
-    var gy = 190, gh = 210;
-    ['400', '200', '0'].forEach(function (l, i) { var y = gy + i * gh / 2; txt(g, l, cx + 40, y + 8, 20, '#8fb8dc', 400, 'right');
-      g.strokeStyle = 'rgba(125,211,252,.15)'; g.beginPath(); g.moveTo(cx + 50, y); g.lineTo(cx + cw, y); g.stroke(); });
-    [[M.lag1, '#60a5fa'], [M.lag2, '#2dd4bf']].forEach(function (s) {
-      g.strokeStyle = s[1]; g.lineWidth = 3; g.beginPath();
-      s[0].forEach(function (v, i) { var x = cx + 50 + i / (s[0].length - 1) * (cw - 50), y = gy + gh * (1 - Math.min(1, v / 400));
-        if (i) { g.lineTo(x, y); } else { g.moveTo(x, y); } }); g.stroke();
-    });
-    txt(g, '● Replica 1', cx + 50, gy + gh + 40, 22, '#60a5fa'); txt(g, '● Replica 2', cx + 220, gy + gh + 40, 22, '#2dd4bf');
+    txt(g, '←', 705, 314, 40, '#7dd3fc', 700, 'center'); txt(g, '→', 885, 314, 40, '#7dd3fc', 700, 'center');
     var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
-    rr(g, 44, 270, 400, 64, 14); g.fillStyle = anyDead ? 'rgba(16,185,129,.35)' : 'rgba(239,68,68,.3)'; g.fill();
+    rr(g, 44, 246, 400, 58, 14); g.fillStyle = anyDead ? 'rgba(16,185,129,.35)' : 'rgba(239,68,68,.3)'; g.fill();
     g.strokeStyle = anyDead ? '#34d399' : '#f87171'; g.lineWidth = 2; g.stroke();
-    txt(g, anyDead ? 'RESTORE REPLICA' : 'KILL A REPLICA', 244, 313, 28, '#ffffff', 700, 'center');
-    txt(g, DB.lastEvent || 'last event: none yet', 44, H - 50, 24, '#c9d8ea');
+    txt(g, anyDead ? 'RESTORE REPLICA' : 'KILL A REPLICA', 244, 286, 28, '#ffffff', 700, 'center');
+    var ev = DB.lastEvent || 'last event: none yet';
+    g.font = '400 22px ' + FONT; while (ev.length > 8 && g.measureText(ev).width > 500) { ev = ev.slice(0, -2); }
+    txt(g, ev === (DB.lastEvent || 'last event: none yet') ? ev : ev + '...', 44, 352, 22, '#c9d8ea');
     up(P);
   }
   function drawTeach () {
@@ -1755,7 +1748,7 @@ window.doorGo = function (href) {
     ALGOS.forEach(function (a, k) { zone(PANELS.algos, 36, 108 + k * 158, PANELS.algos.W - 72, 140, function () { setAlgo(a.k); }); });
     zone(PANELS.auto, PANELS.auto.W - 160, 26, 120, 62, toggleAuto);
     zone(PANELS.auto, 40, 110 + 4 * 56, 470, 60, toggleCd);
-    zone(PANELS.db, 44, 270, 400, 64, dbToggle);
+    zone(PANELS.db, 44, 246, 400, 58, dbToggle);
     zone(PANELS.users, 40, 90, 380, 150, function () {
       openInfo('USERS (LIVE)', 'people around the world pressing refresh\neach strand of light is a stream of requests\ninto the load balancer\ntraffic ' + rate + ' req/s (TRAFFIC & POOL)', PANELS.users.holder.position);
     });
