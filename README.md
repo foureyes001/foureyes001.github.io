@@ -67,6 +67,13 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 32 (25 Oct 2026) - Quest app packaging (2D), no page changes
+- The site is packaged as a 2D Meta Quest app with Meta's Bubblewrap CLI: package `io.github.foureyes001.insidethecloud`, launcher name "Inside Cloud", targetSdk 32, sideload only. Steps in `QUEST-APP-GUIDE.md`; build/install scripts in `tools/quest-app/`.
+- `/.well-known/assetlinks.json` published with the release key's SHA-256 fingerprint (Digital Asset Links), so the app opens the site without a browser bar.
+- `bubblewrap build` fails on Windows with newer Node ("spawn EINVAL": Node no longer starts .bat files directly), so the script runs the same Gradle, zipalign and apksigner steps itself.
+- Meta's Platform SDK (Store features; init wrote app ID 0) is turned off for the sideloaded app.
+- Page stamps stay "build 31c": no page changed. The app loads the live site, so site updates need no rebuild.
+
 ## Build 31c (24 Oct 2026) - AR with the Immersive Web Emulator (all pages)
 - Reproduced with Meta's own emulator runtime (IWER, compiled from source) in a test browser: when the emulator extension installs its fake headset after A-Frame has loaded, A-Frame keeps the PC's original answer ("AR not supported") forever, so every enterAR() failed with "immersive-ar mode not supported" although the page reported AR available.
 - xr-quest.js now re-asks the browser at the moment AR/VR is started (and refreshes the answer at 1.5 s and 4 s after load and on 'devicechange'), shows A-Frame's AR/VR button again when the browser supports it, and lets A-Frame request a session when the browser says a headset is there. A real Quest answers the same both times.

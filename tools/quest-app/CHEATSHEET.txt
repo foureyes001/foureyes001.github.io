@@ -1,0 +1,31 @@
+INSIDE THE CLOUD - answers for "bubblewrap init"  (1-build.bat, step 2)
+
+Use the arrow keys + Enter for choices. If a question is not listed here,
+press Enter to keep the default it shows. If unsure, ask Claude.
+
+  Install JDK 17 / Android SDK? ........ Yes  (accepting the licence is your call)
+  Domain ............................... foureyes001.github.io        (default)
+  URL path ............................. /index.html                  (default)
+  Application name ..................... Inside the Cloud             (default)
+  Short name (max 12) .................. Inside Cloud
+  Application ID / package ............. io.github.foureyes001.insidethecloud
+  App mode (Meta) ...................... 2D
+  Meta App ID .......................... leave EMPTY, press Enter
+  Starting version code ................ 1                            (default)
+  Display mode ......................... standalone                   (default)
+  Orientation .......................... landscape                    (default)
+  Colours / icon URLs .................. defaults
+  Play Billing ......................... No
+  Geolocation .......................... No
+  Key store location ................... default (./android.keystore)
+  Key name ............................. android                      (default)
+  Your name / organisation / country ... anything (goes in the certificate)
+  Key store password + key password .... YOU choose and type them. WRITE THEM DOWN.
+
+During the build (step 4):
+  - The script runs Gradle + zipalign + apksigner itself ("bubblewrap build"
+    fails on new Node versions with "spawn EINVAL").
+  - apksigner asks for the KEYSTORE password, then the KEY password if they differ.
+
+Keep project\android.keystore + both passwords safe (back up to a USB stick
+or cloud drive). Every future update needs the same key and package ID.
