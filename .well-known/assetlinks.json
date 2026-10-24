@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "io.github.foureyes001.insidethecloud",
+    "sha256_cert_fingerprints": ["91:F9:04:3D:A3:2E:6A:1E:3B:BF:A6:84:96:51:40:7B:E9:49:35:1C:C4:5C:91:7E:B7:BD:0D:38:6B:A2:A3:33"]
+  }
+}]
