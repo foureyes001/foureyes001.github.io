@@ -72,6 +72,7 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - xr-quest.js now re-asks the browser at the moment AR/VR is started (and refreshes the answer at 1.5 s and 4 s after load and on 'devicechange'), shows A-Frame's AR/VR button again when the browser supports it, and lets A-Frame request a session when the browser says a headset is there. A real Quest answers the same both times.
 - Second emulator bug found the same way: A-Frame's AR hit-test helpers listen for every later session start and call requestHitTestSourceForTransientInput, which the emulator lacks; the throw stopped "Back to VR" from finishing. A rejecting stand-in is now supplied when a session lacks it (A-Frame already handles the rejection).
 - Emulator results (both load orders): page AR button -> AR; VR -> Switch to AR -> AR; Back to VR -> VR. Stamps read "build 31c".
+- QUEST-APP-GUIDE.md rewritten for 2D-first packaging.
 
 ## Build 31b (24 Oct 2026) - chapter 3 "Start AR" fix
 - After a refused switch, the "Start AR" card did nothing when the page still believed VR was on (A-Frame answers "Already in VR."). The switch now checks the headset's real session: if one is still running it is ended first, and leftover VR/AR flags are cleared before AR is requested.

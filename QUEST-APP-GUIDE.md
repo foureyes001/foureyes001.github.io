@@ -1,109 +1,130 @@
-# Inside the Cloud — publish to GitHub Pages and install on a Meta Quest
+# Inside the Cloud — install on the Meta Quest 2 as an app (Windows)
 
-Windows laptop. Do Parts A–C in order. Part C reuses everything from A and B.
-Things only you can do (accounts, passwords, the headset) are marked **YOU**.
+Follow this yourself in a **Windows terminal** (Command Prompt or PowerShell).
+Steps marked **YOU** are yours only: accounts, sign-ins, passwords, the cable, the headset.
 
----
-
-## Part A — Fonts (2 minutes, recommended)
-
-3D text uses A-Frame's font. The pages now prefer a bundled copy so text works
-even without internet. Download these two files in your browser
-(right-click → Save as) into the `vendor` folder, keeping the names exactly:
-
-- `https://cdn.aframe.io/fonts/Roboto-msdf.json` → `vendor/Roboto-msdf.json`
-- `https://cdn.aframe.io/fonts/Roboto-msdf.png`  → `vendor/Roboto-msdf.png`
-
-If you skip this, text still loads from the internet as before.
+- **Part A (fonts) and Part B (GitHub Pages): done.** The site is live at
+  https://foureyes001.github.io; `vendor/Roboto-msdf.*` and `.nojekyll` are in the repo.
+- **This guide builds the 2D app first.** Immersive mode comes later (see the end).
+- Meta's guide: https://developers.meta.com/horizon/documentation/web/pwa-packaging/
 
 ---
 
-## Part B — GitHub Pages (about 20 minutes)
-
-1. **YOU:** sign in at github.com.
-2. **New repository** → name it **exactly** `<your-username>.github.io`
-   (e.g. `agastya123.github.io`) → **Public** → Create.
-   This exact name matters: the Quest app needs a file at the very root of the site.
-3. **uploading an existing file** → drag in **everything in this folder, including the
-   `vendor` folder** → Commit changes.
-4. **Add file → Create new file** → name it `.nojekyll` → leave it empty → Commit.
-   (Drag-and-drop often skips files whose names start with a dot.)
-5. **Settings → Pages** → Source: **Deploy from a branch** → **main** → **/ (root)** → Save.
-6. Wait 1–3 minutes, then open `https://<your-username>.github.io` on the laptop.
-7. **Test on the Quest before making the app:** open the same address in the
-   **Quest Browser** → walk to a door → in each chapter press **VR** → point a
-   controller and pull the trigger. If VR doesn't work here, the app won't fix it.
+## 0. Before packaging: test in the Quest Browser
+If something fails here, the app won't fix it. In the **Quest Browser** on the Quest 2, open https://foureyes001.github.io, then check:
+- The stamp reads "build 31c".
+- Going through a lobby gate in VR keeps you in VR in the chapter.
+- In ch3, **Switch to AR** works and the globe appears in passthrough.
+  - The Quest 2 passthrough is greyscale; the emulator only tested a Quest 3.
+  - If the "Continue in AR" card appears, note its `reason:` line.
+- **Back to VR** works.
+- Each exit takes you to the main hall.
+- Sounds play at sensible volumes, and the panels are readable.
 
 ---
 
-## Part C — The Quest app (Meta's packaging tool, 1–3 hours the first time)
-
-This wraps the website above into an APK that runs on the Quest Browser's engine,
-so WebXR works. (The old `datacentre_6.apk` used a plain Android WebView, which
-has no WebXR, so it could never enter VR.)
-
-### C1. One-time setup
-1. **Node.js 18 or newer:** install the LTS from nodejs.org, then in a new terminal check `node -v`.
-2. **YOU — Meta developer account:** at developers.meta.com/horizon, create an app in the
-   Developer Dashboard and copy its **App ID**.
-3. **YOU — Developer Mode on the headset:** in the **Meta Horizon** phone app, open your
-   headset's settings and turn on **Developer Mode** (needs the developer account above).
-4. Install the tool:
+## 1. One-time setup
+1. **Node.js 18 or newer:** install the LTS from nodejs.org. Open a *new* terminal and check `node -v`.
+2. Install Meta's packaging tool:
    ```
-   npm install --global @meta-quest/bubblewrap-cli
+   npm i -g @meta-quest/bubblewrap-cli
+   bubblewrap --version
    ```
+3. **Android Platform Tools (adb):** install Google's "SDK Platform-Tools for Windows", unzip it, and add the folder to PATH. You can also run `adb.exe` from inside that folder. Check with `adb version`.
 
-### C2. Create the project
+## 2. Create the project
 ```
 mkdir %USERPROFILE%\inside-the-cloud-app
 cd %USERPROFILE%\inside-the-cloud-app
-bubblewrap init --manifest=https://<your-username>.github.io/manifest.json --metaquest
+bubblewrap init --manifest=https://foureyes001.github.io/manifest.json --metaquest
 ```
 Answer the questions:
-- Install a JDK / Android SDK? → **Yes** (large download, first time only).
-- App mode → **2D** first. (Immersive launches straight into VR; try it later,
-  once 2D works, because moving between chapters ends a VR session.)
-- Package ID → e.g. `io.github.<yourusername>.insidethecloud` (lowercase, letters, dots).
-- Meta App ID → paste the ID from C1.2.
-- Signing key → create a new one. **YOU choose and type the passwords, and write them
-  down.** Keep `android.keystore` safe: without it you can never update the app.
+- **Install a JDK 17 / Android SDK?** → **Yes**. It's a large download, first time only.
+- **App mode** → **2D**.
+- **Package ID** → `io.github.foureyes001.insidethecloud`
+- **Meta App ID** → **skip / leave empty.** It's only needed for in-app purchases (Horizon Billing).
+- **Signing key** → create a new one.
+  - **YOU** choose and type both passwords (keystore and key), and write them down.
+  - Keep `android.keystore` safe and backed up.
+  - **Every update must use the same key and the same package ID.** Without them you can never update the app.
+- Everything else → accept the default it shows.
 
-### C3. Prove you own the website (Digital Asset Links)
-An app that fails this check **will not launch** (immersive mode) or shows a URL bar (2D).
-1. Get the key's SHA-256 fingerprint, then add it:
+## 3. Prove you own the website (Digital Asset Links)
+1. Get the key's SHA-256 fingerprint:
    ```
-   keytool -list -v -keystore android.keystore
+   keytool -list -v -keystore android.keystore -alias android
+   ```
+   - Type the keystore password.
+   - Copy the line starting `SHA256:`.
+   - If `keytool` isn't recognised, use the JDK Bubblewrap installed: see `jdkPath` in `%USERPROFILE%\.bubblewrap\config.json`, then run `<jdkPath>\bin\keytool`.
+2. Add it to the project:
+   ```
    bubblewrap fingerprint add <the SHA256 value>
    ```
-2. Bubblewrap writes an `assetlinks.json` into the project folder.
-3. In your GitHub repo: **Add file → Create new file** → name
-   `.well-known/assetlinks.json` → paste the file's contents → Commit.
-4. Check `https://<your-username>.github.io/.well-known/assetlinks.json` opens in a browser.
-   If it shows 404, the `.nojekyll` file from Part B is missing.
+   This writes `assetlinks.json` into the project folder.
+3. **Send `assetlinks.json` to Claude.** Claude publishes it at `/.well-known/assetlinks.json` in the repo.
+4. Check that https://foureyes001.github.io/.well-known/assetlinks.json opens and shows JSON. Allow 1–3 minutes after publishing.
 
-### C4. Build and install
+## 4. Edit the Gradle files
+- Open the **app module's** `build.gradle`, normally `app\build.gradle`. Set the target SDK to 32, with the comment on the line above:
+  ```
+  //noinspection ExpiredTargetSdkVersion
+  targetSdkVersion 32
+  ```
+  (Edit the existing target-SDK line. Keep whichever spelling it uses: `targetSdkVersion` or `targetSdk`.)
+- In **any** `build.gradle` whose `repositories { … }` lists `jcenter()`, replace it with `mavenCentral()`. Check both `app\build.gradle` and the top-level `build.gradle`.
+
+## 5. Build
 ```
 bubblewrap build
 ```
-This produces **`app-release-signed.apk`**.
+- Type the passwords when asked.
+- This produces **`app-release-signed.apk`** in the project folder.
 
-**YOU:** connect the Quest with a USB-C data cable, put it on, and accept
-**Allow USB debugging**. Then:
-```
-adb devices
-adb install app-release-signed.apk
-```
-On the headset: **Library → Unknown Sources → Inside the Cloud**.
+## 6. Install on the Quest 2
+1. **YOU: turn on Developer Mode.** In the **Meta Horizon** phone app: open your headset's settings → **Developer Mode** → on.
+   - If the app asks you to create or join a developer organisation, do that at developers.meta.com/horizon.
+2. **YOU:** connect the headset with a **USB-C data cable** (not charge-only). Put the headset on and accept **Allow USB debugging**.
+3. In the project folder:
+   ```
+   adb devices
+   adb install app-release-signed.apk
+   ```
+   - `adb devices` must list the headset as `device`, not `unauthorized`.
+4. On the headset: **Library → Unknown Sources → Inside the Cloud**.
+5. Run the same checks as step 0 inside the app.
+   - The app shouldn't show a browser address bar. If it does, the asset links are failing (see the table below).
 
 ---
+
+## Good to know
+- **The app loads the live site, so it needs internet.** Use a phone hotspot for the demo.
+  - Site updates need no rebuild: once a change is on GitHub, the app picks it up.
+- **Unverified:**
+  - Meta's page doesn't name supported headsets. The Quest 2 is likely but not confirmed.
+  - Whether Bubblewrap requires a service worker is also unverified; the site has none.
+  - If `init` or `build` complains, send Claude the **exact message**.
+
+## Immersive mode (later, not yet)
+Immersive mode launches straight into VR. It needs all three of these first:
+1. **A lobby change:** `index.html` must enter VR by itself right after it loads, but only when running as the installed app.
+   - Detect the app with the Digital Goods API or `matchMedia('(display-mode: standalone)')`.
+   - It must never do this in a normal browser tab.
+   - Today the lobby only enters VR from its button, or when you arrive through a gate already in VR.
+2. **A test** that VR survives gate travel inside the installed app. So far this has only been seen in the Quest Browser.
+3. **A check** that ch3's VR↔AR switch still has a usable fallback. The "Continue in AR" card is a 2D page element.
+
+To switch later, set `horizonOSAppMode` in `twa-manifest.json`, then run `bubblewrap update` and `bubblewrap build`. Keep the same keystore and package ID.
 
 ## If something goes wrong
 
 | Symptom | Fix |
 |---|---|
+| "TWA verification was unsuccessful" | Package ID, fingerprint and assetlinks URL must all match. Re-check steps 2–3; the URL must return JSON. |
+| App shows a URL bar (2D) / won't open (immersive) | Asset links failing. Same checks as above. |
+| Wrong app mode | `horizonOSAppMode` in `twa-manifest.json`, then rebuild. |
+| JDK or Android SDK errors | Fix `jdkPath` / `androidSdkPath` in `%USERPROFILE%\.bubblewrap\config.json` (`~/.bubblewrap/config.json`). |
 | `adb devices` lists nothing | Charge-only cable, or the "Allow USB debugging" prompt is waiting inside the headset. |
-| `adb` not recognised | Use the copy in the Android SDK bubblewrap installed, or install "Android SDK Platform-Tools". |
-| App opens with an address bar / won't open | Asset links mismatch: check C3, package ID, fingerprint, and that the file is reachable. |
-| No VR button | It's the site, not the app. Test in the Quest Browser (B7). |
-| Text missing | Part A fonts not uploaded and no internet. |
-| Changes don't show | The app loads the live site: upload the new file to GitHub and wait 1–3 minutes. No rebuild needed. |
+| `adb` / `keytool` not recognised | adb: Platform-Tools folder (step 1.3). keytool: JDK `bin` folder (step 3.1). |
+| No VR button | It's the site, not the app. Test in the Quest Browser (step 0). |
+| Changes don't show | The app loads the live site. Wait 1–3 minutes after the change is on GitHub, then reopen the app. |
