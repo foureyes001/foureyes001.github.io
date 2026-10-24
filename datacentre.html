@@ -3324,7 +3324,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 31c</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 33</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3951,6 +3951,219 @@ function canvasPainter(w, h) {
     bake('containment', [{ geos: frame, mat: M.tray }, { geos: glass, mat: gm, order: 3 }]);
   }
 
+  /* ===================== build 33: CONNECTED, DENSE CEILING SERVICES ========
+     Every rod, pipe and conduit that used to stop in mid-air now ends at the
+     ceiling, a wall, a tray or a machine, and the room gets a full overhead
+     network: ladder racks, wall trays, wall conduits, equipment drops,
+     sprinkler branches and criss-cross cable runs. Decorative only (not a real
+     design). Built once, merged per material: 8 extra draw calls. ?wiring=0 = off. */
+  function wiring () {
+    if (/[?&]wiring=0/.test(location.search)) { return; }
+    var M = looks();
+    if (!M.wire) {
+      M.wire = {
+        blue: M.cable[0], black: M.cable[1], yellow: M.cable[2],
+        red: new THREE.MeshLambertMaterial({ color: '#7a1f27' }),
+        teal: new THREE.MeshLambertMaterial({ color: '#1d5a6e' }),
+        grey: new THREE.MeshLambertMaterial({ color: '#8b9199' }),
+        box: new THREE.MeshLambertMaterial({ color: '#5b6168' })
+      };
+    }
+    var W = M.wire, CY = 4.61;                                   /* ceiling underside */
+    var G = { steel: [], box: [], blue: [], black: [], yellow: [], red: [], teal: [], grey: [] };
+    var COL = ['blue', 'black', 'yellow', 'red', 'teal', 'grey'];
+    var seed = 33;
+    function rnd () { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }
+    function pick (a) { return a[Math.floor(rnd() * a.length) % a.length]; }
+    function joint (k, p, r) { G[k].push(new THREE.SphereGeometry(r * 1.25, 6, 4).translate(p[0], p[1], p[2])); }
+    function seg (k, a, b, r, n) { G[k].push(gCyl(a, b, r, n || 6)); }
+    function path (k, pts, r) {                                  /* polyline with a joint at every bend */
+      for (var i = 1; i < pts.length; i++) { seg(k, pts[i - 1], pts[i], r); }
+      for (var j = 1; j < pts.length - 1; j++) { joint(k, pts[j], r); }
+    }
+    function bx (k, w, h, d, x, y, z) { G[k].push(gBox(w, h, d, x, y, z)); }
+    function jbox (x, y, z) { bx('box', 0.22, 0.22, 0.12, x, y, z); }
+    function rod (x, y, z) { if (CY - y > 0.02) { bx('steel', 0.016, CY - y, 0.016, x, (CY + y) / 2, z); } }
+
+    /* ladder rack along x (dir 'x') or z (dir 'z'); y = top of the rungs */
+    function ladder (dir, c, a0, a1, y, w, bundle) {
+      var L = a1 - a0, m = (a0 + a1) / 2, h = w / 2, t, k;
+      if (dir === 'x') {
+        bx('steel', L, 0.06, 0.02, m, y, c - h); bx('steel', L, 0.06, 0.02, m, y, c + h);
+        for (t = a0 + 0.15; t < a1; t += 0.3) { bx('steel', 0.03, 0.015, w, t, y - 0.02, c); }
+        for (t = a0 + 0.4; t < a1; t += 1.5) { rod(t, y + 0.03, c - h); rod(t, y + 0.03, c + h); bx('steel', 0.04, 0.04, w + 0.12, t, y - 0.05, c); }
+        for (k = 0; k < bundle; k++) { seg(COL[k % 6], [a0, y + 0.03, c - h + 0.06 + k * (w - 0.12) / Math.max(1, bundle - 1)], [a1, y + 0.03, c - h + 0.06 + k * (w - 0.12) / Math.max(1, bundle - 1)], 0.022 + (k % 3) * 0.006); }
+      } else {
+        bx('steel', 0.02, 0.06, L, c - h, y, m); bx('steel', 0.02, 0.06, L, c + h, y, m);
+        for (t = a0 + 0.15; t < a1; t += 0.3) { bx('steel', w, 0.015, 0.03, c, y - 0.02, t); }
+        for (t = a0 + 0.4; t < a1; t += 1.5) { rod(c - h, y + 0.03, t); rod(c + h, y + 0.03, t); bx('steel', w + 0.12, 0.04, 0.04, c, y - 0.05, t); }
+        for (k = 0; k < bundle; k++) { seg(COL[(k + 2) % 6], [c - h + 0.06 + k * (w - 0.12) / Math.max(1, bundle - 1), y + 0.03, a0], [c - h + 0.06 + k * (w - 0.12) / Math.max(1, bundle - 1), y + 0.03, a1], 0.022 + (k % 3) * 0.006); }
+      }
+    }
+    /* wall tray: tray + rails + wall brackets + conduits; axis along the wall */
+    function wallTray (dir, c, a0, a1, y, side) {               /* side = direction from tray to wall (+1/-1) */
+      var L = a1 - a0, m = (a0 + a1) / 2, t, k, o;
+      if (dir === 'z') {
+        bx('steel', 0.36, 0.012, L, c, y - 0.04, m); bx('steel', 0.012, 0.08, L, c - 0.18, y, m); bx('steel', 0.012, 0.08, L, c + 0.18, y, m);
+        for (t = a0 + 0.3; t < a1; t += 1.5) { bx('steel', 0.3, 0.04, 0.04, c + side * 0.33, y - 0.07, t); bx('steel', 0.02, 0.3, 0.06, c + side * 0.47, y - 0.12, t); }
+        for (k = 0; k < 4; k++) { o = c - 0.12 + k * 0.08; seg(COL[(k + 1) % 6], [o, y, a0], [o, y, a1], 0.025); }
+      } else {
+        bx('steel', L, 0.012, 0.36, m, y - 0.04, c); bx('steel', L, 0.08, 0.012, m, y, c - 0.18); bx('steel', L, 0.08, 0.012, m, y, c + 0.18);
+        for (t = a0 + 0.3; t < a1; t += 1.5) { bx('steel', 0.04, 0.04, 0.3, t, y - 0.07, c + side * 0.33); bx('steel', 0.06, 0.3, 0.02, t, y - 0.12, c + side * 0.47); }
+        for (k = 0; k < 4; k++) { o = c - 0.12 + k * 0.08; seg(COL[(k + 3) % 6], [a0, y, o], [a1, y, o], 0.025); }
+      }
+    }
+
+    /* ---- 1. FIX: aisle trays (x +-0.62, y 3.34): hangers reach the tray, the
+       trays run as far as their cables, cables turn up into the ladder racks */
+    [-0.62, 0.62].forEach(function (x) {
+      for (var i = 0; i < 7; i++) {
+        var z = -11.25 + i * 3.75;
+        bx('steel', 0.035, 0.52, 0.035, x, 3.71, z);                       /* 3.45 .. 3.97 */
+        bx('steel', 0.4, 0.035, 0.035, x, 3.44, z);                        /* strut under the hanger */
+      }
+      [-1, 1].forEach(function (sz) {                                       /* tray extension 9.5 -> 11.85 */
+        bx('steel', 0.34, 0.05, 2.35, x, 3.34, sz * 10.675);
+        bx('steel', 0.03, 0.10, 2.35, x - 0.16, 3.41, sz * 10.675); bx('steel', 0.03, 0.10, 2.35, x + 0.16, 3.41, sz * 10.675);
+      });
+    });
+    [[-0.62, 'blue'], [-0.52, 'black'], [0.62, 'yellow']].forEach(function (c) {
+      [-1, 1].forEach(function (sz) {
+        path(c[1], [[c[0], 3.40, sz * 11.75], [c[0], 3.40, sz * 11.95], [c[0], 4.08, sz * 11.95], [c[0], 4.08, sz * 12.5]], c[1] === 'yellow' ? 0.055 : 0.045);
+      });
+    });
+    /* the north cross tray (z -12) now runs to the network core and drops into it */
+    bx('steel', 5.4, 0.05, 0.34, -3.5, 3.34, -12); bx('steel', 5.4, 0.1, 0.03, -3.5, 3.41, -12.16); bx('steel', 5.4, 0.1, 0.03, -3.5, 3.41, -11.84);
+    [-5.6, -4.1, -2.6, -1.1].forEach(function (x) { rod(x, 3.46, -12); });
+    [-6.8, -6.5, -6.2, -5.9, -5.6, -5.3].forEach(function (x, i) {
+      path(COL[i % 6], [[x + 0.3, 3.4, -12], [x + 0.3, 3.4, -12.6 - (i % 3) * 0.2], [x + 0.3, 2.0, -12.6 - (i % 3) * 0.2]], 0.025);
+    });
+
+    /* ---- 2. FIX: power room. One tray over the cabinets; every conduit ends in it */
+    var PX = 10.85, PY = 3.55;
+    bx('steel', 0.5, 0.015, 17.2, PX, PY - 0.04, -3); bx('steel', 0.015, 0.1, 17.2, PX - 0.25, PY, -3); bx('steel', 0.015, 0.1, 17.2, PX + 0.25, PY, -3);
+    for (var pz = -11.4; pz <= 5.4; pz += 1.4) { rod(PX - 0.22, PY + 0.05, pz); rod(PX + 0.22, PY + 0.05, pz); bx('steel', 0.62, 0.04, 0.04, PX, PY - 0.08, pz); bx('steel', 0.9, 0.04, 0.04, PX + 0.6, PY - 0.08, pz); }
+    for (var k5 = 0; k5 < 5; k5++) { seg(COL[k5], [PX - 0.18 + k5 * 0.09, PY, -11.6], [PX - 0.18 + k5 * 0.09, PY, 5.6], 0.028); }
+    [[10.95, -8, 3.4], [10.95, -1.25, 3.2], [10.7, 4, 3.5], [10.7, 1.75, 3.5]].forEach(function (c) {    /* old conduit tops */
+      seg('black', [c[0], c[2] - 0.05, c[1]], [c[0], PY, c[1]], 0.05); jbox(c[0], PY + 0.12, c[1]);
+    });
+    /* drops start a little inside each machine: the visible tops sit below the model bounds */
+    [1.2, 2.3, 3.0, 3.9, 4.6].forEach(function (z, i) { seg(COL[(i + 2) % 6], [10.55 + (i % 2) * 0.3, 1.7, z], [10.55 + (i % 2) * 0.3, PY, z], 0.035); });   /* UPS line-up */
+    [-2.2, -1.7, -0.6, -0.2].forEach(function (z, i) { seg(COL[(i + 4) % 6], [10.8 + (i % 2) * 0.25, 1.5, z], [10.8 + (i % 2) * 0.25, PY, z], 0.035); });  /* ATS */
+    seg('grey', [10.95, 1.65, -7.75], [10.95, PY, -7.75], 0.04);                                     /* transformer */
+    [[10.95, -8, 1.8], [10.95, -1.25, 1.8], [10.7, 4, 1.9], [10.7, 1.75, 1.9], [7, -10.75, 1.55], [6.28, -11.27, 1.45]].forEach(function (c) {   /* old conduit + exhaust feet */
+      seg(c[0] === 6.28 ? 'grey' : 'black', [c[0], c[2] - 0.35, c[1]], [c[0], c[2] + 0.02, c[1]], c[0] === 6.28 ? 0.085 : 0.05);
+    });
+    path('black', [[10.95, 3.1, -8], [11.75, 3.1, -8]], 0.05); joint('black', [10.95, 3.1, -8], 0.05);   /* into the utility box */
+    path('grey', [[11.97, 3.1, -8.3], [11.0, 3.1, -8.3], [11.0, 1.7, -8.3]], 0.06);                     /* incomer to the transformer side */
+    /* generator: conduit + exhaust end at real things */
+    path('black', [[7, 3.0, -10.75], [7, PY, -10.75], [PX, PY, -10.75]], 0.06);
+    seg('grey', [9.5, 2.72, -11.27], [11.9, 2.72, -11.27], 0.085);
+    bx('box', 0.08, 0.36, 0.36, 11.93, 2.72, -11.27);                                                 /* wall flange */
+    seg('grey', [8.2, 2.72, -11.27], [9.0, 2.72, -11.27], 0.15, 10);                                  /* silencer */
+    [6.8, 8.6, 10.4].forEach(function (x) { rod(x, 2.82, -11.27); bx('steel', 0.04, 0.04, 0.26, x, 2.82, -11.27); });
+    path('black', [[6.6, 1.45, -10.4], [6.6, 3.1, -10.4], [7, 3.1, -10.4], [7, PY, -10.4]], 0.04);
+    path('yellow', [[7.6, 1.2, -10.2], [7.6, 3.25, -10.2], [PX - 0.1, 3.25, -10.2], [PX - 0.1, PY, -10.2]], 0.03);
+    /* the busway feeder and the power tray share a link to the east wall tray */
+    [-9, -4.5, 0.5, 4.8].forEach(function (z) { bx('steel', 0.62, 0.05, 0.3, 11.42, PY + 0.02, z); });
+
+    /* ---- 3. FIX: cooling. CRAC pipes rise into the coolant mains; the mains
+       end in elbows that run up into the ceiling, with valves along them */
+    [6.4, 0.15, -6.1].forEach(function (z) {
+      seg('blue', [-11.24, 2.18, z], [-11.24, 2.86, z], 0.06, 8); seg('teal', [-11.06, 2.18, z], [-11.06, 2.86, z], 0.06, 8);
+      joint('blue', [-11.24, 2.86, z], 0.09); joint('teal', [-11.06, 2.86, z], 0.09);
+      bx('box', 0.2, 0.14, 0.14, -10.9, 2.6, z);                                                     /* valve */
+    });
+    [7.5, 1.25, -5.0].forEach(function (z) {                                                          /* CRAC controls up to the wall tray */
+      path('grey', [[-10.85, 2.0, z + 0.35], [-10.85, 3.95, z + 0.35], [-11.5, 3.95, z + 0.35]], 0.03);
+      path('black', [[-10.7, 2.0, z - 0.35], [-10.7, 3.9, z - 0.35], [-11.5, 3.9, z - 0.35]], 0.03);
+      path('yellow', [[-11.0, 2.0, z], [-11.0, 3.92, z], [-11.5, 3.92, z]], 0.025);
+    });
+    [[-11.3, 'teal'], [-11.06, 'yellow']].forEach(function (c) {
+      [-1, 1].forEach(function (sz) { path(c[1], [[c[0], 2.86, sz * 10.5], [c[0], 2.86, sz * 10.8], [c[0], CY, sz * 10.8]], 0.1); });
+      [-8.2, -3, 3.2, 9.2].forEach(function (z) { bx('box', 0.26, 0.26, 0.12, c[0], 2.86, z); seg('red', [c[0], 3.0, z], [c[0], 3.16, z], 0.012); });
+    });
+    [-9.75, -4.5, 3.75, 9.75].forEach(function (z) { rod(-11.18, 2.98, z); bx('steel', 0.36, 0.04, 0.04, -11.18, 2.98, z); });
+
+    /* ---- 4. FIX: rack-row trays (y 2.3) and busway (y 2.75): ends turn up to the ladders */
+    [-1.72, 1.72].forEach(function (x, i) {
+      [-1, 1].forEach(function (sz) {
+        bx('steel', 0.32, 0.09, 0.02, x, 2.3, sz * 11.11);
+        path(COL[i], [[x - 0.08, 2.32, sz * 11.05], [x - 0.08, 4.08, sz * 11.05], [x - 0.08, 4.08, sz * 12.5]], 0.03);
+        path(COL[i + 2], [[x + 0.08, 2.32, sz * 11.05], [x + 0.08, 3.85, sz * 11.05], [x + 0.08, 3.85, sz * 12.3], [x + 0.08, 4.08, sz * 12.3]], 0.03);
+      });
+    });
+    [-2, 2].forEach(function (x) { [-1, 1].forEach(function (sz) {
+      bx('box', 0.2, 0.16, 0.06, x, 2.75, sz * 11.12);
+      path('grey', [[x, 2.83, sz * 11.05], [x, 4.08, sz * 11.05], [x, 4.08, sz * 12.5]], 0.04);
+    }); });
+
+    /* ---- 5. DENSITY: ladder racks. 6 east-west at y 4.08, 4 north-south at y 3.75 */
+    var LZ = [-12.5, -7.5, -2.5, 2.5, 7.5, 12.5], LX = [-8.6, -6.4, 6.4, 8.6];
+    LZ.forEach(function (z) { ladder('x', z, -11.4, 11.4, 4.08, 0.45, 5); bx('steel', 0.04, 0.3, 0.55, -11.96, 4.0, z); bx('steel', 0.04, 0.3, 0.55, 11.96, 4.0, z); });
+    [-10, -5, 0, 5, 10].forEach(function (z) { ladder('x', z, -11.4, 11.4, 4.3, 0.3, 3); });          /* hung from the roof beams */
+    LX.forEach(function (x) { ladder('z', x, -14.5, 14.5, 3.75, 0.4, 4); bx('steel', 0.5, 0.3, 0.04, x, 3.7, -14.96); bx('steel', 0.5, 0.3, 0.04, x, 3.7, 14.96); });
+    LX.forEach(function (x) { LZ.forEach(function (z, i) {                                       /* risers between the tiers */
+      path(COL[(i + 1) % 6], [[x - 0.12, 3.78, z + 0.3], [x - 0.12, 4.11, z + 0.3]], 0.025);
+      path(COL[(i + 3) % 6], [[x + 0.12, 3.78, z - 0.3], [x + 0.12, 3.95, z - 0.3], [x + 0.12, 3.95, z], [x + 0.12, 4.11, z]], 0.025);
+    }); });
+    /* rack-row trays: risers up to every ladder they pass under */
+    [-1.72, 1.72].forEach(function (x, i) { LZ.slice(1, 5).forEach(function (z, j) {
+      path(COL[(i + j) % 6], [[x, 2.33, z + 0.2], [x, 4.11, z + 0.2]], 0.028);
+      path(COL[(i + j + 3) % 6], [[x + 0.1, 2.33, z - 0.2], [x + 0.1, 3.6, z - 0.2], [x + 0.6, 3.6, z - 0.2], [x + 0.6, 4.11, z - 0.2]], 0.022);
+    }); });
+
+    /* ---- 6. DENSITY: wall trays on all four walls + conduits down the walls */
+    wallTray('z', 11.55, -14.6, 14.6, 3.85, 1); wallTray('z', -11.55, -14.6, 14.6, 3.95, -1);
+    wallTray('x', -14.55, -11.6, -3.6, 3.55, -1); wallTray('x', -14.55, 3.6, 11.6, 3.55, -1);
+    wallTray('x', 14.55, -11.6, -2.8, 3.7, 1); wallTray('x', 14.55, 2.8, 11.6, 3.7, 1);
+    [[-3.6, -14.55, 3.55], [3.6, -14.55, 3.55], [-2.8, 14.55, 3.7], [2.8, 14.55, 3.7]].forEach(function (e, i) {   /* tray ends rise into the ceiling */
+      for (var k = 0; k < 3; k++) { path(COL[(i + k) % 6], [[e[0], e[2], e[1] - 0.1 + k * 0.1], [e[0] + (e[0] < 0 ? 0.25 : -0.25), e[2], e[1] - 0.1 + k * 0.1], [e[0] + (e[0] < 0 ? 0.25 : -0.25), CY, e[1] - 0.1 + k * 0.1]], 0.025); }
+    });
+    function wallRun (axis, wall, along, y1, n) {                 /* n conduits from a floor-level pull box up to the wall tray */
+      for (var k = 0; k < n; k++) {
+        var o = along - (n - 1) * 0.06 + k * 0.12, a = axis === 'x' ? [wall, 0.55, o] : [o, 0.55, wall], b = axis === 'x' ? [wall, y1, o] : [o, y1, wall];
+        var in1 = wall - Math.sign(wall) * 0.4, c3 = axis === 'x' ? [in1, y1, o] : [o, y1, in1];   /* last leg into the wall tray */
+        path(COL[(k + Math.abs(Math.round(along))) % 6], [a, b, c3], 0.024);
+      }
+      if (axis === 'x') { bx('box', 0.12, 0.34, 0.12 * n + 0.14, wall, 0.4, along); for (var c1 = 1; c1 < 3.2; c1 += 0.9) { bx('steel', 0.05, 0.03, 0.12 * n + 0.08, wall, c1, along); } }
+      else { bx('box', 0.12 * n + 0.14, 0.34, 0.12, along, 0.4, wall); for (var c2 = 1; c2 < 3.2; c2 += 0.9) { bx('steel', 0.12 * n + 0.08, 0.03, 0.05, along, c2, wall); } }
+    }
+    [-13.4, -6.2, 6.5, 9.6, 12.9].forEach(function (z) { wallRun('x', 11.93, z, 3.82, 3); });
+    [-10.6, -8.6, 4.6, 9.5].forEach(function (x) { wallRun('z', -14.93, x, 3.52, 3); });
+    [-9.2, -5.6, 6.4, 8.0].forEach(function (x) { wallRun('z', 14.93, x, 3.67, 3); });
+    [-13.6, 10.4, 13.6].forEach(function (z) { wallRun('x', -11.93, z, 3.92, 2); });
+
+    /* ---- 7. DENSITY: sprinkler branches (red) off the two mains + extra pipe runs */
+    [-11.25, -3.75, 3.75, 11.25].forEach(function (z) {
+      seg('red', [-11.7, 4.36, z], [11.7, 4.36, z], 0.035); joint('red', [-4.5, 4.38, z], 0.045); joint('red', [4.5, 4.38, z], 0.045);
+      bx('box', 0.06, 0.1, 0.06, -11.7, 4.36, z); bx('box', 0.06, 0.1, 0.06, 11.7, 4.36, z);
+      for (var x7 = -10.5; x7 <= 10.6; x7 += 3) { seg('red', [x7, 4.36, z], [x7, 4.24, z], 0.012); joint('red', [x7, 4.23, z], 0.02); }
+      for (var x8 = -9.75; x8 <= 10; x8 += 3.25) { rod(x8, 4.4, z); }
+    });
+    [[-10.4, 'blue', 4.3], [-10.1, 'yellow', 4.3], [10.2, 'teal', 4.28], [9.9, 'blue', 4.28], [-3.2, 'yellow', 4.22], [3.2, 'blue', 4.22]].forEach(function (p) {
+      path(p[1], [[p[0], CY, -14.3], [p[0], p[2], -14.3], [p[0], p[2], 14.3], [p[0], CY, 14.3]], 0.06);
+      for (var z9 = -12.75; z9 < 14; z9 += 2.5) { rod(p[0], p[2] + 0.06, z9); bx('steel', 0.18, 0.03, 0.05, p[0], p[2] + 0.07, z9); }
+    });
+
+    /* ---- 8. DENSITY: criss-cross cable runs between the ladders, each ending
+       in a junction box on the ceiling (seeded, so every visit looks the same) */
+    for (var r8 = 0; r8 < 110; r8++) {
+      var z0 = pick(LZ), x0 = -10.8 + rnd() * 21.6, x1 = pick(LX), z1 = -14 + rnd() * 28, ym = 4.2 + rnd() * 0.17;
+      if (Math.abs(x0) < 1.0 && Math.abs(z1) < 2) { continue; }
+      var k8 = COL[Math.floor(rnd() * 6) % 6];
+      path(k8, [[x0, 4.11, z0], [x0, ym, z0], [x1 + (rnd() - 0.5) * 0.3, ym, z0], [x1 + (rnd() - 0.5) * 0.3, ym, z1]], 0.018 + rnd() * 0.012);
+      var ex = x1 + (rnd() - 0.5) * 0.3;
+      seg(k8, [ex, ym, z1], [ex, CY - 0.11, z1], 0.02); jbox(ex, CY - 0.11, z1);
+    }
+
+    var parts = [{ geos: G.steel, mat: M.tray }, { geos: G.box, mat: W.box }];
+    COL.forEach(function (k) { parts.push({ geos: G[k], mat: W[k] }); });
+    var n = 0; Object.keys(G).forEach(function (k) { n += G[k].length; });
+    DC_PERF.wiringPieces = n;
+    bake('wiring', parts);
+  }
+
   /* realistic CRAC fans (shown with Guides): steel housing, dark swept blades,
      wire guard; the old louvre / top box become a steel grille and return duct */
   function grilleTex () {
@@ -4063,7 +4276,7 @@ function canvasPainter(w, h) {
     airflowBatch();
     /* merge + restyle only once the models have hidden the shapes they replace */
     ready.then(function () { mergeWhenTextured(0); }, function () { mergeWhenTextured(0); });
-    cabling(); containment();
+    cabling(); containment(); wiring();
     ready.then(function () { setTimeout(realCracs, 0); }, function () { setTimeout(realCracs, 0); });
     /* after the rack heat panels got their model-mode opacity */
     ready.then(function () { setTimeout(function () { batchStatus(0); }, 300); },
