@@ -67,6 +67,15 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 25 (24 Oct 2026) - chapter 2 final touches
+- Users-to-balancer fibres now really start at the Users panel's edge (they were bunching at the balancer), with 360 streaming fibre dots.
+- Ceiling halo above the beam: bigger ring, warmer and lighter glow.
+- Each instance gets 5 strands that leave from the balancer's side facing it and spread across its top.
+- Auto-scaling demo: while auto-scaling is ON, traffic surges (about 3x for 40 s, then 36 s calm), so the pool visibly scales 2 -> 4 and back to 2. Turning auto-scaling on starts a surge within about 3 s. Decisions use averaged CPU. Requests are shorter (avg 0.55 s), so the base load sits at about 40% on 2 instances.
+- New instances materialise: a wireframe hologram with a scan line, then the server grows up out of the floor; its beams pulse while it launches and carry traffic once it is live (5 s launch).
+- Databases: glassy lit tops (white-hot centre, bright rim), a soft light column rising off each, bigger halos.
+- Test hook: `LB.scaleOut()`.
+
 ## Build 24 (24 Oct 2026) - chapter 2 rebuilt as a futuristic control hall
 - New round hall:
   - Background ring of server racks with blue and amber LEDs (chapter 1's rack model).

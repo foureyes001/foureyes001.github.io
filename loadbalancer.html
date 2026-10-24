@@ -442,6 +442,20 @@ window.doorGo = function (href) {
     gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return ctex(c);
   })();
 
+  var GLASSTOP = (function () {                      /* glassy lit top: white-hot centre, soft body, bright rim */
+    var c = canvas(256, 256), g = c.getContext('2d'), gr = g.createRadialGradient(118, 112, 4, 128, 128, 128);
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.22, 'rgba(255,255,255,.92)'); gr.addColorStop(0.55, 'rgba(200,200,200,.62)');
+    gr.addColorStop(0.86, 'rgba(160,160,160,.55)'); gr.addColorStop(0.94, '#ffffff'); gr.addColorStop(1, 'rgba(230,230,230,.9)');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    g.globalCompositeOperation = 'lighter'; g.fillStyle = 'rgba(255,255,255,.22)';   /* a soft specular streak */
+    g.beginPath(); g.ellipse(96, 92, 62, 18, -0.6, 0, Math.PI * 2); g.fill(); return ctex(c);
+  })();
+  var VFADE = (function () {                         /* vertical fade for light columns */
+    var c = canvas(4, 128), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 128);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.7, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 128); return ctex(c);
+  })();
+  var C_WHITE = new THREE.Color('#ffffff');
   function add (parent, obj) { parent.add(obj); return obj; }
   function basic (o) { o = o || {}; o.toneMapped = false; return new THREE.MeshBasicMaterial(o); }
   function addMat (color, opacity, map) {
@@ -648,9 +662,13 @@ window.doorGo = function (href) {
         addMat('#38bdf8', b[2], VFADE)));
       beam.position.set(LBP.x, LBP.y + 1.4 + len / 2, LBP.z); BEAMS.push(beam); mirror(beam);
     });
-    var cap = add(root, new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.05, 8, 64).rotateX(Math.PI / 2), basic({ color: '#e0f7ff' })));
+    /* ceiling light over the beam: a wide, warm-white ring with a soft glowing disc */
+    var cap = add(root, new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.07, 10, 96).rotateX(Math.PI / 2), basic({ color: '#fff4e0' })));
     cap.position.set(LBP.x, H_HALL - 0.18, LBP.z); mirror(cap);
-    halo(root, new V3(LBP.x, H_HALL - 0.3, LBP.z), 2.6, '#38bdf8', 0.7);
+    var capDisc = add(root, new THREE.Mesh(new THREE.CircleGeometry(1.05, 64).rotateX(Math.PI / 2), addMat('#ffe7c2', 0.55, GLOW)));
+    capDisc.position.set(LBP.x, H_HALL - 0.2, LBP.z);
+    halo(root, new V3(LBP.x, H_HALL - 0.32, LBP.z), 4.4, '#ffd9a8', 0.75);
+    halo(root, new V3(LBP.x, H_HALL - 0.3, LBP.z), 2.0, '#fff8ee', 0.85);
   }
   var LBFACE = null;
 
@@ -701,6 +719,10 @@ window.doorGo = function (href) {
     s.holoGrid = add(s.holo, new THREE.LineSegments(gg, s.holoMat));
     s.holoFill = add(grp, new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.88, 0.9), addMat('#38bdf8', 0.12)));
     s.holoFill.position.y = s.body.position.y;
+    s.scan = add(grp, new THREE.Group());                /* scan line: glowing outline + faint fill */
+    var sq = new THREE.BufferGeometry().setFromPoints([new V3(-0.49, 0, -0.49), new V3(0.49, 0, -0.49), new V3(0.49, 0, 0.49), new V3(-0.49, 0, 0.49)]);
+    s.scan.add(new THREE.LineLoop(sq, new THREE.LineBasicMaterial({ color: '#e0f7ff', transparent: true, opacity: 0.95, toneMapped: false })));
+    s.scan.add(new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.98).rotateX(-Math.PI / 2), addMat('#38bdf8', 0.14)));
     /* card above it */
     var cc = canvas(512, 300);
     s.card = { c: cc, g: cc.getContext('2d'), t: ctex(cc) };
@@ -746,9 +768,18 @@ window.doorGo = function (href) {
         add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r + 0.012, r + 0.012, 0.035, 40, 1, true), v.ringMat)).position.y = h * f;
       });
       v.topMat = basic({ color: d[1] });
-      v.top = add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r + 0.02, r + 0.02, 0.07, 40), v.topMat));
+      v.glassMat = basic({ color: d[1], map: GLASSTOP });
+      v.top = add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r + 0.02, r + 0.02, 0.07, 48), [v.topMat, v.glassMat, v.topMat]));
       v.top.position.y = h + 0.035;
-      v.halo = halo(grp, new V3(0, h + 0.1, 0), r * 3.4, d[1], 0.65);
+      v.shine = add(grp, new THREE.Mesh(new THREE.CircleGeometry(r * 0.55, 40).rotateX(-Math.PI / 2), addMat('#ffffff', 0.5, GLOW)));
+      v.shine.position.y = h + 0.075;                     /* white-hot centre */
+      v.rimMat = addMat(d[1], 0.95);
+      v.rim = add(grp, new THREE.Mesh(new THREE.TorusGeometry(r + 0.025, 0.016, 8, 56).rotateX(Math.PI / 2), v.rimMat));
+      v.rim.position.y = h + 0.072;
+      v.colMat = addMat(d[1], 0.32, VFADE);              /* soft light rising off the top */
+      v.col = add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r * 0.7, r * 0.98, 0.85, 40, 1, true), v.colMat));
+      v.col.position.y = h + 0.07 + 0.425; v.col.renderOrder = 4;
+      v.halo = halo(grp, new V3(0, h + 0.12, 0), r * 4.3, d[1], 0.8);
       v.base = add(grp, new THREE.Mesh(new THREE.RingGeometry(r * 0.6, r * 2.1, 48).rotateX(-Math.PI / 2), addMat(d[1], 0.6, RINGFADE)));
       v.base.position.y = 0.014;
       var cc = canvas(512, 220);
@@ -816,11 +847,10 @@ window.doorGo = function (href) {
   var USER_LUTS = [], USER_N = 46;
   function buildUserStrands (panel) {
     var curves = [], m = panel.mesh.matrixWorld, colors = ['#22d3ee', '#38bdf8', '#7dd3fc', '#60a5fa', '#22d3ee', '#a78bfa', '#38bdf8'];
-    panel.mesh.updateMatrixWorld(true);
+    panel.mesh.updateWorldMatrix(true, true);          /* parents too, or the strands start in the wrong place */
     var right = new V3(1, 0, 0).transformDirection(m), fwd = new V3(0, 0, 1).transformDirection(m);
     for (var i = 0; i < USER_N; i++) {
-      var lx = rnd(-0.1, PANELS.users.w / 2 - 0.15), ly = rnd(-0.85, 0.55);
-      if (lx < 0.6 && ly > 0.15) { ly -= 0.7; }           /* keep the big numbers readable */
+      var lx = PANELS.users.w / 2 - rnd(0.02, 0.3), ly = rnd(-0.95, 0.95);   /* pour out of the edge facing the balancer */
       var p0 = new V3(lx, ly, 0.04).applyMatrix4(m);
       var end = LB_IN.clone().add(new V3(rnd(-0.12, 0.12), rnd(-0.14, 0.14), rnd(-0.1, 0.1)));
       var p1 = p0.clone().addScaledVector(fwd, rnd(0.5, 1.1)).addScaledVector(right, rnd(0.6, 1.4));
@@ -828,7 +858,33 @@ window.doorGo = function (href) {
       var cv = new THREE.CubicBezierCurve3(p0, p1, p2, end);
       curves.push(cv); USER_LUTS.push(lut(cv));
     }
-    root.add(strandBundle(curves, colors, 0.011, 0.045, 0.16, 48));
+    root.add(strandBundle(curves, colors, 0.013, 0.05, 0.24, 48));
+    /* fibre sparkle: small dots streaming continuously from the Users panel into the balancer */
+    var n = 360, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), c = new THREE.Color();
+    for (var j = 0; j < n; j++) {
+      FLOW.push({ lut: USER_LUTS[j % USER_LUTS.length], t: Math.random(), sp: rnd(0.25, 0.6) });
+      c.set(Math.random() < 0.15 ? '#c4b5fd' : (Math.random() < 0.5 ? '#e0f7ff' : '#67e8f9'));
+      col[j * 3] = c.r; col[j * 3 + 1] = c.g; col[j * 3 + 2] = c.b;
+    }
+    FLOW_GEO = new THREE.BufferGeometry();
+    FLOW_GEO.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    FLOW_GEO.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    var fp = new THREE.Points(FLOW_GEO, new THREE.PointsMaterial({ size: 0.11, map: GLOW, vertexColors: true, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    fp.frustumCulled = false; fp.renderOrder = 6; root.add(fp);
+    var fc = new THREE.Points(FLOW_GEO, new THREE.PointsMaterial({ size: 0.035, map: GLOW, color: '#ffffff', transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    fc.frustumCulled = false; fc.renderOrder = 7; root.add(fc);
+  }
+  var FLOW = [], FLOW_GEO = null;
+  function flowTick (dt) {
+    if (!FLOW_GEO) { return; }
+    var a = FLOW_GEO.attributes.position.array, k = dt / 1000 * (0.6 + rate * 0.05);
+    for (var i = 0; i < FLOW.length; i++) {
+      var f = FLOW[i]; f.t += k * f.sp; if (f.t > 1) { f.t -= 1; }
+      sample(f.lut, f.t, vP); a[i * 3] = vP.x; a[i * 3 + 1] = vP.y; a[i * 3 + 2] = vP.z;
+    }
+    FLOW_GEO.attributes.position.needsUpdate = true;
   }
   /* balancer -> one instance: a 3-strand bundle, coloured by that instance's load */
   function buildServerStrands (s) {
@@ -836,15 +892,19 @@ window.doorGo = function (href) {
     var top = new V3(s.grp.position.x, PLAT_H + 0.96, s.grp.position.z);
     var dir = top.clone().sub(LBP).setY(0).normalize();
     var curves = []; s.luts = [];
-    for (var i = 0; i < 3; i++) {
-      var a = LB_OUT.clone().add(new V3((i - 1) * 0.22, rnd(-0.05, 0.05), 0));
-      var b = top.clone().add(new V3((i - 1) * 0.12, 0, (i - 1) * 0.05));
-      var cv = new THREE.CubicBezierCurve3(a, a.clone().addScaledVector(dir, 0.9).add(new V3(0, 0.55, 0)),
-        b.clone().addScaledVector(dir, -0.5).add(new V3(0, 0.95, 0)), b);
+    var side = new V3(-dir.z, 0, dir.x);                       /* across the instance */
+    var ox = Math.max(-0.85, Math.min(0.85, dir.x * 1.6));     /* leave from the side of the balancer facing it */
+    for (var i = 0; i < 5; i++) {
+      var f = i - 2;
+      var a = LB_OUT.clone().add(new V3(ox + f * 0.1, rnd(-0.06, 0.06), rnd(0, 0.06)));
+      var b = top.clone().addScaledVector(side, f * 0.17).addScaledVector(dir, rnd(-0.25, 0.2));
+      var cv = new THREE.CubicBezierCurve3(a, a.clone().addScaledVector(dir, rnd(0.7, 1.1)).add(new V3(f * 0.08, rnd(0.4, 0.7), 0)),
+        b.clone().addScaledVector(dir, -rnd(0.3, 0.6)).add(new V3(0, rnd(0.8, 1.1), 0)), b);
       curves.push(cv); s.luts.push(lut(cv));
     }
     s.bundle = strandBundle(curves, ['#ffffff'], 0.012, 0.05, 0.2, 36);
     s.bundle.core.material.vertexColors = true;
+    s.bundle.core.renderOrder = 6;                     /* thin bright cores read in front of the instance cards */
     root.add(s.bundle);
     /* instance -> database junction */
     var foot = new V3(s.grp.position.x, PLAT_H + 0.2, s.grp.position.z).addScaledVector(dir, 0.48);
@@ -1241,7 +1301,7 @@ window.doorGo = function (href) {
   /* ---------------- simulation ------------------------------------------- */
   var CAP = 4, MIN_SERVERS = 2, MAX_SERVERS = 8;
   var SCALE_OUT_UTIL = 0.70, SCALE_OUT_HOLD = 3000, SCALE_IN_UTIL = 0.30, SCALE_IN_HOLD = 5000;
-  var COOLDOWN = 10000, LAUNCH_MS = 2800;
+  var COOLDOWN = 10000, LAUNCH_MS = 5000;
   var WEIGHTS = [5, 3, 2, 4, 3, 2, 4, 3];
   var rate = 6, algo = 'lc', autoOn = true, cooldownOn = true;
   var rrIndex = -1, wrrCur = [0, 0, 0, 0, 0, 0, 0, 0], lastScale = 0, aboveSince = 0, belowSince = 0;
@@ -1260,6 +1320,21 @@ window.doorGo = function (href) {
       launchT: 1, angle: 0, luts: [], dbLut: null };
     makeServerVisual(s); servers.push(s); return s;
   }
+  /* demand waves: while auto-scaling is on, traffic surges every so often (like a daily peak),
+     so the pool visibly scales out and back in. The slider sets the base load. */
+  var SURGE = { phase: 'calm', until: 0, level: 0 };
+  function surgeTick (now, dt) {
+    if (!SURGE.until) { SURGE.until = now + 9000; }
+    if (!autoOn) { SURGE.phase = 'calm'; SURGE.until = now + 2500; }
+    else if (now > SURGE.until) {
+      if (SURGE.phase === 'calm') { SURGE.phase = 'surge'; SURGE.until = now + 40000;
+        setStatus('traffic surge - demand is climbing, watch the pool scale out', 'warn'); }
+      else { SURGE.phase = 'calm'; SURGE.until = now + 36000; setStatus('surge over - demand back to normal'); }
+    }
+    var target = SURGE.phase === 'surge' ? 1 : 0;
+    SURGE.level += (target - SURGE.level) * Math.min(1, dt / 3500);
+  }
+  function effRate () { return rate * (1 + 2 * SURGE.level); }
   function activeServers () { return servers.filter(function (s) { return s.state === 'active'; }); }
   function activeServersCount () { return servers.filter(function (s) { return s.state === 'active' || s.state === 'launching'; }).length; }
   function layout () {
@@ -1291,7 +1366,7 @@ window.doorGo = function (href) {
     it.user = (Math.random() * 12) | 0; it.lut = USER_LUTS[(Math.random() * USER_LUTS.length) | 0]; it.srv = null;
   }
   function startProc (s, spawnAt, now) {
-    s.inFlight.push({ doneAt: now + 300 + Math.random() * 2100 });
+    s.inFlight.push({ doneAt: now + 150 + Math.random() * 700 });
     waitSamples.push(now - spawnAt); if (waitSamples.length > 120) { waitSamples.shift(); }
   }
   function arrive (it, now) {
@@ -1340,8 +1415,20 @@ window.doorGo = function (href) {
     if (s.bundle) { s.bundle.core.material.color.copy(tc2); s.bundle.glow.material.color.copy(tc2); }
     if (s.dbBundle) { s.dbBundle.core.material.color.set('#60a5fa'); s.dbBundle.glow.material.color.set('#60a5fa'); }
     var launching = s.state === 'launching';
-    s.body.visible = !launching; s.cap.visible = !launching; s.edge.visible = !launching;
-    s.holo.visible = launching; s.holoFill.visible = launching;
+    s.cap.visible = !launching; s.edge.visible = !launching;
+    s.holo.visible = launching; s.holoFill.visible = launching; s.scan.visible = launching;
+    if (!launching) { s.body.visible = true; s.body.scale.y = 1; s.body.position.y = PLAT_H + 0.47; s.holoFill.material.opacity = 0.12; }
+    if (s.bundle) { s.bundle.core.material.opacity = 1; }
+  }
+  /* an instance materialising: hologram + scan line, then the server grows up out of it */
+  function launchFx (s, now) {
+    var g = Math.max(0, Math.min(1, (s.launchT - 0.3) / 0.7)), e = g * g * (3 - 2 * g);
+    s.body.visible = e > 0.01; s.body.scale.y = Math.max(0.01, e); s.body.position.y = PLAT_H + 0.02 + 0.45 * e;
+    s.holoFill.material.opacity = 0.18 * (1 - e) + 0.05;
+    s.holoMat.opacity = 0.55 + 0.45 * Math.sin(now / 120);
+    s.scan.position.y = PLAT_H + 0.03 + 0.9 * ((now / 650) % 1);
+    s.holo.position.y = PLAT_H + 0.47 + Math.sin(now / 300) * 0.02;
+    if (s.bundle) { s.bundle.core.material.opacity = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now / 180)); }
   }
 
   /* ---------------- database tier --------------------------------------- */
@@ -1385,8 +1472,10 @@ window.doorGo = function (href) {
     DB.reps.forEach(function (r, j) {
       var v = DBV[r.key], c = r.state === 'dead' ? '#ef4444' : r.state === 'resync' ? (Math.sin(now / 160) > 0 ? '#fbbf24' : '#7c5a10') : '#2dd4bf';
       v.topMat.color.set(c); v.ringMat.color.set(r.state === 'dead' ? '#7f1d1d' : c); v.halo.material.color.set(c);
-      v.halo.material.opacity = r.state === 'dead' ? 0.25 : 0.65;
+      v.halo.material.opacity = r.state === 'dead' ? 0.25 : 0.8;
     });
+    ['primary', 'r1', 'r2'].forEach(function (key) { var v = DBV[key];
+      v.glassMat.color.copy(v.topMat.color); v.rimMat.color.copy(v.topMat.color).lerp(C_WHITE, 0.45); v.colMat.color.copy(v.topMat.color); });
   }
   function dbInfo (k) {
     var u = k === 'primary' ? DB.primary : DB.reps[k === 'r1' ? 0 : 1];
@@ -1421,7 +1510,7 @@ window.doorGo = function (href) {
   function dbToggle () { if (DB.reps.some(function (r) { return r.state !== 'live'; })) { dbRestore(); } else { dbKill(); } }
 
   /* ---------------- metrics (simulated "big" numbers in the concept's style) -- */
-  var lastSample = 0;
+  var lastSample = 0, cpuAvg = 0.4;
   function metricsTick (now) {
     var act = activeServers(), sum = 0, q = 0;
     servers.forEach(function (s) {
@@ -1435,10 +1524,13 @@ window.doorGo = function (href) {
       s.lat = Math.round(14 + s.util * 22 + s.queue.length * 6);
       tintServer(s);
     });
-    var mean = act.length ? sum / act.length : 0;
+    var raw = act.length ? sum / act.length : 0;
+    cpuAvg += (raw - cpuAvg) * 0.15;               /* scaling decisions use averaged CPU, like real autoscalers */
+    var mean = cpuAvg;
     var avgWait = waitSamples.length ? waitSamples.reduce(function (a, b) { return a + b; }, 0) / waitSamples.length : 0;
-    M.users = Math.round(rate * 42 + 6 * Math.sin(now / 7000) + Math.random() * 4);
-    M.rps = Math.round(rate * 142 + Math.random() * 14 - 7);
+    var er = effRate();
+    M.users = Math.round(er * 42 + 6 * Math.sin(now / 7000) + Math.random() * 4);
+    M.rps = Math.round(er * 142 + Math.random() * 14 - 7);
     M.latency = Math.round(9 + avgWait * 0.02 + mean * 9);
     M.err = Math.min(9.9, 0.1 + q * 0.05);
     M.waiting = q * 6 + (q ? (Math.random() * 4) | 0 : 0);
@@ -1450,6 +1542,7 @@ window.doorGo = function (href) {
     else if (draining) { M.scaleText = 'Scaling in... draining instance ' + (draining.id + 1); M.scaleProgress = -1; }
     else if (!autoOn) { M.scaleText = 'Auto-scaling is OFF - the pool stays fixed'; M.scaleProgress = -1; }
     else if (M.cdLeft > 0) { M.scaleText = 'Cooldown: ' + M.cdLeft + ' s before the next scaling action'; M.scaleProgress = -1; }
+    else if (SURGE.level > 0.3 && SURGE.phase === 'surge') { M.scaleText = 'Traffic surge - demand rising, CPU ' + Math.round(mean * 100) + '%'; M.scaleProgress = -1; }
     else { M.scaleText = mean > SCALE_OUT_UTIL ? 'CPU above target - will add an instance' : mean < SCALE_IN_UTIL ? 'CPU low - may remove an instance' : 'Stable - CPU within target'; M.scaleProgress = -1; }
     if (now - lastSample > 600) {
       lastSample = now;
@@ -1509,6 +1602,7 @@ window.doorGo = function (href) {
     caption = 'algorithm: ' + algoName(); setStatus(caption); syncUI(); drawAlgos(); drawLbFace(); }
   function cycleAlgo () { var i = ALGOS.map(function (a) { return a.k; }).indexOf(algo); setAlgo(ALGOS[(i + 1) % ALGOS.length].k); }
   function toggleAuto () { autoOn = !autoOn; aboveSince = 0; belowSince = 0;
+    if (autoOn) { SURGE.phase = 'calm'; SURGE.until = performance.now() + 2500; }
     setStatus('auto-scaling ' + (autoOn ? 'enabled' : 'disabled'), autoOn ? undefined : 'warn'); syncUI(); }
   function toggleCd () { cooldownOn = !cooldownOn;
     setStatus('cooldown ' + (cooldownOn ? 'enabled - scaling settles' : 'DISABLED - watch the pool flap'), cooldownOn ? undefined : 'bad'); syncUI(); }
@@ -1524,6 +1618,7 @@ window.doorGo = function (href) {
     DB.ops.forEach(function (o) { dropParticle(o.p); }); DB.ops = [];
     rate = 6; algo = 'lc'; autoOn = true; cooldownOn = true; rrIndex = -1; wrrCur = [0, 0, 0, 0, 0, 0, 0, 0];
     lastScale = 0; aboveSince = 0; belowSince = 0; waitSamples = []; served = 0; acc = 0; caption = '';
+    SURGE.phase = 'calm'; SURGE.until = performance.now() + 9000; SURGE.level = 0;
     layout(); syncUI(); drawAlgos(); drawLbFace(); setStatus('reset - 2 instances, least connections, 6 req/s');
   }
 
@@ -1690,7 +1785,7 @@ window.doorGo = function (href) {
       get served () { return served; }, get scaleEvents () { return scaleEvents; },
       activeCount: function () { return activeServers().length; }, get waitSamples () { return waitSamples; },
       pick: function (u) { var s = pickServer(u || 0); return s ? s.id : -1; },
-      setAlgo: setAlgo, setAuto: function (v) { autoOn = v; syncUI(); }, setCooldown: function (v) { cooldownOn = v; syncUI(); },
+      setAlgo: setAlgo, setAuto: function (v) { autoOn = v; syncUI(); }, setCooldown: function (v) { cooldownOn = v; syncUI(); }, scaleOut: function () { scaleOut(performance.now()); },
       reset: doReset, view: goView, metrics: function () { return JSON.parse(JSON.stringify(M)); }, ready: true
     };
     window.LBDB = { kill: dbKill, restore: dbRestore, setReadShare: function (v) { DB.readShare = v; },
@@ -1739,7 +1834,8 @@ window.doorGo = function (href) {
   function tick (t, dt) {
     var now = performance.now();
     dt = Math.min(dt || 16, 100);
-    acc += rate * dt / 1000;
+    surgeTick(now, dt);
+    acc += effRate() * dt / 1000;
     while (acc >= 1) { acc -= 1; spawnRequest(now); }
     for (var p = 0; p < REQS.length; p++) {
       var it = REQS[p];
@@ -1768,13 +1864,12 @@ window.doorGo = function (href) {
       }
       if (s.state === 'launching') {
         s.launchT = Math.min(1, s.launchT + dt / LAUNCH_MS);
-        s.holoMat.opacity = 0.55 + 0.45 * Math.sin(now / 120);
-        s.holo.position.y = s.body.position.y + Math.sin(now / 300) * 0.03;
+        launchFx(s, now);
         if (s.launchT >= 1) { s.state = 'active'; caption = 'instance ' + (s.id + 1) + ' is live - ' + activeServers().length + ' active';
           setStatus(caption); tintServer(s); }
       }
     });
-    dbTick(now, dt);
+    dbTick(now, dt); flowTick(dt);
     PGEO.attributes.position.needsUpdate = true;
     /* motion: strand pulses speed up with traffic, the core spins */
     STRAND.offset.x -= dt / 1000 * (0.18 + rate * 0.02);
@@ -1882,6 +1977,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 24</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 25</div>
 </body>
 </html>
