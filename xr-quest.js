@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 23).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 24).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 23';
+  var BUILD = 'build 24';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }

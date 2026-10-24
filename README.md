@@ -67,6 +67,31 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 24 (24 Oct 2026) - chapter 2 rebuilt as a futuristic control hall
+- New round hall:
+  - Background ring of server racks with blue and amber LEDs (chapter 1's rack model).
+  - Ceiling ring lights and a reflective-looking floor.
+  - Twinkling distant lights.
+- The load balancer floats on a tower over a glowing platform, with a spinning core crystal and a light beam from the ceiling.
+- Flowing light strands with moving pulses:
+  - From the Users panel into the balancer.
+  - From the balancer out to every instance; colour shows load (cyan, gold, red).
+  - From the instances down to the database tier, with replication arcs from the primary to the replicas.
+  - Every live request and database operation travels the strands as a glowing particle.
+- Instances on an arc, each with a live card (CPU, connections, latency). A new instance appears as a wireframe "Launching..." hologram with a progress bar.
+- Panels around the hall, all live:
+  - What this room teaches
+  - Users (live): world map, regions, requests per second
+  - Auto-scaling controller: CPU graph, scale-out progress, on/off toggle, cooldown
+  - Load balancing algorithms
+  - Queue
+  - Database live console, with a kill/restore replica button
+- 4 working algorithms: least connections, round robin, weighted (smooth weighted round robin) and IP hash (sticky by user). Click a row on the algorithms panel, use TRAFFIC & POOL, or use the VR control deck.
+- Top tabs (and keys 1/2/3, and the VR deck) jump between viewpoints: Overview, Load Balancing & Auto-Scaling, Database Tier.
+- All existing controls are kept: traffic, algorithm, auto-scaling, cooldown, read share, kill/restore replica, explain, reset, chapters.
+- The VR control deck, the explain boards and the info pop-ups are drawn on canvas, so they stay sharp in the headset.
+- Built only from three.js built-in materials, so it is safe with Quest multiview. Around 190 draw calls and 164k triangles. Lighter than chapter 1 in the headless frame test. AR was not tuned (VR only, as agreed).
+
 ## Build 23 (24 Oct 2026)
 - Cooling-unit fans: the blades are now brushed aluminium behind a dark graphite guard, so the spin is easy to see against the black unit.
 

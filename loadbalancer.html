@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Load Balancing &amp; Auto-Scaling · Interactive 3D Simulator</title>
+<title>Load Balancing &amp; Auto-Scaling · Cloud Infrastructure</title>
+<script src="ne_110m_land.js"></script>
 <script src="vendor/aframe.min.js"></script>
 <script src="xr-quest.js"></script>
 <script>
@@ -115,58 +116,64 @@ AFRAME.registerComponent('rig-walk', {
 /* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
 </script>
 <style>
-  html, body { margin: 0; padding: 0; background: #10151c; overflow: hidden; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e2e8f0; }
+  html, body { margin: 0; padding: 0; background: #03060c; overflow: hidden; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color: #e2f2ff; }
   a-scene canvas { touch-action: none; }
-  #hud { position: fixed; top: 10px; left: 10px; z-index: 5; max-width: 330px;
-         background: rgba(23, 26, 31, 0.9); border: 1px solid rgba(217, 165, 20, 0.4);
-         border-radius: 10px; padding: 10px 12px; }
-  #hud .eyebrow { color: #22d3ee; font-size: 10px; letter-spacing: 0.14em; font-weight: 700; }
-  #hud h1 { margin: 3px 0 2px; font-size: 15px; }
-  #hud .sub { font-size: 11px; color: #a8b0b6; line-height: 1.35; }
-  #status { margin-top: 6px; font-size: 11px; color: #34d399; min-height: 14px; }
-  #bar { position: fixed; left: 10px; bottom: 10px; z-index: 5; display: flex; flex-wrap: wrap;
-         gap: 6px; align-items: center; max-width: calc(100vw - 20px);
-         background: rgba(19, 26, 46, 0.88); border: 1px solid rgba(34, 211, 238, 0.25);
-         border-radius: 10px; padding: 8px 10px; }
-  #bar label { font-size: 11px; color: #a8b0b6; }
-  #bar input[type=range] { width: 110px; accent-color: #22d3ee; }
-  #bar button { font: inherit; font-size: 11.5px; color: #e2e8f0; background: #26292e;
-                border: 1px solid #3a3f45; border-radius: 7px; padding: 6px 9px; cursor: pointer; }
-  #bar button.on { border-color: #22d3ee; color: #22d3ee; }
-  #rateval { font-size: 11px; color: #22d3ee; min-width: 46px; }
-/* ---- tab bar / collapsible panels ---- */
-#tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 61;
-  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96vw; }
-#tabbar .tab { font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; color: #e2e8f0;
-  background: #26292e; border: 1px solid #3a3f46; border-radius: 999px; padding: 8px 13px; cursor: pointer; }
-#tabbar .tab.on { background: #22d3ee; color: #101317; border-color: #22d3ee; }
-#tabbar #b-hub { border-color: #d9a514; color: #fbbf24; }
-.tabpanel { position: fixed !important; left: 50% !important; right: auto !important; top: auto !important;
-  bottom: 86px !important; transform: translateX(-50%) !important; display: none !important;
-  flex-direction: column; gap: 6px; width: min(380px, calc(100vw - 14px)); max-width: calc(100vw - 14px);
-  max-height: 46vh; overflow: auto; box-sizing: border-box; margin: 0 !important; z-index: 60;
-  background: rgba(27,30,34,.94); border: 1px solid #34383f; border-radius: 12px; padding: 8px; }
-.tabpanel.open { display: flex !important; }
-#tabbar small { display: none; }
-@media (max-width: 700px) {
-  #tabbar .tab { font-size: 10.5px; padding: 7px 10px; }
-  #tabbar { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; left: 8px; right: 8px;
-    transform: none; bottom: 8px; max-width: none; }
-  #tabbar .tab { text-align: center; }
-  #tabbar #b-hub { grid-column: 1 / -1; }
-  .tabpanel { bottom: 120px !important; }
-}
-
-/* ---- touch thumb stick (phones: no WASD out there) ---- */
-#stick{position:fixed;left:14px;bottom:132px;width:116px;height:116px;border-radius:50%;
-  background:rgba(23,26,31,.55);border:1px solid rgba(217,165,20,.5);display:none;
-  touch-action:none;z-index:40}
-#stick::after{content:"";position:absolute;inset:34px;border-radius:50%;
-  border:1px dashed rgba(226,232,240,.25)}
-#stick-knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;
-  border-radius:50%;background:rgba(34,211,238,.85);box-shadow:0 0 16px rgba(34,211,238,.55)}
-html.coarse #stick{display:block}
+  /* ---- futuristic top bar (mirrors the concept: title | viewpoint tabs | explain reset gear) ---- */
+  #topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 62; display: flex; align-items: center;
+    gap: 14px; padding: 10px 16px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(3,8,18,.92), rgba(3,8,18,.55) 70%, rgba(3,8,18,0)); }
+  #topbar > * { pointer-events: auto; }
+  #brand { display: flex; align-items: center; gap: 12px; min-width: 230px; }
+  #brand .burger { width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(56,189,248,.35);
+    display: grid; place-items: center; color: #7dd3fc; font-size: 18px; background: rgba(8,20,40,.7); }
+  #brand .t1 { font-weight: 700; font-size: 14px; letter-spacing: .08em; color: #f0f9ff; }
+  #brand .t2 { font-size: 11px; letter-spacing: .12em; color: #7aa6c9; margin-top: 2px; }
+  #vtabs { flex: 1; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .vtab { font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #a9c7e4; cursor: pointer;
+    background: rgba(8,20,40,.72); border: 1px solid rgba(56,189,248,.28); border-radius: 10px; padding: 9px 16px; }
+  .vtab.on { color: #e0f7ff; border-color: #38bdf8; background: rgba(14,65,110,.65);
+    box-shadow: 0 0 14px rgba(56,189,248,.55), inset 0 0 12px rgba(56,189,248,.25); }
+  .vtab .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #38bdf8;
+    margin-right: 7px; box-shadow: 0 0 8px #38bdf8; vertical-align: 1px; }
+  #topright { display: flex; gap: 8px; }
+  .tbtn { font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .08em; color: #d6ecff; cursor: pointer;
+    background: rgba(8,20,40,.72); border: 1px solid rgba(56,189,248,.3); border-radius: 10px; padding: 9px 14px; }
+  .tbtn:hover, .vtab:hover { border-color: #7dd3fc; }
+  #status { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 61; font-size: 12px;
+    color: #34d399; background: rgba(4,12,26,.75); border: 1px solid rgba(56,189,248,.18); border-radius: 999px;
+    padding: 5px 14px; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
+  #hud { display: none; }
+  /* ---- bottom tab bar + panels (all existing controls kept) ---- */
+  #tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 12px; z-index: 61;
+    display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 96vw; }
+  #tabbar .tab { font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; color: #cfe6ff; cursor: pointer;
+    background: rgba(6,18,36,.8); border: 1px solid rgba(56,189,248,.3); border-radius: 999px; padding: 9px 15px; }
+  #tabbar .tab.on { background: rgba(14,65,110,.85); color: #fff; border-color: #38bdf8; box-shadow: 0 0 12px rgba(56,189,248,.5); }
+  #tabbar #b-hub { border-color: rgba(251,191,36,.6); color: #fcd34d; }
+  .tabpanel { position: fixed !important; left: 50% !important; bottom: 62px !important; transform: translateX(-50%) !important;
+    display: none !important; flex-wrap: wrap; gap: 7px; align-items: center; width: min(560px, calc(100vw - 16px));
+    box-sizing: border-box; z-index: 60; background: rgba(4,14,30,.9); border: 1px solid rgba(56,189,248,.35);
+    border-radius: 14px; padding: 10px 12px; box-shadow: 0 0 22px rgba(56,189,248,.18); }
+  .tabpanel.open { display: flex !important; }
+  .tabpanel label { font-size: 11px; color: #8fb4d4; letter-spacing: .06em; }
+  .tabpanel input[type=range] { width: 120px; accent-color: #38bdf8; }
+  .tabpanel button { font: inherit; font-size: 11.5px; color: #dbeeff; background: rgba(10,32,58,.9);
+    border: 1px solid rgba(56,189,248,.3); border-radius: 9px; padding: 7px 10px; cursor: pointer; }
+  .tabpanel button.on { border-color: #38bdf8; color: #7dd3fc; box-shadow: 0 0 10px rgba(56,189,248,.35); }
+  #rateval { font-size: 11px; color: #7dd3fc; min-width: 52px; }
+  .tabhint { font-size: 11px; color: #8fb4d4; line-height: 1.4; }
+  @media (max-width: 760px) {
+    #brand { min-width: 0; } #brand .t2 { display: none; } #topright .tbtn.gear { display: none; }
+    .vtab { font-size: 10.5px; padding: 7px 9px; } #status { top: 96px; }
+    #tabbar .tab { font-size: 10.5px; padding: 7px 10px; }
+  }
+  #stick{position:fixed;left:14px;bottom:132px;width:116px;height:116px;border-radius:50%;
+    background:rgba(4,14,30,.55);border:1px solid rgba(56,189,248,.5);display:none;touch-action:none;z-index:40}
+  #stick::after{content:"";position:absolute;inset:34px;border-radius:50%;border:1px dashed rgba(226,232,240,.25)}
+  #stick-knob{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;
+    border-radius:50%;background:rgba(56,189,248,.85);box-shadow:0 0 16px rgba(56,189,248,.65)}
+  html.coarse #stick{display:block}
 </style>
 <link rel="prefetch" href="datacentre.html">
 <link rel="prefetch" href="cdn.html">
@@ -175,11 +182,10 @@ html.coarse #stick{display:block}
 <div id="doorfade"></div>
 <div id="veil">loading chapter&hellip;</div>
 <style>
-#doorfade{position:fixed;inset:0;background:#10151c;opacity:0;transition:opacity .16s ease;
-  pointer-events:none;z-index:98}
+#doorfade{position:fixed;inset:0;background:#03060c;opacity:0;transition:opacity .16s ease;pointer-events:none;z-index:98}
 #doorfade.on{opacity:1;pointer-events:all}
-#veil{position:fixed;inset:0;background:#10151c;z-index:99;display:flex;align-items:center;
-  justify-content:center;color:#e2e8f0;font:600 13px/1 system-ui,sans-serif;letter-spacing:.08em}
+#veil{position:fixed;inset:0;background:#03060c;z-index:99;display:flex;align-items:center;justify-content:center;
+  color:#bfe6ff;font:600 13px/1 system-ui,sans-serif;letter-spacing:.12em}
 #veil.gone{display:none}
 </style>
 <script>
@@ -188,8 +194,6 @@ window.doorGo = function (href) {
   window.__dooring = true;
   var f = document.getElementById('doorfade');
   if (f) { f.classList.add('on'); }
-  var l = document.createElement('link'); l.rel = 'prefetch'; l.href = href;
-  document.head.appendChild(l);
   var sc = document.querySelector('a-scene');
   if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
   setTimeout(function () { location.href = href; }, 170);
@@ -202,20 +206,27 @@ window.doorGo = function (href) {
     var sc = document.querySelector('a-scene');
     if (sc) { sc.addEventListener('loaded', function () { setTimeout(kill, 250); }); }
   };
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', hook); }
-  else { hook(); }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', hook); } else { hook(); }
   setTimeout(kill, 9000);
 })();
 </script>
 
-
-<div id="hud">
-  <div class="eyebrow">CLOUD INFRASTRUCTURE, CHAPTER 2 OF 3</div>
-  <h1>Load Balancing &amp; Auto-Scaling</h1>
-  <div class="sub">Requests flow from users through one balancer into a pool that
-    grows and shrinks by itself. Drag to look · click anything glowing · stick to walk in VR.</div>
-  <div id="status">ready</div>
+<div id="topbar">
+  <div id="brand"><div class="burger">&#9776;</div>
+    <div><div class="t1">CLOUD INFRASTRUCTURE</div><div class="t2">CHAPTER 2 OF 3</div></div></div>
+  <div id="vtabs">
+    <button class="vtab" id="vp-1" type="button">1. OVERVIEW</button>
+    <button class="vtab on" id="vp-2" type="button"><span class="dot"></span>2. LOAD BALANCING &amp; AUTO-SCALING</button>
+    <button class="vtab" id="vp-3" type="button">3. DATABASE TIER</button>
+  </div>
+  <div id="topright">
+    <button class="tbtn" id="t-explain" type="button">EXPLAIN</button>
+    <button class="tbtn" id="t-reset" type="button">RESET</button>
+    <button class="tbtn gear" id="t-gear" type="button" title="controls">&#9881;</button>
+  </div>
 </div>
+<div id="status">ready</div>
+<div id="hud"></div>
 
 <div id="tabbar">
   <button class="tab" data-tab="traffic" id="tab-traffic" type="button">TRAFFIC &amp; POOL</button>
@@ -226,276 +237,135 @@ window.doorGo = function (href) {
 <div id="stick" aria-hidden="true"><div id="stick-knob"></div></div>
 <div id="bar" class="tabpanel" data-tab="traffic">
   <label for="rate">traffic</label>
-  <input id="rate" type="range" min="1" max="30" step="1" value="4">
-  <span id="rateval">4 req/s</span>
-  <button id="b-algo">algorithm: least-connections</button>
+  <input id="rate" type="range" min="1" max="30" step="1" value="6">
+  <span id="rateval">6 req/s</span>
+  <button id="b-algo">algorithm: least connections</button>
   <button id="b-auto" class="on">auto-scaling: on</button>
   <button id="b-cd" class="on">cooldown: on</button>
   <label for="db-share">read share</label>
-  <input id="db-share" type="range" min="0" max="100" step="5" value="80">
+  <input id="db-share" type="range" min="0" max="100" step="5" value="85">
   <button id="b-db">kill a replica</button>
   <button id="b-dbex">explain the db tier</button>
 </div>
 <div id="bar-view" class="tabpanel" data-tab="view">
-  <button id="b-reset">reset</button>
+  <button id="b-reset">reset the simulation</button>
 </div>
 <div id="bar-learn" class="tabpanel" data-tab="learn">
   <button id="b-explain">explain the simulation</button>
-  <span class="tabhint">walk: W A S D / arrows · drag to look · click cabinets, users or the core for info · thumb stick or W A S D walks · gold doors change chapter</span>
+  <span class="tabhint">top tabs jump between viewpoints · walk: W A S D / arrows · drag to look · click the balancer,
+    an instance, a database or a panel row · the gold portals change chapter</span>
 </div>
 
 <a-scene
-  background="color: #10151c"
-  fog="type: linear; color: #10151c; near: 12; far: 44"
+  background="color: #03060c"
+  fog="type: linear; color: #050a14; near: 16; far: 42"
   renderer="antialias: true; colorManagement: true; multiviewStereo: true"
   xr-mode-ui="enabled: true; XRMode: xr"
-  quest-ar="hide: #shell > a-box:not(:first-child)"
-  ar-model="mode: model; root: #world; scale: 0.045" lbsim>
+  quest-ar="hide: #shell"
+  ar-model="mode: model; root: #world; scale: 0.04" lbsim>
 
-  <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.75"></a-entity>
-  <a-entity light="type: directional; color: #fff4e0; intensity: 0.55" position="-2 4 3"></a-entity>
+  <a-entity light="type: ambient; color: #8fb3ff; intensity: 0.55"></a-entity>
+  <a-entity light="type: hemisphere; color: #7fb4ff; groundColor: #05080f; intensity: 0.9"></a-entity>
+  <a-entity light="type: directional; color: #cfe4ff; intensity: 0.5" position="2 6 6"></a-entity>
 
-  <a-entity id="rig" position="0 0 8" rig-walk="bound: 11.0" thumbstick-locomotion>
+  <a-entity id="rig" position="0 0 9.6" rig-walk="rbound: 10.6" thumbstick-locomotion>
     <a-entity id="cam" camera position="0 1.6 0"
       look-controls="pointerLockEnabled: false; magicWindowTrackingEnabled: true;
                      reverseTouchDrag: true; mouseEnabled: true; touchEnabled: true">
       <a-entity id="mouseCursor" cursor="rayOrigin: mouse; fuse: false"
-                raycaster="objects: .clickable; far: 30"></a-entity>
+                raycaster="objects: .clickable; far: 40"></a-entity>
     </a-entity>
     <a-entity id="handR" laser-controls="hand: right" cursor="fuse: false"
-              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+              raycaster="objects: .clickable; far: 40; lineColor: #38bdf8"></a-entity>
     <a-entity id="handL" laser-controls="hand: left"
-              raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
+              raycaster="objects: .clickable; far: 40; lineColor: #38bdf8"></a-entity>
   </a-entity>
 
   <a-entity id="world">
-    <a-plane rotation="-90 0 0" geometry="width: 24; height: 24"
-             material="color: #363c44; shader: flat; roughness: .95"></a-plane>
+    <!-- the hall (floor, walls, ceiling, background racks) is built in script: see buildRoom() -->
+    <a-entity id="shell"></a-entity>
 
-    <a-entity id="shell">
-      <a-box position="0 -0.1 0" width="24.6" height="0.2" depth="24.6"
-             material="color: #22262b; shader: flat"></a-box>
-      <a-box position="-7.7 2.3 12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="7.7 2.3 12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="0 3.6 12.15" width="2.6" height="2.0" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="-12.15 2.3 0" width="0.3" height="4.6" depth="24.6" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="12.15 2.3 0" width="0.3" height="4.6" depth="24.6" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="-7.7 2.3 -12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="7.7 2.3 -12.15" width="8.6" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="0 3.6 -12.15" width="2.6" height="2.0" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="0 4.7 0" width="24.6" height="0.18" depth="24.6" material="color: #2b3038; shader: flat"></a-box>
-      <a-box position="0 4.55 4" width="0.3" height="0.08" depth="22" material="color: #eaf6ff; shader: flat; opacity: .85; transparent: true"></a-box>
-      <a-box position="0 4.55 -4" width="0.3" height="0.08" depth="22" material="color: #eaf6ff; shader: flat; opacity: .85; transparent: true"></a-box>
-    </a-entity>
-
-    <a-entity id="door-ch1" class="clickable" door-zone="href: datacentre.html" position="0 0 11.9">
-      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
-             material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
-             material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
-             material="color: #d9a514; shader: flat"></a-box>
-      <a-plane position="0 1.3 -0.05" width="2.55" height="2.6"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3; side: double"></a-plane>
-      <a-text value="CHAPTER 1" position="0 3.35 -0.1" rotation="0 180 0" align="center"
-              width="4.2" color="#fbbf24" material="shader: flat"></a-text>
-      <a-text value="INSIDE A DATA CENTRE - WALK IN TO GO BACK" position="0 3.02 -0.1"
-              rotation="0 180 0" align="center" width="3.4" wrap-count="40"
-              color="#e2e8f0" material="shader: flat"></a-text>
-    </a-entity>
-
-    <a-entity id="door-ch3" class="clickable" door-zone="href: cdn.html" position="0 0 -11.9">
-      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
-             material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
-             material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
-             material="color: #d9a514; shader: flat"></a-box>
-      <a-plane position="0 1.3 0.05" width="2.55" height="2.6"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3; side: double"></a-plane>
-      <a-text value="CHAPTER 3" position="0 3.35 0.1" align="center"
-              width="4.2" color="#fbbf24" material="shader: flat"></a-text>
-      <a-text value="CDN &amp; EDGE CACHING - WALK IN TO CONTINUE" position="0 3.02 0.1"
-              align="center" width="3.4" wrap-count="40"
-              color="#e2e8f0" material="shader: flat"></a-text>
-    </a-entity>
-
-    <canvas id="tex-rackfront" width="256" height="512" style="display:none"></canvas>
-    <canvas id="tex-lbfront" width="256" height="256" style="display:none"></canvas>
-    <canvas id="tex-concrete" width="512" height="512" style="display:none"></canvas>
+    <a-entity id="door-ch1" class="clickable" door-zone="href: datacentre.html" position="0 0 11.3"></a-entity>
+    <a-entity id="door-ch3" class="clickable" door-zone="href: cdn.html" position="0 0 -11.3"></a-entity>
 
     <a-entity id="info" position="0 2.2 0" billboard visible="false">
-      <a-plane geometry="width: 1.8; height: 1.0" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
-      <a-text id="info-title" value="" position="-0.82 0.36 0.01" align="left" color="#fbbf24"
-              width="1.6" material="shader: flat"></a-text>
-      <a-text id="info-body" value="" position="-0.82 0.16 0.01" align="left" color="#e2e8f0"
-              width="1.6" material="shader: flat"></a-text>
+      <a-plane geometry="width: 2.0; height: 1.1" material="color: #06142a; shader: flat; opacity: 0.93; transparent: true"></a-plane>
+      <a-plane geometry="width: 2.0; height: 0.025" position="0 0.54 0.005" material="color: #38bdf8; shader: flat"></a-plane>
+      <a-text id="info-title" value="" position="-0.9 0.38 0.01" align="left" color="#7dd3fc" width="1.8" material="shader: flat"></a-text>
+      <a-text id="info-body" value="" position="-0.9 0.16 0.01" align="left" color="#e0f2fe" width="1.7" baseline="top" material="shader: flat"></a-text>
     </a-entity>
 
-    <a-entity id="clients"></a-entity>
-    <a-text value="USERS" position="0 0.03 8.4" rotation="-90 0 0" align="center" color="#9fb0cc" width="3"
-            material="shader: flat"></a-text>
-
-    <a-entity id="lb" position="0 1 2.5">
-      <a-box position="0 -0.95 0" width="1.5" height="0.12" depth="1.1" material="color: #17191c; shader: flat"></a-box>
-      <a-box position="-0.7 0 0" width="0.12" height="1.9" depth="1.1" material="color: #23272b; shader: flat"></a-box>
-      <a-box position="0.7 0 0" width="0.12" height="1.9" depth="1.1" material="color: #23272b; shader: flat"></a-box>
-      <a-box position="0 0.98 0" width="1.52" height="0.14" depth="1.12" material="color: #17191c; shader: flat"></a-box>
-      <a-box position="0 -0.02 -0.54" width="1.4" height="1.8" depth="0.06" material="color: #23272b; shader: flat"></a-box>
-      <a-plane position="0 -0.02 0.56" width="1.36" height="1.76"
-               material="color: #ffffff; shader: flat; src: #tex-lbfront; opacity: .96; transparent: true"></a-plane>
-      <a-box position="-0.5 0.9 0.5" width="0.06" height="0.06" depth="0.06" material="color: #34d399; shader: flat"></a-box>
-      <a-box position="-0.36 0.9 0.5" width="0.06" height="0.06" depth="0.06" material="color: #fbbf24; shader: flat"></a-box>
-      <a-cylinder position="0 1.28 0" radius="0.05" height="0.7"
-                  material="color: #22d3ee; shader: flat; opacity: .45; transparent: true"></a-cylinder>
-      <a-octahedron radius="0.45" position="0 1.85 0" spin
-                    material="color: #22d3ee; shader: flat; opacity: 0.95"
-                    class="clickable" id="lb-core"></a-octahedron>
+    <a-entity id="explain" position="0 1.75 6.4" visible="false">
+      <a-plane geometry="width: 3.0; height: 1.75" material="color: #06142a; shader: flat; opacity: 0.94; transparent: true"></a-plane>
+      <a-plane geometry="width: 3.0; height: 0.03" position="0 0.86 0.005" material="color: #38bdf8; shader: flat"></a-plane>
+      <a-text id="explain-text" value="" position="-1.38 0.76 0.01" align="left" color="#e0f2fe" width="2.76" baseline="top" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="dbexplain" position="-3.6 1.6 5.2" rotation="0 30 0" visible="false">
+      <a-plane geometry="width: 3.2; height: 2.1" material="color: #06142a; shader: flat; opacity: 0.95; transparent: true"></a-plane>
+      <a-plane geometry="width: 3.2; height: 0.03" position="0 1.04 0.005" material="color: #fbbf24; shader: flat"></a-plane>
+      <a-text id="dbexplain-text" value="" position="-1.5 0.95 0.01" align="left" color="#e0f2fe" width="2.9" baseline="top" material="shader: flat"></a-text>
     </a-entity>
 
-    <a-entity id="links"></a-entity>
-    <a-entity id="servers"></a-entity>
-    <a-entity id="pool"></a-entity>
-
-    <a-entity id="metrics" position="0 3.15 2.5" billboard>
-      <a-plane id="metrics-board" class="clickable" geometry="width: 3.5; height: 1.62"
-               material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
-      <a-text id="metrics-text" value="" position="-1.62 0.68 0.01" align="left" color="#e2e8f0"
-              width="3.2" material="shader: flat"></a-text>
-    </a-entity>
-
-    <canvas id="tex-legend" width="1024" height="576" style="display:none"></canvas>
-    <canvas id="tex-takeaways" width="1024" height="512" style="display:none"></canvas>
-    <a-entity id="legend" position="-11.9 2.1 0" rotation="0 90 0">
-      <a-plane geometry="width: 4.6; height: 2.6" material="color: #ffffff; shader: flat; src: #tex-legend"></a-plane>
-    </a-entity>
-    <a-entity id="takeaways" position="11.9 2.1 0" rotation="0 -90 0">
-      <a-plane geometry="width: 4.6; height: 2.3" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
-    </a-entity>
-
-    <canvas id="tex-db" width="1024" height="576" style="display:none"></canvas>
-    <a-entity id="dbboard" position="-11.9 2.1 -7.4" rotation="0 90 0">
-      <a-plane geometry="width: 4.6; height: 2.6" material="color: #ffffff; shader: flat; src: #tex-db"></a-plane>
-    </a-entity>
-    <a-entity id="dbtier" position="-7.4 0 -7.4">
-      <a-cylinder radius="2.7" height="0.06" position="0 0.03 0"
-                  material="color: #22262b; shader: flat"></a-cylinder>
-      <a-entity id="db-primary" class="clickable" position="0 0 0.95">
-        <a-cylinder radius="0.55" height="1.5" position="0 0.75 0" material="color: #23272b; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.58" height="0.05" position="0 0.42 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.58" height="0.05" position="0 0.78 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.58" height="0.05" position="0 1.14 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder id="dbp-heat" radius="0.57" height="0.16" position="0 1.42 0" material="color: #d9a514; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.32" height="0.06" position="0 1.55 0" material="color: #fbbf24; shader: flat; opacity: .9; transparent: true"></a-cylinder>
-        <a-box id="dbp-led" geometry="width: 0.07; height: 0.07; depth: 0.07" position="0.44 1.28 0.44"
-               material="color: #f59e0b; shader: flat" visible="false"></a-box>
-        <a-entity id="dbp-tag" billboard position="0 2.12 0">
-          <a-plane geometry="width: 2.0; height: 0.5" position="0 0 -0.02"
-                   material="color: #10151c; shader: flat; opacity: .85; transparent: true"></a-plane>
-          <a-text id="dbp-label" value="PRIMARY - takes writes" position="0 0.12 0" align="center"
-                  color="#fbbf24" width="2.2" material="shader: flat"></a-text>
-          <a-text id="dbp-stat" value="ops 0 · heat 0%" position="0 -0.12 0" align="center"
-                  color="#e2e8f0" width="1.8" material="shader: flat"></a-text>
-        </a-entity>
+    <a-entity id="vrmenu" position="0 1.45 6.4" visible="false">
+      <a-plane geometry="width: 2.9; height: 1.9" material="color: #06142a; shader: flat; opacity: 0.94; transparent: true"></a-plane>
+      <a-plane geometry="width: 2.9; height: 0.02" position="0 0.94 0.004" material="color: #38bdf8; shader: flat"></a-plane>
+      <a-text value="CONTROL DECK" position="0 0.8 0.01" align="center" color="#7dd3fc" width="3" material="shader: flat"></a-text>
+      <a-entity id="vm-v1" class="clickable" position="-0.95 0.52 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #0b2a4a; shader: flat"></a-plane>
+        <a-text value="1 overview" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="db-r1" class="clickable" position="-1.55 0 -0.95">
-        <a-cylinder radius="0.45" height="1.2" position="0 0.6 0" material="color: #2a2f35; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.48" height="0.04" position="0 0.34 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.48" height="0.04" position="0 0.66 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder id="dbr1-ring" radius="0.47" height="0.12" position="0 1.14 0" material="color: #14b8a6; shader: flat"></a-cylinder>
-        <a-box id="dbr1-led" geometry="width: 0.06; height: 0.06; depth:0.06" position="0.36 1.0 0.36"
-               material="color: #22d3ee; shader: flat" visible="false"></a-box>
-        <a-box geometry="width: 0.94; height: 0.08; depth: 0.02" position="0 1.34 0"
-               material="color: #22262b; shader: flat"></a-box>
-        <a-box id="dbr1-lag" geometry="width: 0.94; height: 0.08; depth: 0.03" position="-0.47 1.34 0.01"
-               material="color: #22d3ee; shader: flat" scale="0.05 1 1"></a-box>
-        <a-entity id="dbr1-tag" billboard position="0 1.78 0">
-          <a-plane geometry="width: 2.1; height: 0.5" position="0 0 -0.02"
-                   material="color: #10151c; shader: flat; opacity: .85; transparent: true"></a-plane>
-          <a-text id="dbr1-label" value="REPLICA 1 - serves reads" position="0 0.12 0" align="center"
-                  color="#5eead4" width="2.2" material="shader: flat"></a-text>
-          <a-text id="dbr1-stat" value="ops 0 · lag ~0 ms" position="0 -0.12 0" align="center"
-                  color="#e2e8f0" width="1.8" material="shader: flat"></a-text>
-        </a-entity>
+      <a-entity id="vm-v2" class="clickable" position="0 0.52 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #0b2a4a; shader: flat"></a-plane>
+        <a-text value="2 load balancing" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="db-r2" class="clickable" position="1.55 0 -0.95">
-        <a-cylinder radius="0.45" height="1.2" position="0 0.6 0" material="color: #2a2f35; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.48" height="0.04" position="0 0.34 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder radius="0.48" height="0.04" position="0 0.66 0" material="color: #3a4046; shader: flat"></a-cylinder>
-        <a-cylinder id="dbr2-ring" radius="0.47" height="0.12" position="0 1.14 0" material="color: #14b8a6; shader: flat"></a-cylinder>
-        <a-box id="dbr2-led" geometry="width: 0.06; height: 0.06; depth:0.06" position="0.36 1.0 0.36"
-               material="color: #22d3ee; shader: flat" visible="false"></a-box>
-        <a-box geometry="width: 0.94; height: 0.08; depth: 0.02" position="0 1.34 0"
-               material="color: #22262b; shader: flat"></a-box>
-        <a-box id="dbr2-lag" geometry="width: 0.94; height: 0.08; depth: 0.03" position="-0.47 1.34 0.01"
-               material="color: #22d3ee; shader: flat" scale="0.05 1 1"></a-box>
-        <a-entity id="dbr2-tag" billboard position="0 1.78 0">
-          <a-plane geometry="width: 2.1; height: 0.5" position="0 0 -0.02"
-                   material="color: #10151c; shader: flat; opacity: .85; transparent: true"></a-plane>
-          <a-text id="dbr2-label" value="REPLICA 2 - serves reads" position="0 0.12 0" align="center"
-                  color="#5eead4" width="2.2" material="shader: flat"></a-text>
-          <a-text id="dbr2-stat" value="ops 0 · lag ~0 ms" position="0 -0.12 0" align="center"
-                  color="#e2e8f0" width="1.8" material="shader: flat"></a-text>
-        </a-entity>
+      <a-entity id="vm-v3" class="clickable" position="0.95 0.52 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #0b2a4a; shader: flat"></a-plane>
+        <a-text value="3 database" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="db-links">
-        <a-line start="0 1.6 0.95" end="-1.55 1.2 -0.95" material="color: #22d3ee; opacity: .75; transparent: true"></a-line>
-        <a-line start="0 1.6 0.95" end="1.55 1.2 -0.95" material="color: #22d3ee; opacity: .75; transparent: true"></a-line>
+      <a-entity id="vm-algo" class="clickable" position="-0.95 0.2 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="least connections" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="db-ops"></a-entity>
-    </a-entity>
-    <canvas id="tex-dbconsole" width="1024" height="640" style="display:none"></canvas>
-    <a-entity id="dbconsole" billboard position="-7.4 3.4 -7.4">
-      <a-plane geometry="width: 3.5; height: 2.19" material="color: #ffffff; shader: flat; src: #tex-dbconsole"></a-plane>
-    </a-entity>
-    <a-entity id="dbexplain" billboard position="-8.7 1.75 -4.5" visible="false">
-      <a-plane geometry="width: 3.5; height: 2.2" material="color: #1b1e22; shader: flat; opacity: 0.95"></a-plane>
-      <a-text id="dbexplain-text" value="" position="-1.62 1.0 0.01" align="left" color="#e2e8f0"
-              width="3.2" baseline="top" material="shader: flat"></a-text>
-    </a-entity>
-    <a-entity id="explain" position="0 1.7 7.5" billboard visible="false">
-      <a-plane geometry="width: 2.6; height: 1.5" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
-      <a-text id="explain-text" value="" position="-1.18 0.63 0.01" align="left" color="#e2e8f0"
-              width="2.36" material="shader: flat"></a-text>
-    </a-entity>
-
-    <a-entity id="vrmenu" position="0 1.45 6.2" visible="false">
-      <a-plane geometry="width: 2.5; height: 1.7" material="color: #1b1e22; shader: flat; opacity: 0.94"></a-plane>
-      <a-text value="CONTROLS" position="0 0.72 0.01" align="center" color="#22d3ee" width="3"
-              material="shader: flat"></a-text>
-      <a-entity id="vm-algo"  class="clickable" position="-0.72 0.16 0.01">
-        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text value="algorithm" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-auto" class="clickable" position="0 0.2 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="autoscale on" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="vm-auto"  class="clickable" position="0.42 0.16 0.01">
-        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text value="autoscale" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-cd" class="clickable" position="0.95 0.2 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="cooldown on" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="vm-cd"    class="clickable" position="-0.72 -0.14 0.01">
-        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text value="cooldown" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-rate" class="clickable" position="-0.95 -0.12 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text id="vm-rate-t" value="traffic +" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="vm-rate"  class="clickable" position="0.42 -0.14 0.01">
-        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text value="rate - / +" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-expl" class="clickable" position="0 -0.12 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="explain" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="vm-expl"  class="clickable" position="-0.72 -0.44 0.01">
-        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text value="explain" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-reset" class="clickable" position="0.95 -0.12 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="reset" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="vm-exit"  class="clickable" position="0.42 -0.44 0.01">
-        <a-plane geometry="width: 1.06; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text value="leave VR" align="center" color="#f87171" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-db" class="clickable" position="-0.48 -0.44 0.01">
+        <a-plane geometry="width: 1.36; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text id="vm-db-t" value="kill a replica" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-entity id="vm-db" class="clickable" position="0 -0.72 0.01">
-        <a-plane geometry="width: 2.2; height: 0.24" material="color: #26292e; shader: flat"></a-plane>
-        <a-text id="vm-db-t" value="kill a replica" align="center" color="#e2e8f0" width="2.4" position="0 0 0.01" material="shader: flat"></a-text>
+      <a-entity id="vm-exit" class="clickable" position="0.72 -0.44 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #2a1020; shader: flat"></a-plane>
+        <a-text value="leave VR" align="center" color="#fca5a5" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
+      <a-text id="vm-status" value="" position="0 -0.74 0.01" align="center" color="#8fb4d4" width="2.7" material="shader: flat"></a-text>
     </a-entity>
   </a-entity>
 </a-scene>
-
 <script>
+/* =============================================================================
+   Chapter 2 - LOAD BALANCING & AUTO-SCALING (build 24 redesign)
+   A futuristic control hall: requests flow as light from the Users panel into
+   the load balancer, out to the instance pool and down to the database tier.
+   Everything visual is built here in three.js with built-in materials only
+   (safe with Quest multiview); A-Frame entities are used just for clicks.
+   ========================================================================== */
 (function () {
   'use strict';
   var scene = document.querySelector('a-scene');
@@ -503,348 +373,949 @@ window.doorGo = function (href) {
   function setStatus (t, kind) {
     statusEl.textContent = t;
     statusEl.style.color = kind === 'warn' ? '#fbbf24' : kind === 'bad' ? '#f87171' : '#34d399';
+    var vs = document.getElementById('vm-status'); if (vs) { vs.setAttribute('value', t); }
+    if (typeof VM !== 'undefined' && VM) { vmPaint(); }
   }
+  var V3 = THREE.Vector3;
+  /* glow sprites are decoration: never raycast them (the cursor would need a camera on the raycaster) */
+  THREE.Sprite.prototype.raycast = function () {};
+  var TAU = Math.PI * 2;
+  function rnd (a, b) { return a + Math.random() * (b - a); }
 
-  var CAP = 4, MIN_SERVERS = 2, MAX_SERVERS = 8;
-  var SCALE_OUT_UTIL = 0.70, SCALE_OUT_HOLD = 3000;
-  var SCALE_IN_UTIL = 0.30, SCALE_IN_HOLD = 5000;
-  var COOLDOWN = 10000;
-  var POOL_N = 220;
+  /* ---------------- layout (metres; +z is towards the entrance) ------------ */
+  var R_HALL = 12, H_HALL = 6.2;
+  var PLAT = new V3(0, 0, -3.6), PLAT_R = 3.9, PLAT_H = 0.22;
+  var LB_LIFT = 1.7;                                 /* the balancer floats above the pool, as in the concept */
+  var LBP = new V3(0, PLAT_H + LB_LIFT, -4.6);        /* load balancer cabinet foot */
+  var LB_IN = new V3(-1.08, LBP.y + 0.78, -4.45);    /* where user strands enter (left side) */
+  var LB_OUT = new V3(0, LBP.y + 0.12, -4.06);       /* where instance strands leave (front, low) */
+  var CORE_Y = LBP.y + 2.35;
+  var ARC_R = 3.2;                                   /* instance arc around the balancer */
+  var JUNC = new V3(0, 0.42, 0.55);                  /* instances -> database junction */
+  var DBP = { primary: new V3(0, 0, 2.3), r1: new V3(-2.15, 0, 2.75), r2: new V3(2.15, 0, 2.75) };
+  var VIEWS = [
+    { pos: new V3(0, 0, 9.6), look: new V3(0, 1.95, -2.8) },
+    { pos: new V3(0, 0, 1.7), look: new V3(0, 1.95, -4.6) },
+    { pos: new V3(-2.4, 0, 9.4), look: new V3(-2.9, 1.2, 2.9) }
+  ];
 
-  var rate = 4, algo = 'lc', autoOn = true, cooldownOn = true;
-  var rrIndex = -1, lastScale = 0, aboveSince = 0, belowSince = 0;
-  var waitSamples = [], served = 0, acc = 0, caption = '', scaleEvents = 0;
-  var servers = [], pool = [], poolCursor = 0;
-
-  var C_GREEN = new THREE.Color('#34d399'), C_AMBER = new THREE.Color('#fbbf24'),
-      C_RED = new THREE.Color('#f87171'), C_SLATE = new THREE.Color('#334155');
-  var tmpC = new THREE.Color();
-  function utilColor (u, target) {
-    if (u <= 0.6) { tmpC.copy(C_GREEN).lerp(C_AMBER, u / 0.6); }
-    else { tmpC.copy(C_AMBER).lerp(C_RED, (u - 0.6) / 0.4); }
-    target.copy(tmpC); return target;
+  /* ---------------- shared textures --------------------------------------- */
+  function canvas (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function ctex (c, rep) {
+    var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+    return t;
   }
-
-  function el (tag, attrs, parent) {
-    var e = document.createElement(tag);
-    for (var k in attrs) { e.setAttribute(k, attrs[k]); }
-    if (parent) { parent.appendChild(e); }
-    return e;
-  }
-
-  var clientSpots = [];
-  function buildStatics () {
-    var clients = document.getElementById('clients');
-    for (var i = 0; i < 12; i++) {
-      var x = -3 + 6 * Math.random(), z = 6 + (Math.random() - 0.5) * 1.6, y = 0.8 + Math.random() * 0.5;
-      clientSpots.push(new THREE.Vector3(x, y, z));
-      var dev = ['#8b5cf6', '#14b8a6', '#f59e0b', '#ec4899'][i % 4];
-      var tok = el('a-sphere', { radius: 0.12, position: x + ' ' + y + ' ' + z,
-        material: 'color: ' + dev + '; shader: flat', 'class': 'clickable' }, clients);
-      (function (token, colour, idx) {
-        var device = { '#8b5cf6': 'phone on 5G', '#14b8a6': 'laptop on fibre',
-                       '#f59e0b': 'tablet on wifi', '#ec4899': 'smart TV on cable' }[colour] || 'device';
-        token.addEventListener('click', function () {
-          openInfo('USER ' + (idx + 1), 'a real visitor: ' + device + '\nevery tap sends HTTP requests\nto the load balancer out front\nwatch the cyan sphere it launches',
-            token.object3D.position);
-        });
-      })(tok, dev, i);
-    }
-    var links = document.getElementById('links');
-    el('a-cylinder', { id: 'link-clients', radius: 0.01,
-      material: 'color: #454b54; shader: flat' }, links);
-    for (var s = 0; s < MAX_SERVERS; s++) {
-      el('a-cylinder', { id: 'link-s' + s, radius: 0.01, visible: 'false',
-        material: 'color: #454b54; shader: flat' }, links);
-    }
-    var poolWrap = document.getElementById('pool');
-    for (var p = 0; p < POOL_N; p++) {
-      var sp = el('a-sphere', { radius: 0.08, visible: 'false',
-        material: 'color: #22d3ee; shader: flat' }, poolWrap);
-      var item = { el: sp, phase: 0, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(),
-        srv: null, spawnAt: 0 };
-      sp.addEventListener('click', function () {
-        openInfo('ONE REQUEST', item.phase === 0 ? 'waiting at a user, not sent yet'
-          : 'in flight: user -> ' + (item.srv ? 'server S' + (item.srv.id + 1) : 'balancer') +
-            '\nwaiting ' + Math.round(Math.max(0, nowMs() - item.spawnAt)) + ' ms so far',
-          sp.object3D.position);
-      });
-      pool.push(item);
-    }
-  }
-
-  function makeServer (idx) {
-    var g = el('a-entity', { visible: 'false' }, document.getElementById('servers'));
-    el('a-box', { position: '0 0.06 0', geometry: 'primitive: box; width: 0.8; height: 0.12; depth: 0.8',
-      material: 'color: #17191c; shader: flat' }, g);
-    el('a-box', { position: '0 0.95 0', geometry: 'primitive: box; width: 0.72; height: 1.66; depth: 0.72',
-      material: 'color: #23272b; shader: flat' }, g);
-    el('a-plane', { position: '0 0.98 0.37', geometry: 'width: 0.64; height: 1.5',
-      material: 'color: #ffffff; shader: flat; src: #tex-rackfront' }, g);
-    el('a-box', { position: '0 1.82 0', geometry: 'primitive: box; width: 0.76; height: 0.08; depth: 0.76',
-      material: 'color: #17191c; shader: flat' }, g);
-    el('a-box', { position: '0.3 0.95 0.38', geometry: 'primitive: box; width: 0.04; height: 0.6; depth: 0.04',
-      material: 'color: #8b9199; shader: flat' }, g);
-    var box = el('a-box', { 'geometry': 'primitive: box; width: 0.6; height: 0.05; depth: 0.05',
-      position: '0 1.9 0.3', material: 'color: #454b54; shader: flat',
-      'class': 'clickable' }, g);
-    var qbar = el('a-box', { 'geometry': 'primitive: box; width: 0.12; height: 0.02; depth: 0.12',
-      position: '0.44 1.98 0', visible: 'false', material: 'color: #f87171; shader: flat' }, g);
-    var txt = el('a-text', { value: '', position: '0 2.3 0', align: 'center', color: '#e2e8f0',
-      width: 3, material: 'shader: flat', billboard: '' }, g);
-    var srv = { id: idx, el: g, box: box, qbar: qbar, txt: txt, inFlight: [], queue: [],
-      state: 'hidden', homeX: 0, scaleT: 1, load: 0, util: 0 };
-    box.addEventListener('click', function () {
-      setStatus('S' + (srv.id + 1) + ' · in flight ' + srv.inFlight.length + '/' + CAP +
-        ' · queued ' + srv.queue.length + ' · ' + Math.round(srv.util * 100) + '% utilised');
-      openInfo('POOL SERVER S' + (srv.id + 1),
-        'rack cabinet · 8 vCPU · 32 GB RAM\nrole: pool worker, least-connections pick\nin flight ' +
-        srv.inFlight.length + '/' + CAP + ' · queued ' + srv.queue.length + '\nutilisation ' +
-        Math.round(srv.util * 100) + '% · state ' + srv.state, srv.el.object3D.position);
+  var GLOW = (function () {                          /* soft round glow for halos / particles */
+    var c = canvas(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,255,255,.75)');
+    gr.addColorStop(0.45, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return ctex(c);
+  })();
+  var STRAND = (function () {                        /* faint body + travelling bright pulses */
+    var c = canvas(512, 8), g = c.getContext('2d'), x;
+    var gr = g.createLinearGradient(0, 0, 512, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,.28)'); gr.addColorStop(1, 'rgba(255,255,255,.28)');
+    g.fillStyle = gr; g.fillRect(0, 0, 512, 8);
+    [[70, 26, 1], [250, 18, .8], [400, 34, 1]].forEach(function (p) {
+      var pg = g.createLinearGradient(p[0] - p[1], 0, p[0] + p[1], 0);
+      pg.addColorStop(0, 'rgba(255,255,255,0)'); pg.addColorStop(0.5, 'rgba(255,255,255,' + p[2] + ')');
+      pg.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = pg; g.fillRect(p[0] - p[1], 0, p[1] * 2, 8);
     });
-    servers.push(srv);
-    return srv;
+    var t = ctex(c, true); t.colorSpace = THREE.NoColorSpace; return t;
+  })();
+  var STRAND_SOFT = (function () {
+    var c = canvas(256, 8), g = c.getContext('2d');
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(0, 0, 256, 8);
+    var t = ctex(c, true); t.colorSpace = THREE.NoColorSpace; return t;
+  })();
+  var VFADE = (function () {                         /* vertical fade for beams */
+    var c = canvas(4, 256), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, 'rgba(255,255,255,0.0)'); gr.addColorStop(0.25, 'rgba(255,255,255,.55)');
+    gr.addColorStop(0.85, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,.2)');
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 256); return ctex(c);
+  })();
+  var RINGFADE = (function () {                      /* radial band: bright on the ring, fading out */
+    var c = canvas(256, 256), g = c.getContext('2d'), gr = g.createRadialGradient(128, 128, 60, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.62, 'rgba(255,255,255,.0)');
+    gr.addColorStop(0.8, 'rgba(255,255,255,.85)'); gr.addColorStop(0.86, 'rgba(255,255,255,.4)');
+    gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return ctex(c);
+  })();
+
+  function add (parent, obj) { parent.add(obj); return obj; }
+  function basic (o) { o = o || {}; o.toneMapped = false; return new THREE.MeshBasicMaterial(o); }
+  function addMat (color, opacity, map) {
+    return new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: opacity == null ? 1 : opacity,
+      map: map || null, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  }
+  function halo (parent, pos, size, color, opacity) {
+    var s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: color, transparent: true,
+      opacity: opacity == null ? 0.8 : opacity, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    s.position.copy(pos); s.scale.set(size, size, 1); parent.add(s); return s;
   }
 
-  function activeServers () {
-    return servers.filter(function (s) { return s.state === 'active'; });
+  var root, refl;                                     /* refl: mirrored copies under the glossy floor */
+  var MIRROR = [];
+  function mirror (obj) {
+    var m = obj.clone(); m.position.y = -obj.position.y; m.scale.y = -obj.scale.y;
+    if (obj.isSprite) { m.scale.y = obj.scale.y; m.material = obj.material.clone(); m.material.opacity *= 0.55; }
+    refl.add(m); MIRROR.push({ src: obj, dst: m }); return m;
   }
-  function layoutRow () {
-    var list = servers.filter(function (s) { return s.state !== 'hidden'; });
-    for (var i = 0; i < list.length; i++) { list[i].homeX = (i - (list.length - 1) / 2) * 1.3; }
+
+  /* ---------------- the hall ---------------------------------------------- */
+  function buildRoom () {
+    var shell = document.getElementById('shell').object3D;
+    /* glossy dark floor: a subtle grid, partly see-through so the mirrored glow shows */
+    var fc = canvas(1024, 1024), g = fc.getContext('2d'), i;
+    g.fillStyle = '#060b14'; g.fillRect(0, 0, 1024, 1024);
+    g.strokeStyle = 'rgba(56,120,190,.20)'; g.lineWidth = 2;
+    for (i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * 128, 0); g.lineTo(i * 128, 1024); g.stroke();
+      g.beginPath(); g.moveTo(0, i * 128); g.lineTo(1024, i * 128); g.stroke(); }
+    g.strokeStyle = 'rgba(56,120,190,.07)'; g.lineWidth = 1;
+    for (i = 0; i <= 32; i++) { g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, 1024); g.stroke();
+      g.beginPath(); g.moveTo(0, i * 32); g.lineTo(1024, i * 32); g.stroke(); }
+    var ft = ctex(fc, true); ft.repeat.set(6, 6);
+    var floor = add(shell, new THREE.Mesh(new THREE.CircleGeometry(R_HALL, 72).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ map: ft, transparent: true, opacity: 0.8, toneMapped: false })));
+    floor.renderOrder = 1;
+    /* under-floor void (what the "reflections" sit in) */
+    add(refl, new THREE.Mesh(new THREE.CircleGeometry(R_HALL, 48).rotateX(-Math.PI / 2).translate(0, -7, 0),
+      basic({ color: '#02040a' })));
+
+    /* curved wall: dark panels with two cyan light lines */
+    var wc = canvas(1024, 512); g = wc.getContext('2d');
+    var wg = g.createLinearGradient(0, 0, 0, 512);
+    wg.addColorStop(0, '#04070e'); wg.addColorStop(0.6, '#071022'); wg.addColorStop(1, '#050913');
+    g.fillStyle = wg; g.fillRect(0, 0, 1024, 512);
+    g.fillStyle = 'rgba(70,130,200,.10)';
+    for (i = 0; i < 8; i++) { g.fillRect(i * 128, 0, 2, 512); }
+    g.fillStyle = 'rgba(80,190,255,.9)'; g.fillRect(0, 168, 1024, 3);
+    g.fillStyle = 'rgba(80,190,255,.25)'; g.fillRect(0, 164, 1024, 11);
+    g.fillStyle = 'rgba(80,190,255,.55)'; g.fillRect(0, 60, 1024, 2);
+    for (i = 0; i < 16; i++) { g.fillStyle = i % 5 === 0 ? 'rgba(251,191,36,.8)' : 'rgba(80,190,255,.6)';
+      g.fillRect(i * 64 + 20, 120, 24, 3); }
+    var wt = ctex(wc, true); wt.repeat.set(9, 1);
+    add(shell, new THREE.Mesh(new THREE.CylinderGeometry(R_HALL, R_HALL, H_HALL, 72, 1, true).translate(0, H_HALL / 2, 0),
+      basic({ map: wt, side: THREE.BackSide })));
+    /* ceiling + concentric light rings (the picture's glowing top edge) */
+    add(shell, new THREE.Mesh(new THREE.CircleGeometry(R_HALL, 72).rotateX(Math.PI / 2).translate(0, H_HALL, 0),
+      basic({ color: '#03060c' })));
+    [[10.6, 0.05, '#7dd3fc'], [7.4, 0.035, '#38bdf8'], [4.4, 0.03, '#38bdf8']].forEach(function (r) {
+      var ring = add(shell, new THREE.Mesh(new THREE.TorusGeometry(r[0], r[1], 6, 120).rotateX(Math.PI / 2),
+        basic({ color: r[2] })));
+      ring.position.y = H_HALL - 0.12; mirror(ring);
+      var band = add(shell, new THREE.Mesh(new THREE.RingGeometry(r[0] - 0.5, r[0] + 0.5, 96).rotateX(Math.PI / 2),
+        addMat(r[2], 0.35, RINGFADE)));
+      band.position.y = H_HALL - 0.14;
+    });
+    for (i = 0; i < 24; i++) {                       /* radial ceiling ribs */
+      var a = i / 24 * TAU, rib = add(shell, new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 6.2),
+        basic({ color: i % 2 ? '#0d2a4a' : '#143a63' })));
+      rib.position.set(Math.sin(a) * 7.6, H_HALL - 0.1, Math.cos(a) * 7.6); rib.rotation.y = a;
+    }
+    /* light coves along the wall foot */
+    var cove = add(shell, new THREE.Mesh(new THREE.TorusGeometry(R_HALL - 0.15, 0.03, 6, 120).rotateX(Math.PI / 2),
+      basic({ color: '#38bdf8' })));
+    cove.position.y = 0.06; mirror(cove);
+
+    /* distant "bokeh": twinkling LED dots across the rack wall */
+    var N = 520, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), c3 = new THREE.Color();
+    for (i = 0; i < N; i++) {
+      var th = Math.random() * TAU, rr = R_HALL - 0.85 - Math.random() * 0.2, y = 0.25 + Math.random() * 1.75;
+      if (Math.abs(Math.sin(th)) < 0.13) { y += 2.4; }     /* keep the doorways clear */
+      pos[i * 3] = Math.sin(th) * rr; pos[i * 3 + 1] = y; pos[i * 3 + 2] = Math.cos(th) * rr;
+      c3.set(Math.random() < 0.18 ? '#fbbf24' : (Math.random() < 0.5 ? '#38bdf8' : '#7dd3fc'));
+      col[i * 3] = c3.r; col[i * 3 + 1] = c3.g; col[i * 3 + 2] = c3.b;
+    }
+    var pg = new THREE.BufferGeometry();
+    pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    pg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    BOKEH = add(shell, new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.11, map: GLOW, vertexColors: true,
+      transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
+    var big = new THREE.BufferGeometry(), bp = new Float32Array(90 * 3), bc = new Float32Array(90 * 3);
+    for (i = 0; i < 90; i++) {
+      var t2 = Math.random() * TAU, r2 = R_HALL - 0.4;
+      bp[i * 3] = Math.sin(t2) * r2; bp[i * 3 + 1] = 2.4 + Math.random() * 3.3; bp[i * 3 + 2] = Math.cos(t2) * r2;
+      c3.set(Math.random() < 0.25 ? '#f59e0b' : '#1d6fb8');
+      bc[i * 3] = c3.r; bc[i * 3 + 1] = c3.g; bc[i * 3 + 2] = c3.b;
+    }
+    big.setAttribute('position', new THREE.BufferAttribute(bp, 3));
+    big.setAttribute('color', new THREE.BufferAttribute(bc, 3));
+    add(shell, new THREE.Points(big, new THREE.PointsMaterial({ size: 0.9, map: GLOW, vertexColors: true,
+      transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })));
   }
-  function pickServer () {
+  var BOKEH = null;
+
+  /* background server racks: one ring around the hall, facing in (chapter 1's model) */
+  function buildRacks () {
+    var targets = [], n = 0;
+    for (var i = 0; i < 118; i++) {
+      var th = i / 118 * TAU;
+      if (Math.abs(Math.sin(th)) < 0.16) { continue; }     /* doorways */
+      var o = new THREE.Object3D(), rr = R_HALL - 0.55;
+      o.position.set(Math.sin(th) * rr, 0, -Math.cos(th) * rr); o.rotation.y = -th;
+      root.add(o); targets.push({ object3D: o }); n++;
+    }
+    var strip = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.025, 0.02), basic({ color: '#ffffff' }), n * 2);
+    var m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s1 = new V3(1, 1, 1), c = new THREE.Color(), k = 0;
+    targets.forEach(function (t) {
+      var o = t.object3D;
+      [1.92, 0.62 + Math.random() * 0.9].forEach(function (y, j) {
+        var p = new V3(0, y, 0.52).applyEuler(o.rotation).add(o.position);
+        q.setFromEuler(o.rotation); m4.compose(p, q, s1); strip.setMatrixAt(k, m4);
+        strip.setColorAt(k, c.set(j === 0 ? '#38bdf8' : (Math.random() < 0.3 ? '#fbbf24' : '#22d3ee'))); k++;
+      });
+    });
+    strip.instanceMatrix.needsUpdate = true; strip.instanceColor.needsUpdate = true;
+    root.add(strip);
+    if (window.XRQ && XRQ.instanceModel) {
+      XRQ.instanceModel('assets/server_rack_plain.glb', document.getElementById('world'), targets,
+        { height: 2.0, width: 0.6, depth: 1.0, yaw: -90, fitSrc: 'assets/server_rack_plain.glb' })
+        .then(function (r) {
+          r.holder.traverse(function (o2) { if (o2.material) { o2.material = o2.material.clone();
+            o2.material.color.set('#7f93b0'); } });
+        }).catch(function (e) { console.warn('racks', e && e.message); });
+    }
+  }
+
+  /* ---------------- platform, balancer, beam ----------------------------- */
+  var CORE = null, CORE_IN = null, BEAMS = [];
+  function buildStage () {
+    /* round dais with a ringed, lit top */
+    var tc = canvas(1024, 1024), g = tc.getContext('2d'), i;
+    var bg = g.createRadialGradient(512, 512, 0, 512, 512, 512);
+    bg.addColorStop(0, '#0d1b31'); bg.addColorStop(0.75, '#08111f'); bg.addColorStop(1, '#0b1a2e');
+    g.fillStyle = bg; g.fillRect(0, 0, 1024, 1024);
+    [[500, 6, .9], [470, 2, .5], [380, 2, .35], [260, 2, .3], [150, 3, .45]].forEach(function (r) {
+      g.strokeStyle = 'rgba(56,189,248,' + r[2] + ')'; g.lineWidth = r[1];
+      g.beginPath(); g.arc(512, 512, r[0], 0, TAU); g.stroke();
+    });
+    g.strokeStyle = 'rgba(56,189,248,.18)'; g.lineWidth = 2;
+    for (i = 0; i < 72; i++) { var a = i / 72 * TAU;
+      g.beginPath(); g.moveTo(512 + Math.cos(a) * 395, 512 + Math.sin(a) * 395);
+      g.lineTo(512 + Math.cos(a) * (i % 6 ? 440 : 465), 512 + Math.sin(a) * (i % 6 ? 440 : 465)); g.stroke(); }
+    var top = ctex(tc);
+    var dais = add(root, new THREE.Mesh(new THREE.CylinderGeometry(PLAT_R, PLAT_R + 0.08, PLAT_H, 72),
+      [basic({ color: '#0a1424' }), basic({ map: top }), basic({ color: '#05090f' })]));
+    dais.position.set(PLAT.x, PLAT_H / 2, PLAT.z);
+    var rim = add(root, new THREE.Mesh(new THREE.TorusGeometry(PLAT_R + 0.04, 0.025, 6, 140).rotateX(Math.PI / 2),
+      basic({ color: '#7dd3fc' })));
+    rim.position.set(PLAT.x, PLAT_H, PLAT.z); mirror(rim);
+    var rim2 = add(root, new THREE.Mesh(new THREE.TorusGeometry(PLAT_R + 0.1, 0.018, 6, 140).rotateX(Math.PI / 2),
+      basic({ color: '#38bdf8' })));
+    rim2.position.set(PLAT.x, 0.03, PLAT.z); mirror(rim2);
+    var spill = add(root, new THREE.Mesh(new THREE.RingGeometry(PLAT_R - 0.2, PLAT_R + 1.4, 96).rotateX(-Math.PI / 2),
+      addMat('#38bdf8', 0.5, RINGFADE)));
+    spill.position.set(PLAT.x, 0.015, PLAT.z);
+
+    /* tower that lifts the balancer above the pool */
+    var tower = add(root, new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.8, LB_LIFT, 6), basic({ color: '#081322' })));
+    tower.position.set(LBP.x, PLAT_H + LB_LIFT / 2, LBP.z - 0.05);
+    var tEdge = add(root, new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.56, 0.81, LB_LIFT, 6)),
+      new THREE.LineBasicMaterial({ color: '#38bdf8', toneMapped: false, transparent: true, opacity: 0.8 })));
+    tEdge.position.copy(tower.position);
+    var collar = add(root, new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.03, 6, 48).rotateX(Math.PI / 2), basic({ color: '#7dd3fc' })));
+    collar.position.set(LBP.x, PLAT_H + 0.06, LBP.z - 0.05); mirror(collar);
+    /* the load balancer cabinet: dark body, glowing face, light strips */
+    var faceC = canvas(1024, 640);
+    LBFACE = { c: faceC, g: faceC.getContext('2d'), t: ctex(faceC) };
+    var body = basic({ color: '#0a1526' });
+    var lb = add(root, new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.38, 1.0),
+      [body, body, basic({ color: '#10223a' }), body, basic({ map: LBFACE.t }), body]));
+    lb.position.set(LBP.x, LBP.y + 0.69, LBP.z);
+    var edge = add(root, new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(2.22, 1.4, 1.02)),
+      new THREE.LineBasicMaterial({ color: '#38bdf8', toneMapped: false })));
+    edge.position.copy(lb.position);
+    var strip = add(root, new THREE.Mesh(new THREE.BoxGeometry(2.24, 0.03, 1.04), basic({ color: '#7dd3fc' })));
+    strip.position.set(LBP.x, LBP.y + 1.39, LBP.z); mirror(strip);
+    halo(root, new V3(LBP.x, LBP.y + 0.69, LBP.z + 0.6), 3.6, '#1e7fd0', 0.35);
+    /* the core: a spinning crystal over the cabinet, fed by a light beam from the ceiling */
+    CORE = add(root, new THREE.Mesh(new THREE.OctahedronGeometry(0.34, 0), basic({ color: '#38bdf8' })));
+    CORE.position.set(LBP.x, CORE_Y, LBP.z); CORE.scale.y = 1.35;
+    CORE_IN = add(root, new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), basic({ color: '#e0f7ff' })));
+    CORE_IN.position.copy(CORE.position); CORE_IN.scale.y = 1.35;
+    var cEdge = add(CORE, new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.OctahedronGeometry(0.345, 0)),
+      new THREE.LineBasicMaterial({ color: '#e0f7ff', toneMapped: false })));
+    halo(root, CORE.position, 2.2, '#38bdf8', 0.9);
+    halo(root, CORE.position, 0.9, '#e0f7ff', 0.9);
+    mirror(CORE); mirror(CORE_IN);
+    var stem = add(root, new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.06, CORE_Y - LBP.y - 1.42, 8),
+      basic({ color: '#38bdf8' })));
+    stem.position.set(LBP.x, LBP.y + 1.4 + (CORE_Y - LBP.y - 1.42) / 2, LBP.z);
+    [[0.14, 0.32, 0.9], [0.55, 1.15, 0.38]].forEach(function (b) {
+      var len = H_HALL - (LBP.y + 1.4);
+      var beam = add(root, new THREE.Mesh(new THREE.CylinderGeometry(b[0], b[1], len, 32, 1, true),
+        addMat('#38bdf8', b[2], VFADE)));
+      beam.position.set(LBP.x, LBP.y + 1.4 + len / 2, LBP.z); BEAMS.push(beam); mirror(beam);
+    });
+    var cap = add(root, new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.05, 8, 64).rotateX(Math.PI / 2), basic({ color: '#e0f7ff' })));
+    cap.position.set(LBP.x, H_HALL - 0.18, LBP.z); mirror(cap);
+    halo(root, new V3(LBP.x, H_HALL - 0.3, LBP.z), 2.6, '#38bdf8', 0.7);
+  }
+  var LBFACE = null;
+
+  /* ---------------- instance servers ------------------------------------- */
+  function serverFrontTex () {
+    var c = canvas(256, 256), g = c.getContext('2d'), y, i;
+    g.fillStyle = '#081322'; g.fillRect(0, 0, 256, 256);
+    for (y = 0; y < 4; y++) {
+      var yy = 18 + y * 58;
+      g.fillStyle = '#0d1d33'; g.fillRect(14, yy, 228, 46);
+      g.strokeStyle = 'rgba(125,211,252,.55)'; g.lineWidth = 2; g.strokeRect(14, yy, 228, 46);
+      g.fillStyle = '#04080f';
+      for (i = 0; i < 11; i++) { g.fillRect(24 + i * 14, yy + 9, 8, 28); }
+      g.fillStyle = '#ffffff'; g.fillRect(192, yy + 12, 38, 5);
+      g.fillStyle = 'rgba(255,255,255,.7)'; g.fillRect(192, yy + 26, 22, 5);
+    }
+    return ctex(c);
+  }
+  var SRV_TEX = null;
+  var servers = [];
+  function makeServerVisual (s) {
+    var grp = new THREE.Group(); root.add(grp); grp.visible = false;
+    var side = basic({ color: '#0a1628' });
+    s.frontMat = basic({ map: SRV_TEX, color: '#7dd3fc' });
+    s.body = add(grp, new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.9, 0.92),
+      [side, side, basic({ color: '#0f2340' }), side, s.frontMat, side]));
+    s.body.position.y = PLAT_H + 0.47;
+    s.edgeMat = new THREE.LineBasicMaterial({ color: '#38bdf8', toneMapped: false, transparent: true, opacity: 1 });
+    s.edge = add(grp, new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(0.94, 0.92, 0.94)), s.edgeMat));
+    s.edge.position.y = s.body.position.y;
+    s.capMat = basic({ color: '#38bdf8' });
+    s.cap = add(grp, new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.035, 0.96), s.capMat));
+    s.cap.position.y = PLAT_H + 0.94;
+    s.ringMat = addMat('#38bdf8', 0.75, RINGFADE);
+    s.ring = add(grp, new THREE.Mesh(new THREE.RingGeometry(0.35, 1.0, 48).rotateX(-Math.PI / 2), s.ringMat));
+    s.ring.position.y = PLAT_H + 0.01;
+    s.halo = halo(grp, new V3(0, PLAT_H + 0.98, 0), 1.3, '#38bdf8', 0.55);
+    /* "launching" hologram: wireframe cube with an inner grid */
+    s.holoMat = new THREE.LineBasicMaterial({ color: '#7dd3fc', transparent: true, opacity: 0.9, toneMapped: false });
+    var hg = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.92, 0.9, 0.92));
+    s.holo = add(grp, new THREE.LineSegments(hg, s.holoMat));
+    s.holo.position.y = s.body.position.y;
+    var gl = [], k;
+    for (k = 1; k < 4; k++) { var f = -0.46 + k * 0.23;
+      gl.push(f, -0.45, 0.46, f, 0.45, 0.46, -0.46, -0.45 + k * 0.225, 0.46, 0.46, -0.45 + k * 0.225, 0.46,
+              0.46, -0.45 + k * 0.225, -0.46, 0.46, -0.45 + k * 0.225, 0.46, -0.46, -0.45 + k * 0.225, -0.46, -0.46, -0.45 + k * 0.225, 0.46); }
+    var gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(gl, 3));
+    s.holoGrid = add(s.holo, new THREE.LineSegments(gg, s.holoMat));
+    s.holoFill = add(grp, new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.88, 0.9), addMat('#38bdf8', 0.12)));
+    s.holoFill.position.y = s.body.position.y;
+    /* card above it */
+    var cc = canvas(512, 300);
+    s.card = { c: cc, g: cc.getContext('2d'), t: ctex(cc) };
+    s.cardMesh = add(grp, new THREE.Mesh(new THREE.PlaneGeometry(1.16, 0.68),
+      new THREE.MeshBasicMaterial({ map: s.card.t, transparent: true, toneMapped: false, depthWrite: false })));
+    s.cardMesh.position.set(0, PLAT_H + 1.36, 0.22); s.cardMesh.rotation.x = -0.32;
+    s.cardMesh.renderOrder = 5;
+    s.grp = grp;
+    /* click target */
+    var hit = document.createElement('a-entity');
+    hit.setAttribute('class', 'clickable');
+    hit.setAttribute('geometry', 'primitive: box; width: 0.95; height: 1.5; depth: 0.95');
+    hit.setAttribute('material', 'visible: false');
+    hit.setAttribute('position', '0 ' + (PLAT_H + 0.75) + ' 0');
+    document.getElementById('world').appendChild(hit);
+    s.hit = hit;
+    hit.addEventListener('click', function () {
+      openInfo('INSTANCE ' + (s.id + 1) + (s.state === 'launching' ? ' (LAUNCHING)' : ''),
+        'compute node · 8 vCPU · 32 GB RAM\nin flight ' + s.inFlight.length + '/' + CAP + ' · queued ' + s.queue.length +
+        '\nCPU ' + Math.round(s.cpu) + '% · weight ' + WEIGHTS[s.id] + '\nstate: ' + s.state, s.grp.position);
+    });
+  }
+  function placeServer (s, angle) {
+    s.angle = angle;
+    s.grp.position.set(LBP.x + Math.sin(angle) * ARC_R, 0, LBP.z + Math.cos(angle) * ARC_R);
+    s.grp.rotation.y = angle;
+    s.hit.object3D.position.set(s.grp.position.x, PLAT_H + 0.75, s.grp.position.z);
+    s.hit.object3D.rotation.y = angle;
+  }
+
+  /* ---------------- database tier ---------------------------------------- */
+  var DBV = {};
+  function buildDb () {
+    var base = add(root, new THREE.Mesh(new THREE.RingGeometry(0.2, 3.6, 64).rotateX(-Math.PI / 2),
+      addMat('#38bdf8', 0.18, RINGFADE)));
+    base.position.set(0, 0.012, 2.55);
+    [['primary', '#fbbf24', 0.6, 0.72], ['r1', '#2dd4bf', 0.48, 0.6], ['r2', '#2dd4bf', 0.48, 0.6]].forEach(function (d) {
+      var p = DBP[d[0]], grp = new THREE.Group(); grp.position.copy(p); root.add(grp);
+      var r = d[2], h = d[3], v = { grp: grp, color: d[1], h: h };
+      add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 40), basic({ color: '#0a1526' }))).position.y = h / 2;
+      v.ringMat = basic({ color: d[1] });
+      [0.22, 0.5, 0.78].forEach(function (f) {
+        add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r + 0.012, r + 0.012, 0.035, 40, 1, true), v.ringMat)).position.y = h * f;
+      });
+      v.topMat = basic({ color: d[1] });
+      v.top = add(grp, new THREE.Mesh(new THREE.CylinderGeometry(r + 0.02, r + 0.02, 0.07, 40), v.topMat));
+      v.top.position.y = h + 0.035;
+      v.halo = halo(grp, new V3(0, h + 0.1, 0), r * 3.4, d[1], 0.65);
+      v.base = add(grp, new THREE.Mesh(new THREE.RingGeometry(r * 0.6, r * 2.1, 48).rotateX(-Math.PI / 2), addMat(d[1], 0.6, RINGFADE)));
+      v.base.position.y = 0.014;
+      var cc = canvas(512, 220);
+      v.card = { c: cc, g: cc.getContext('2d'), t: ctex(cc) };
+      v.cardMesh = add(grp, new THREE.Mesh(new THREE.PlaneGeometry(1.35, 0.58),
+        new THREE.MeshBasicMaterial({ map: v.card.t, transparent: true, toneMapped: false, depthWrite: false })));
+      v.cardMesh.position.set(0, h + 0.75, 0); v.cardMesh.renderOrder = 5; v.cardMesh.visible = false;
+      v.cardMesh.rotation.x = -0.1;
+      DBV[d[0]] = v;
+      var hit = document.createElement('a-entity');
+      hit.setAttribute('class', 'clickable');
+      hit.setAttribute('geometry', 'primitive: cylinder; radius: ' + r + '; height: ' + (h + 0.2));
+      hit.setAttribute('material', 'visible: false');
+      hit.setAttribute('position', p.x + ' ' + (h / 2 + 0.1) + ' ' + p.z);
+      document.getElementById('world').appendChild(hit);
+      hit.addEventListener('click', function () { dbInfo(d[0]); });
+    });
+  }
+
+  /* ---------------- flowing strands (the defining feature) ---------------- */
+  var LUT_N = 40;
+  function lut (curve) {
+    var a = new Float32Array((LUT_N + 1) * 3), p = new V3();
+    for (var i = 0; i <= LUT_N; i++) { curve.getPoint(i / LUT_N, p); a[i * 3] = p.x; a[i * 3 + 1] = p.y; a[i * 3 + 2] = p.z; }
+    return a;
+  }
+  function sample (a, t, out) {
+    t = Math.max(0, Math.min(1, t)) * LUT_N;
+    var i = Math.min(LUT_N - 1, Math.floor(t)), f = t - i, j = i * 3;
+    out.set(a[j] + (a[j + 3] - a[j]) * f, a[j + 1] + (a[j + 4] - a[j + 1]) * f, a[j + 2] + (a[j + 5] - a[j + 2]) * f);
+    return out;
+  }
+  /* one merged mesh per bundle: a bright core with travelling pulses + a soft wide glow */
+  var STRAND_MATS = [];
+  function strandBundle (curves, colors, rCore, rGlow, glowOpacity, segs) {
+    var cores = [], glows = [], c = new THREE.Color();
+    curves.forEach(function (cv, i) {
+      c.set(colors[i % colors.length]);
+      var off = Math.random();
+      [[rCore, cores, 5], [rGlow, glows, 4]].forEach(function (spec) {
+        var tg = new THREE.TubeGeometry(cv, segs || 40, spec[0], spec[2], false);
+        var uv = tg.attributes.uv, n = uv.count, col = new Float32Array(n * 3);
+        for (var k = 0; k < n; k++) { uv.setX(k, uv.getX(k) * 2 + off); col[k * 3] = c.r; col[k * 3 + 1] = c.g; col[k * 3 + 2] = c.b; }
+        tg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        spec[1].push(tg);
+      });
+    });
+    var g = new THREE.Group();
+    var core = new THREE.Mesh(THREE.BufferGeometryUtils.mergeGeometries(cores, false),
+      new THREE.MeshBasicMaterial({ map: STRAND, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, toneMapped: false }));
+    var glow = new THREE.Mesh(THREE.BufferGeometryUtils.mergeGeometries(glows, false),
+      new THREE.MeshBasicMaterial({ map: STRAND_SOFT, vertexColors: true, transparent: true, opacity: glowOpacity,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    core.renderOrder = 3; glow.renderOrder = 2;
+    g.add(glow); g.add(core); g.core = core; g.glow = glow;
+    cores.concat(glows).forEach(function (x) { x.dispose(); });
+    return g;
+  }
+  function disposeBundle (b) {
+    if (!b) { return; }
+    b.parent && b.parent.remove(b);
+    b.core.geometry.dispose(); b.glow.geometry.dispose(); b.core.material.dispose(); b.glow.material.dispose();
+  }
+  var USER_LUTS = [], USER_N = 46;
+  function buildUserStrands (panel) {
+    var curves = [], m = panel.mesh.matrixWorld, colors = ['#22d3ee', '#38bdf8', '#7dd3fc', '#60a5fa', '#22d3ee', '#a78bfa', '#38bdf8'];
+    panel.mesh.updateMatrixWorld(true);
+    var right = new V3(1, 0, 0).transformDirection(m), fwd = new V3(0, 0, 1).transformDirection(m);
+    for (var i = 0; i < USER_N; i++) {
+      var lx = rnd(-0.1, PANELS.users.w / 2 - 0.15), ly = rnd(-0.85, 0.55);
+      if (lx < 0.6 && ly > 0.15) { ly -= 0.7; }           /* keep the big numbers readable */
+      var p0 = new V3(lx, ly, 0.04).applyMatrix4(m);
+      var end = LB_IN.clone().add(new V3(rnd(-0.12, 0.12), rnd(-0.14, 0.14), rnd(-0.1, 0.1)));
+      var p1 = p0.clone().addScaledVector(fwd, rnd(0.5, 1.1)).addScaledVector(right, rnd(0.6, 1.4));
+      var p2 = end.clone().add(new V3(rnd(-1.5, -0.8), rnd(0.2, 0.9), rnd(0.4, 1.0)));
+      var cv = new THREE.CubicBezierCurve3(p0, p1, p2, end);
+      curves.push(cv); USER_LUTS.push(lut(cv));
+    }
+    root.add(strandBundle(curves, colors, 0.011, 0.045, 0.16, 48));
+  }
+  /* balancer -> one instance: a 3-strand bundle, coloured by that instance's load */
+  function buildServerStrands (s) {
+    disposeBundle(s.bundle); disposeBundle(s.dbBundle);
+    var top = new V3(s.grp.position.x, PLAT_H + 0.96, s.grp.position.z);
+    var dir = top.clone().sub(LBP).setY(0).normalize();
+    var curves = []; s.luts = [];
+    for (var i = 0; i < 3; i++) {
+      var a = LB_OUT.clone().add(new V3((i - 1) * 0.22, rnd(-0.05, 0.05), 0));
+      var b = top.clone().add(new V3((i - 1) * 0.12, 0, (i - 1) * 0.05));
+      var cv = new THREE.CubicBezierCurve3(a, a.clone().addScaledVector(dir, 0.9).add(new V3(0, 0.55, 0)),
+        b.clone().addScaledVector(dir, -0.5).add(new V3(0, 0.95, 0)), b);
+      curves.push(cv); s.luts.push(lut(cv));
+    }
+    s.bundle = strandBundle(curves, ['#ffffff'], 0.012, 0.05, 0.2, 36);
+    s.bundle.core.material.vertexColors = true;
+    root.add(s.bundle);
+    /* instance -> database junction */
+    var foot = new V3(s.grp.position.x, PLAT_H + 0.2, s.grp.position.z).addScaledVector(dir, 0.48);
+    var dcv = new THREE.CubicBezierCurve3(foot, foot.clone().addScaledVector(dir, 1.0).setY(0.35),
+      JUNC.clone().add(new V3(0, 0.1, -1.3)), JUNC);
+    s.dbLut = lut(dcv);
+    s.dbBundle = strandBundle([dcv], ['#ffffff'], 0.009, 0.035, 0.14, 32);
+    root.add(s.dbBundle);
+    tintServer(s, true);
+  }
+  var DB_LUTS = {}, REPL_LUTS = {};
+  function buildDbStrands () {
+    var curves = [], cols = [];
+    ['primary', 'r1', 'r2'].forEach(function (k) {
+      var top = DBP[k].clone().setY(DBV[k].h + 0.07);
+      DB_LUTS[k] = [];
+      for (var i = 0; i < 2; i++) {
+        var cv = new THREE.CubicBezierCurve3(JUNC.clone().add(new V3((i - 0.5) * 0.12, 0, 0)),
+          JUNC.clone().add(new V3((top.x - JUNC.x) * 0.25, 0.25, 0.5)),
+          top.clone().add(new V3(0, 0.9, -0.4)), top.clone().add(new V3((i - 0.5) * 0.18, 0, 0)));
+        curves.push(cv); cols.push(k === 'primary' ? '#fbbf24' : '#2dd4bf'); DB_LUTS[k].push(lut(cv));
+      }
+    });
+    root.add(strandBundle(curves, cols, 0.011, 0.045, 0.16, 36));
+    var rc = [], rcol = [];
+    ['r1', 'r2'].forEach(function (k) {
+      var a = DBP.primary.clone().setY(DBV.primary.h + 0.12), b = DBP[k].clone().setY(DBV[k].h + 0.12);
+      var mid = a.clone().lerp(b, 0.5).add(new V3(0, 0.55, 0.15));
+      var cv = new THREE.QuadraticBezierCurve3(a, mid, b);
+      rc.push(cv); rcol.push('#7dd3fc'); REPL_LUTS[k] = lut(cv);
+    });
+    REPL_BUNDLE = strandBundle(rc, rcol, 0.009, 0.04, 0.18, 28);
+    root.add(REPL_BUNDLE);
+  }
+  var REPL_BUNDLE = null;
+
+  /* ---------------- particles: every live request / db operation ---------- */
+  var PN = 460, PPOS, PCOL, PGEO, PARTS = [];
+  function buildParticles () {
+    PPOS = new Float32Array(PN * 3); PCOL = new Float32Array(PN * 3);
+    for (var i = 0; i < PN; i++) { PPOS[i * 3 + 1] = -50; PARTS.push({ used: false, i: i }); }
+    PGEO = new THREE.BufferGeometry();
+    PGEO.setAttribute('position', new THREE.BufferAttribute(PPOS, 3));
+    PGEO.setAttribute('color', new THREE.BufferAttribute(PCOL, 3));
+    var pts = new THREE.Points(PGEO, new THREE.PointsMaterial({ size: 0.13, map: GLOW, vertexColors: true, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    pts.frustumCulled = false; pts.renderOrder = 6; root.add(pts);
+    var core = new THREE.Points(PGEO, new THREE.PointsMaterial({ size: 0.045, map: GLOW, color: '#ffffff', transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    core.frustumCulled = false; core.renderOrder = 7; root.add(core);
+  }
+  var tmpC = new THREE.Color();
+  function takeParticle (color) {
+    for (var k = 0; k < PN; k++) {
+      var p = PARTS[k];
+      if (!p.used) { p.used = true; tmpC.set(color); PCOL[p.i * 3] = tmpC.r; PCOL[p.i * 3 + 1] = tmpC.g; PCOL[p.i * 3 + 2] = tmpC.b;
+        PGEO.attributes.color.needsUpdate = true; return p; }
+    }
+    return null;
+  }
+  function dropParticle (p) { if (!p) { return; } p.used = false; PPOS[p.i * 3 + 1] = -50; }
+  var vP = new V3();
+  function putParticle (p, v) { if (!p) { return; } PPOS[p.i * 3] = v.x; PPOS[p.i * 3 + 1] = v.y; PPOS[p.i * 3 + 2] = v.z; }
+
+  /* ---------------- holographic panels ------------------------------------ */
+  var PX = 300;                                       /* canvas pixels per metre */
+  var FONT = '"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+  var PANELS = {};
+  var FRAME_TEX = (function () {
+    var c = canvas(256, 256), g = c.getContext('2d');
+    g.shadowColor = 'rgba(255,255,255,1)'; g.shadowBlur = 26; g.strokeStyle = 'rgba(255,255,255,.95)'; g.lineWidth = 5;
+    rr(g, 30, 30, 196, 196, 22); g.stroke(); g.shadowBlur = 0;
+    return ctex(c);
+  })();
+  function rr (g, x, y, w, h, r) {
+    g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
+    g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h);
+    g.quadraticCurveTo(x, y + h, x, y + h - r); g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+  }
+  function txt (g, s, x, y, size, color, weight, align) {
+    g.font = (weight || 400) + ' ' + size + 'px ' + FONT; g.fillStyle = color; g.textAlign = align || 'left';
+    g.textBaseline = 'alphabetic'; g.fillText(s, x, y);
+  }
+  function panelBg (g, W, H, title, accent) {
+    g.clearRect(0, 0, W, H);
+    var bg = g.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, 'rgba(8,24,48,.86)'); bg.addColorStop(1, 'rgba(4,12,28,.86)');
+    rr(g, 6, 6, W - 12, H - 12, 26); g.fillStyle = bg; g.fill();
+    g.save(); g.shadowColor = accent; g.shadowBlur = 18; g.strokeStyle = accent; g.lineWidth = 3;
+    rr(g, 6, 6, W - 12, H - 12, 26); g.stroke(); g.restore();
+    g.strokeStyle = 'rgba(125,211,252,.12)'; g.lineWidth = 1;
+    for (var y = 70; y < H - 20; y += 8) { g.beginPath(); g.moveTo(14, y); g.lineTo(W - 14, y); g.stroke(); }
+    if (title) {
+      g.save(); g.shadowColor = accent; g.shadowBlur = 12;
+      txt(g, title, 44, 72, 44, '#e6f6ff', 700); g.restore();
+    }
+  }
+  function pill (g, x, y, on, label) {
+    rr(g, x, y, 92, 42, 21); g.fillStyle = on ? 'rgba(16,185,129,.9)' : 'rgba(71,85,105,.9)'; g.fill();
+    g.beginPath(); g.arc(on ? x + 70 : x + 22, y + 21, 15, 0, TAU); g.fillStyle = '#f0fdf4'; g.fill();
+    txt(g, label || (on ? 'ON' : 'OFF'), on ? x + 34 : x + 58, y + 29, 20, '#ffffff', 700, 'center');
+  }
+  function makePanel (key, w, h, pos, accent, lookAt) {
+    var W = Math.round(w * PX), H = Math.round(h * PX), c = canvas(W, H);
+    var P = { key: key, w: w, h: h, c: c, g: c.getContext('2d'), t: ctex(c), accent: accent || '#38bdf8', W: W, H: H };
+    var holder = new THREE.Group(); holder.position.copy(pos);
+    var target = lookAt || new V3(0, 1.7, 7.6);
+    holder.rotation.y = Math.atan2(target.x - pos.x, target.z - pos.z);
+    root.add(holder); P.holder = holder;
+    var fr = add(holder, new THREE.Mesh(new THREE.PlaneGeometry(w * 1.12, h * 1.17), addMat(P.accent, 0.55, FRAME_TEX)));
+    fr.position.z = -0.02; fr.renderOrder = 3;
+    P.mesh = add(holder, new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({ map: P.t, transparent: true, toneMapped: false, depthWrite: false })));
+    P.mesh.renderOrder = 4;
+    var back = add(holder, new THREE.Mesh(new THREE.PlaneGeometry(w * 1.02, h * 1.03), basic({ color: '#06122a' })));
+    back.rotation.y = Math.PI; back.position.z = -0.03;      /* solid from behind */
+    var hm = halo(root, new V3(pos.x, 0.03, pos.z).lerp(new V3(0, 0, pos.z), 0), Math.max(w, 1.5) * 1.1, P.accent, 0.18);
+    hm.position.y = 0.05; hm.scale.y = 0.35 * hm.scale.y;
+    var ent = document.createElement('a-entity');      /* click overlay frame for this panel */
+    ent.setAttribute('position', pos.x + ' ' + pos.y + ' ' + pos.z);
+    ent.setAttribute('rotation', '0 ' + (holder.rotation.y * 180 / Math.PI) + ' 0');
+    document.getElementById('world').appendChild(ent);
+    P.ent = ent;
+    PANELS[key] = P; return P;
+  }
+  /* invisible click zone on a panel, given in canvas pixels */
+  function zone (P, x, y, w, h, onClick) {
+    var z = document.createElement('a-entity');
+    z.setAttribute('class', 'clickable');
+    z.setAttribute('geometry', 'primitive: plane; width: ' + (w / PX) + '; height: ' + (h / PX));
+    z.setAttribute('material', 'visible: false; side: double');
+    z.setAttribute('position', ((x + w / 2) / PX - P.w / 2) + ' ' + (P.h / 2 - (y + h / 2) / PX) + ' 0.03');
+    P.ent.appendChild(z);
+    z.addEventListener('click', onClick);
+    return z;
+  }
+  function up (P) { P.t.needsUpdate = true; }
+
+  /* world map (Natural Earth land, public domain) drawn once */
+  var MAP = null, CITY = [];
+  function buildMap () {
+    var c = canvas(520, 260), g = c.getContext('2d');
+    g.fillStyle = 'rgba(56,189,248,.05)'; g.fillRect(0, 0, 520, 260);
+    var land = window.NE_LAND && window.NE_LAND.features;
+    g.fillStyle = 'rgba(56,150,220,.38)'; g.strokeStyle = 'rgba(125,211,252,.55)'; g.lineWidth = 1;
+    if (land) {
+      land.forEach(function (f) {
+        var polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+        polys.forEach(function (poly) {
+          g.beginPath();
+          poly[0].forEach(function (pt, i) { var x = (pt[0] + 180) / 360 * 520, y = (90 - pt[1]) / 180 * 260;
+            if (i) { g.lineTo(x, y); } else { g.moveTo(x, y); } });
+          g.closePath(); g.fill(); g.stroke();
+        });
+      });
+    }
+    /* dotted texture over land for the "holographic" look */
+    var img = g.getImageData(0, 0, 520, 260), d = img.data;
+    g.clearRect(0, 0, 520, 260);
+    for (var y = 2; y < 260; y += 5) { for (var x = 2; x < 520; x += 5) {
+      if (d[(y * 520 + x) * 4 + 3] > 40) { g.fillStyle = 'rgba(96,180,240,.75)'; g.fillRect(x - 1, y - 1, 2.6, 2.6); } } }
+    MAP = c;
+    [[77, 22], [-98, 39], [-74, 41], [10, 51], [2, 48], [139, 36], [-46, -23], [151, -33], [103, 1], [28, -26],
+     [37, 55], [-122, 37], [72, 19], [116, 40], [-3, 40], [55, 25]].forEach(function (ll) {
+      CITY.push({ x: (ll[0] + 180) / 360 * 520, y: (90 - ll[1]) / 180 * 260, ph: Math.random() * TAU });
+    });
+  }
+
+  function drawUsers (now) {
+    var P = PANELS.users, g = P.g, W = P.W;
+    panelBg(g, W, P.H, 'USERS (LIVE)', P.accent);
+    g.save(); g.strokeStyle = '#7dd3fc'; g.lineWidth = 3;
+    g.beginPath(); g.arc(W - 90, 58, 13, 0, TAU); g.stroke(); g.beginPath(); g.arc(W - 90, 96, 24, Math.PI, 0); g.stroke(); g.restore();
+    txt(g, String(M.users), 44, 178, 104, '#ffffff', 700);
+    txt(g, 'active users', 48, 218, 30, '#8fb8dc');
+    var mx = 440, my = 96;
+    g.drawImage(MAP, mx, my, 560, 280);
+    CITY.forEach(function (ct) {
+      var a = 0.55 + 0.45 * Math.sin(now / 420 + ct.ph), x = mx + ct.x * 560 / 520, y = my + ct.y * 280 / 260;
+      var gr = g.createRadialGradient(x, y, 0, x, y, 16);
+      gr.addColorStop(0, 'rgba(255,255,255,' + a + ')'); gr.addColorStop(0.3, 'rgba(56,189,248,' + (a * 0.8) + ')');
+      gr.addColorStop(1, 'rgba(56,189,248,0)'); g.fillStyle = gr; g.fillRect(x - 16, y - 16, 32, 32);
+    });
+    txt(g, 'Top regions', 48, 300, 28, '#cde8ff', 600);
+    M.regions.forEach(function (r, i) {
+      var y = 346 + i * 44;
+      g.beginPath(); g.arc(58, y - 9, 8, 0, TAU); g.fillStyle = r.c; g.fill();
+      txt(g, r.n, 80, y, 27, '#dbeeff');
+      g.fillStyle = 'rgba(56,189,248,.18)'; g.fillRect(200, y - 18, 150, 12);
+      g.fillStyle = r.c; g.fillRect(200, y - 18, 150 * r.p / 40, 12);
+      txt(g, Math.round(r.p) + '%', 410, y, 27, '#ffffff', 600, 'right');
+    });
+    txt(g, 'requests per second', 470, 430, 28, '#8fb8dc');
+    txt(g, String(M.rps), 470, 520, 84, '#ffffff', 700);
+    var hist = M.rpsHist, bx = 740, bw = 8, bh = 130, by = 530, mxv = Math.max.apply(null, hist.concat([1]));
+    for (var i = 0; i < hist.length; i++) {
+      var h = Math.max(4, hist[i] / mxv * bh);
+      var gr2 = g.createLinearGradient(0, by - h, 0, by); gr2.addColorStop(0, '#7dd3fc'); gr2.addColorStop(1, '#1d4ed8');
+      g.fillStyle = gr2; g.fillRect(bx + i * (bw + 3), by - h, bw, h);
+    }
+    up(P);
+  }
+  function drawAutoscale () {
+    var P = PANELS.auto, g = P.g, W = P.W, H = P.H;
+    panelBg(g, W, H, 'AUTO-SCALING CONTROLLER', P.accent);
+    pill(g, W - 150, 36, autoOn);
+    rr(g, 40, 110, 470, 310, 16); g.fillStyle = 'rgba(8,30,60,.55)'; g.fill();
+    g.strokeStyle = 'rgba(125,211,252,.35)'; g.lineWidth = 2; g.stroke();
+    [['Current instances', String(activeServersCount())], ['Min instances', String(MIN_SERVERS)],
+     ['Max instances', String(MAX_SERVERS)], ['Target CPU', Math.round(SCALE_OUT_UTIL * 100) + '%'],
+     ['Cooldown', cooldownOn ? (M.cdLeft > 0 ? M.cdLeft + ' s' : 'ready') : 'OFF']].forEach(function (r, i) {
+      var y = 168 + i * 56;
+      txt(g, r[0], 66, y, 30, '#cde8ff');
+      txt(g, r[1], 484, y, 34, r[0] === 'Cooldown' && !cooldownOn ? '#f87171' : '#ffffff', 700, 'right');
+    });
+    var cx = 540, cy = 110, cw = W - 580, ch = 310;
+    rr(g, cx, cy, cw, ch, 16); g.fillStyle = 'rgba(8,30,60,.55)'; g.fill(); g.strokeStyle = 'rgba(125,211,252,.35)'; g.stroke();
+    txt(g, 'CPU Utilization (Average)', cx + 22, cy + 44, 26, '#cde8ff', 600);
+    var gx = cx + 90, gy = cy + 70, gw = cw - 120, gh = ch - 100;
+    ['100%', '50%', '0%'].forEach(function (l, i) {
+      var y = gy + i * gh / 2; txt(g, l, gx - 14, y + 8, 21, '#8fb8dc', 400, 'right');
+      g.strokeStyle = 'rgba(125,211,252,.15)'; g.beginPath(); g.moveTo(gx, y); g.lineTo(gx + gw, y); g.stroke();
+    });
+    var ty = gy + gh * (1 - SCALE_OUT_UTIL);
+    g.setLineDash([8, 8]); g.strokeStyle = 'rgba(251,191,36,.7)'; g.beginPath(); g.moveTo(gx, ty); g.lineTo(gx + gw, ty); g.stroke(); g.setLineDash([]);
+    var hist = M.cpuHist;
+    g.save(); g.shadowColor = '#38bdf8'; g.shadowBlur = 12; g.strokeStyle = '#7dd3fc'; g.lineWidth = 4; g.beginPath();
+    hist.forEach(function (v, i) { var x = gx + i / (hist.length - 1) * gw, y = gy + gh * (1 - v);
+      if (i) { g.lineTo(x, y); } else { g.moveTo(x, y); } });
+    g.stroke(); g.restore();
+    rr(g, 40, 446, W - 80, H - 486, 16); g.fillStyle = 'rgba(8,30,60,.55)'; g.fill(); g.strokeStyle = 'rgba(125,211,252,.35)'; g.stroke();
+    var st = M.scaleText, pr = M.scaleProgress;
+    txt(g, st, 70, 500, 30, pr >= 0 ? '#fde68a' : '#cde8ff', 600);
+    if (pr >= 0) {
+      rr(g, 70, 528, W - 300, 26, 13); g.fillStyle = 'rgba(56,189,248,.18)'; g.fill();
+      rr(g, 70, 528, Math.max(26, (W - 300) * pr), 26, 13);
+      var pg = g.createLinearGradient(70, 0, W - 230, 0); pg.addColorStop(0, '#1d4ed8'); pg.addColorStop(1, '#7dd3fc');
+      g.fillStyle = pg; g.fill();
+      txt(g, Math.round(pr * 100) + '%', W - 80, 552, 30, '#ffffff', 700, 'right');
+    }
+    up(P);
+  }
+  var ALGOS = [
+    { k: 'lc', n: 'Least Connections', d: 'Sends each request to the server', d2: 'with the fewest active connections', ic: 'A' },
+    { k: 'rr', n: 'Round Robin', d: 'Sends requests to each server', d2: 'in a fixed rotation', ic: 'R' },
+    { k: 'wrr', n: 'Weighted', d: 'Bigger servers get a bigger share', d2: 'of the requests (weights 2-5)', ic: 'W' },
+    { k: 'hash', n: 'IP Hash', d: 'Same user always lands on the', d2: 'same server (sticky sessions)', ic: '#' }];
+  function drawAlgos () {
+    var P = PANELS.algos, g = P.g, W = P.W;
+    panelBg(g, W, P.H, 'LOAD BALANCING ALGORITHMS', P.accent);
+    ALGOS.forEach(function (a, i) {
+      var y = 108 + i * 158, on = algo === a.k;
+      rr(g, 36, y, W - 72, 140, 18);
+      g.fillStyle = on ? 'rgba(29,78,216,.55)' : 'rgba(8,30,60,.55)'; g.fill();
+      g.save(); if (on) { g.shadowColor = '#38bdf8'; g.shadowBlur = 16; }
+      g.strokeStyle = on ? '#7dd3fc' : 'rgba(125,211,252,.3)'; g.lineWidth = on ? 3 : 2; g.stroke(); g.restore();
+      g.beginPath(); g.arc(110, y + 70, 38, 0, TAU); g.fillStyle = on ? '#2563eb' : 'rgba(30,58,100,.9)'; g.fill();
+      txt(g, a.ic, 110, y + 84, 38, '#ffffff', 700, 'center');
+      txt(g, a.n, 176, y + 56, 38, '#ffffff', 700);
+      txt(g, a.d, 176, y + 94, 26, '#bcdcff'); txt(g, a.d2, 176, y + 126, 26, '#bcdcff');
+      if (on) { txt(g, 'ACTIVE', W - 64, y + 56, 22, '#7dd3fc', 700, 'right'); }
+    });
+    up(P);
+  }
+  function drawQueue () {
+    var P = PANELS.queue, g = P.g, W = P.W, H = P.H;
+    panelBg(g, W, H, 'QUEUE', '#f59e0b');
+    pill(g, W - 150, 34, M.waiting > 0, M.waiting > 0 ? 'LIVE' : 'IDLE');
+    txt(g, 'Waiting requests', 44, 150, 32, '#ffe7b0');
+    txt(g, String(M.waiting), W - 50, 152, 52, '#fbbf24', 700, 'right');
+    txt(g, 'Avg wait time', 44, 214, 32, '#ffe7b0');
+    txt(g, M.avgWait + ' ms', W - 50, 216, 46, M.avgWait > 400 ? '#f87171' : '#fbbf24', 700, 'right');
+    var hist = M.queueHist, bx = 44, by = H - 40, bh = 200, bw = (W - 88) / hist.length - 4, mxv = Math.max.apply(null, hist.concat([4]));
+    for (var i = 0; i < hist.length; i++) {
+      var h = Math.max(4, hist[i] / mxv * bh);
+      var gr = g.createLinearGradient(0, by - h, 0, by); gr.addColorStop(0, '#fde047'); gr.addColorStop(1, '#d97706');
+      g.fillStyle = gr; g.fillRect(bx + i * (bw + 4), by - h, bw, h);
+    }
+    up(P);
+  }
+  function drawDb () {
+    var P = PANELS.db, g = P.g, W = P.W, H = P.H;
+    panelBg(g, W, H, '', '#fbbf24');
+    txt(g, 'DATABASE TIER - LIVE CONSOLE', 44, 70, 40, '#fde68a', 700);
+    txt(g, 'Every finished request touches this tier', 44, 112, 26, '#c9d8ea');
+    txt(g, 'writes', 44, 176, 28, '#c9d8ea'); txt(g, String(DB.writes), 140, 178, 38, '#ffffff', 700);
+    txt(g, 'reads', 290, 176, 28, '#c9d8ea'); txt(g, String(DB.reads), 368, 178, 38, '#ffffff', 700);
+    txt(g, 'read share ' + Math.round(DB.readShare * 100) + '%', 44, 228, 28, '#c9d8ea');
+    var cols = [['REPLICA 1', DB.reps[0]], ['PRIMARY', DB.primary], ['REPLICA 2', DB.reps[1]]];
+    cols.forEach(function (c, i) {
+      var x = 560 + i * 200, u = c[1], prim = c[0] === 'PRIMARY';
+      var col = u.state === 'dead' ? '#f87171' : u.state === 'resync' ? '#fbbf24' : prim ? '#fbbf24' : '#2dd4bf';
+      g.beginPath(); g.arc(x - 12, 156, 9, 0, TAU); g.fillStyle = col; g.fill();
+      txt(g, c[0], x, 166, 27, col, 700);
+      txt(g, 'ops ' + u.ops, x, 206, 25, '#dbeeff');
+      txt(g, prim ? 'heat ' + Math.round(Math.min(1, u.load / 6) * 100) + '%' :
+        (u.state === 'live' ? 'lag ~' + Math.round(u.lagMs) + ' ms' : u.state === 'dead' ? 'DOWN' : 'RESYNC'), x, 240, 25, '#dbeeff');
+      var cyx = x + 50, cyy = 300;
+      g.fillStyle = 'rgba(20,40,70,.95)'; g.fillRect(cyx - 34, cyy, 68, 70);
+      g.beginPath(); g.ellipse(cyx, cyy, 34, 11, 0, 0, TAU); g.fillStyle = col; g.fill();
+      g.beginPath(); g.ellipse(cyx, cyy + 70, 34, 11, 0, 0, Math.PI); g.fillStyle = 'rgba(20,40,70,.95)'; g.fill();
+    });
+    txt(g, '←', 742, 345, 44, '#7dd3fc', 700, 'center'); txt(g, '→', 922, 345, 44, '#7dd3fc', 700, 'center');
+    var cx = 1060, cw = W - cx - 40;
+    txt(g, 'Replication Lag (ms)', cx, 166, 25, '#cde8ff', 600);
+    var gy = 190, gh = 210;
+    ['400', '200', '0'].forEach(function (l, i) { var y = gy + i * gh / 2; txt(g, l, cx + 40, y + 8, 20, '#8fb8dc', 400, 'right');
+      g.strokeStyle = 'rgba(125,211,252,.15)'; g.beginPath(); g.moveTo(cx + 50, y); g.lineTo(cx + cw, y); g.stroke(); });
+    [[M.lag1, '#60a5fa'], [M.lag2, '#2dd4bf']].forEach(function (s) {
+      g.strokeStyle = s[1]; g.lineWidth = 3; g.beginPath();
+      s[0].forEach(function (v, i) { var x = cx + 50 + i / (s[0].length - 1) * (cw - 50), y = gy + gh * (1 - Math.min(1, v / 400));
+        if (i) { g.lineTo(x, y); } else { g.moveTo(x, y); } }); g.stroke();
+    });
+    txt(g, '● Replica 1', cx + 50, gy + gh + 40, 22, '#60a5fa'); txt(g, '● Replica 2', cx + 220, gy + gh + 40, 22, '#2dd4bf');
+    var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
+    rr(g, 44, 270, 400, 64, 14); g.fillStyle = anyDead ? 'rgba(16,185,129,.35)' : 'rgba(239,68,68,.3)'; g.fill();
+    g.strokeStyle = anyDead ? '#34d399' : '#f87171'; g.lineWidth = 2; g.stroke();
+    txt(g, anyDead ? 'RESTORE REPLICA' : 'KILL A REPLICA', 244, 313, 28, '#ffffff', 700, 'center');
+    txt(g, DB.lastEvent || 'last event: none yet', 44, H - 50, 24, '#c9d8ea');
+    up(P);
+  }
+  function drawTeach () {
+    var P = PANELS.teach, g = P.g, W = P.W;
+    panelBg(g, W, P.H, 'WHAT THIS ROOM TEACHES', P.accent);
+    [['One entry point spreads load', 'across many workers'],
+     ['Least-connections beats', 'round-robin when work is uneven'],
+     ['Auto-scaling grows and shrinks', 'the pool based on demand'],
+     ['Cooldown stops the pool from', 'flapping up and down'],
+     ['Queues form when every worker', 'is busy']].forEach(function (t, i) {
+      var y = 140 + i * 124;
+      g.save(); g.shadowColor = '#38bdf8'; g.shadowBlur = 14;
+      g.beginPath(); g.arc(84, y + 10, 32, 0, TAU); g.fillStyle = '#1e6fb8'; g.fill(); g.restore();
+      txt(g, String(i + 1), 84, y + 23, 36, '#ffffff', 700, 'center');
+      txt(g, t[0], 140, y + 6, 36, '#e6f6ff', 600); txt(g, t[1], 140, y + 50, 36, '#e6f6ff', 600);
+    });
+    up(P);
+  }
+  function drawLbFace () {
+    var g = LBFACE.g, W = 1024, H = 640;
+    g.fillStyle = '#071226'; g.fillRect(0, 0, W, H);
+    g.save(); g.shadowColor = '#38bdf8'; g.shadowBlur = 24; g.strokeStyle = '#7dd3fc'; g.lineWidth = 6;
+    rr(g, 24, 24, W - 48, H - 48, 30); g.stroke();
+    var cx = W / 2, cy = 150;                       /* triangle "network" icon */
+    g.lineWidth = 8; g.beginPath(); g.moveTo(cx, cy - 70); g.lineTo(cx - 70, cy + 50); g.lineTo(cx + 70, cy + 50); g.closePath(); g.stroke();
+    [[cx, cy - 70], [cx - 70, cy + 50], [cx + 70, cy + 50]].forEach(function (p) { g.beginPath(); g.arc(p[0], p[1], 18, 0, TAU);
+      g.fillStyle = '#e0f7ff'; g.fill(); });
+    g.restore();
+    g.save(); g.shadowColor = '#7dd3fc'; g.shadowBlur = 16; txt(g, 'LOAD BALANCER', cx, 300, 76, '#ffffff', 700, 'center'); g.restore();
+    rr(g, 80, 336, W - 160, 70, 14); g.fillStyle = 'rgba(30,64,120,.55)'; g.fill();
+    txt(g, 'Algorithm: ' + ALGOS.filter(function (a) { return a.k === algo; })[0].n + '  ▾', cx, 384, 36, '#dbeeff', 600, 'center');
+    [[String(M.rps), 'req/s'], [M.latency + ' ms', 'avg latency'], [M.err.toFixed(1) + '%', 'error rate']].forEach(function (b, i) {
+      var x = 80 + i * 296;
+      rr(g, x, 426, 272, 156, 14); g.fillStyle = 'rgba(8,30,60,.85)'; g.fill(); g.strokeStyle = 'rgba(125,211,252,.4)'; g.lineWidth = 2; g.stroke();
+      txt(g, b[0], x + 136, 506, 54, '#ffffff', 700, 'center'); txt(g, b[1], x + 136, 554, 28, '#9cc6ea', 400, 'center');
+    });
+    LBFACE.t.needsUpdate = true;
+  }
+  function drawCard (s) {
+    var g = s.card.g, W = 512, H = 300;
+    g.clearRect(0, 0, W, H);
+    var busy = s.cpu > 60, col = s.state === 'launching' ? '#7dd3fc' : s.state === 'draining' ? '#94a3b8' : busy ? '#fbbf24' : '#34d399';
+    rr(g, 6, 6, W - 12, H - 12, 22); g.fillStyle = 'rgba(6,18,38,.88)'; g.fill();
+    g.save(); g.shadowColor = col; g.shadowBlur = 14; g.strokeStyle = col; g.lineWidth = 3; g.stroke(); g.restore();
+    if (s.state === 'launching') {
+      txt(g, '⚙  Launching...', 34, 78, 40, '#ffffff', 700);
+      txt(g, 'Initializing instance ' + (s.id + 1), 36, 136, 30, '#bfe3ff');
+      txt(g, 'loading image, health checks', 36, 180, 26, '#8fb8dc');
+      rr(g, 36, 214, W - 72, 26, 13); g.fillStyle = 'rgba(56,189,248,.2)'; g.fill();
+      rr(g, 36, 214, Math.max(26, (W - 72) * s.launchT), 26, 13); g.fillStyle = '#38bdf8'; g.fill();
+    } else {
+      g.beginPath(); g.arc(44, 62, 12, 0, TAU); g.fillStyle = col; g.fill();
+      txt(g, 'Instance ' + (s.id + 1) + (s.state === 'draining' ? ' (draining)' : ''), 70, 76, 38, '#ffffff', 700);
+      [['CPU', Math.round(s.cpu) + '%'], ['Connections', String(s.conns)], ['Latency', s.lat + ' ms']].forEach(function (r, i) {
+        var y = 142 + i * 52;
+        txt(g, r[0], 40, y, 32, '#bfe3ff'); txt(g, r[1], W - 40, y, 34, '#ffffff', 700, 'right');
+      });
+    }
+    s.card.t.needsUpdate = true;
+  }
+  function drawDbCard (k) {
+    var v = DBV[k], g = v.card.g, W = 512, H = 220, u = k === 'primary' ? DB.primary : DB.reps[k === 'r1' ? 0 : 1];
+    var col = u.state === 'dead' ? '#f87171' : u.state === 'resync' ? '#fbbf24' : (k === 'primary' ? '#fbbf24' : '#2dd4bf');
+    g.clearRect(0, 0, W, H);
+    rr(g, 6, 6, W - 12, H - 12, 20); g.fillStyle = 'rgba(6,18,38,.86)'; g.fill();
+    g.save(); g.shadowColor = col; g.shadowBlur = 12; g.strokeStyle = col; g.lineWidth = 3; g.stroke(); g.restore();
+    g.beginPath(); g.arc(40, 56, 11, 0, TAU); g.fillStyle = col; g.fill();
+    txt(g, k === 'primary' ? 'PRIMARY' : 'REPLICA ' + (k === 'r1' ? 1 : 2), 64, 70, 38, col, 700);
+    txt(g, 'ops ' + u.ops, 40, 130, 32, '#e6f6ff');
+    txt(g, k === 'primary' ? 'heat ' + Math.round(Math.min(1, u.load / 6) * 100) + '%' :
+      (u.state === 'live' ? 'lag ~' + Math.round(u.lagMs) + ' ms' : u.state === 'dead' ? 'DOWN - reads fail over' : 'RESYNCING'), 40, 180, 32, '#e6f6ff');
+    v.card.t.needsUpdate = true;
+  }
+
+  /* ---------------- simulation ------------------------------------------- */
+  var CAP = 4, MIN_SERVERS = 2, MAX_SERVERS = 8;
+  var SCALE_OUT_UTIL = 0.70, SCALE_OUT_HOLD = 3000, SCALE_IN_UTIL = 0.30, SCALE_IN_HOLD = 5000;
+  var COOLDOWN = 10000, LAUNCH_MS = 2800;
+  var WEIGHTS = [5, 3, 2, 4, 3, 2, 4, 3];
+  var rate = 6, algo = 'lc', autoOn = true, cooldownOn = true;
+  var rrIndex = -1, wrrCur = [0, 0, 0, 0, 0, 0, 0, 0], lastScale = 0, aboveSince = 0, belowSince = 0;
+  var waitSamples = [], served = 0, acc = 0, caption = '', scaleEvents = 0;
+  var REQS = [], POOL_N = 260;
+  var M = { users: 256, rps: 854, latency: 12, err: 0.2, waiting: 0, avgWait: 0, cdLeft: 0,
+    rpsHist: [], cpuHist: [], queueHist: [], lag1: [], lag2: [], scaleText: 'Stable', scaleProgress: -1,
+    regions: [{ n: 'India', p: 34, c: '#38bdf8' }, { n: 'US', p: 28, c: '#60a5fa' },
+              { n: 'Europe', p: 20, c: '#2dd4bf' }, { n: 'Other', p: 18, c: '#94a3b8' }] };
+  (function () { for (var i = 0; i < 34; i++) { M.rpsHist.push(800 + Math.random() * 120); }
+    for (i = 0; i < 48; i++) { M.cpuHist.push(0.35 + Math.random() * 0.05); M.lag1.push(180); M.lag2.push(190); }
+    for (i = 0; i < 22; i++) { M.queueHist.push(0); } })();
+
+  function newServer (id) {
+    var s = { id: id, state: 'hidden', inFlight: [], queue: [], load: 0, util: 0, cpu: 10, conns: 0, lat: 15,
+      launchT: 1, angle: 0, luts: [], dbLut: null };
+    makeServerVisual(s); servers.push(s); return s;
+  }
+  function activeServers () { return servers.filter(function (s) { return s.state === 'active'; }); }
+  function activeServersCount () { return servers.filter(function (s) { return s.state === 'active' || s.state === 'launching'; }).length; }
+  function layout () {
+    var vis = servers.filter(function (s) { return s.state !== 'hidden'; });
+    var step = 0.4, n = vis.length;
+    vis.forEach(function (s, i) { placeServer(s, (i - (n - 1) / 2) * step); buildServerStrands(s); });
+    servers.forEach(function (s) { s.grp.visible = s.state !== 'hidden'; if (s.state === 'hidden') {
+      disposeBundle(s.bundle); disposeBundle(s.dbBundle); s.bundle = s.dbBundle = null; } });
+  }
+  function pickServer (user) {
     var act = activeServers();
     if (!act.length) { return null; }
     if (algo === 'rr') { rrIndex = (rrIndex + 1) % act.length; return act[rrIndex]; }
-    return act.reduce(function (best, s) {
-      var l = s.inFlight.length + s.queue.length;
-      var b = best.inFlight.length + best.queue.length;
-      return l < b ? s : best;
-    });
+    if (algo === 'wrr') {                              /* smooth weighted round robin (nginx) */
+      var total = 0, best = null;
+      act.forEach(function (s) { wrrCur[s.id] += WEIGHTS[s.id]; total += WEIGHTS[s.id];
+        if (!best || wrrCur[s.id] > wrrCur[best.id]) { best = s; } });
+      wrrCur[best.id] -= total; return best;
+    }
+    if (algo === 'hash') { return act[((user * 2654435761) >>> 0) % act.length]; }
+    return act.reduce(function (b, s) { return (s.inFlight.length + s.queue.length) < (b.inFlight.length + b.queue.length) ? s : b; });
   }
-
   function spawnRequest (now) {
-    for (var tries = 0; tries < POOL_N; tries++) {
-      poolCursor = (poolCursor + 1) % POOL_N;
-      if (pool[poolCursor].phase === 0) { break; }
-    }
-    var it = pool[poolCursor];
-    if (it.phase !== 0) { return; }
-    var from = clientSpots[(Math.random() * clientSpots.length) | 0];
-    it.phase = 1; it.t = 0; it.spawnAt = now;
-    it.from.copy(from); it.to.set(0, 1.0, 2.5);
-    it.el.object3D.visible = true;
+    var it = null;
+    for (var k = 0; k < REQS.length; k++) { if (!REQS[k].phase) { it = REQS[k]; break; } }
+    if (!it) { return; }
+    it.p = takeParticle('#7dd3fc'); if (!it.p) { return; }
+    it.phase = 1; it.t = 0; it.dur = 950 + Math.random() * 300; it.spawnAt = now;
+    it.user = (Math.random() * 12) | 0; it.lut = USER_LUTS[(Math.random() * USER_LUTS.length) | 0]; it.srv = null;
   }
-
-  
-function nowMs () { return performance.now(); }
-var infoEl = null;
-function openInfo (title, body, pos) {
-  if (!infoEl) { infoEl = document.getElementById('info'); }
-  document.getElementById('info-title').setAttribute('value', title);
-  document.getElementById('info-body').setAttribute('value', body);
-  infoEl.object3D.position.set(pos.x, 2.35, pos.z);
-  infoEl.setAttribute('visible', true);
-  clearTimeout(openInfo.t);
-  openInfo.t = setTimeout(function () { infoEl.setAttribute('visible', false); }, 8000);
-}
-
-/* Runtime canvas textures: rack fronts, balancer face, concrete shell. */
-
-function paintBoard (id, title, lines, h) {
-  var c = document.getElementById(id), g = c.getContext('2d');
-  g.fillStyle = 'rgba(27,30,34,0.96)'; g.fillRect(0, 0, c.width, c.height);
-  g.strokeStyle = 'rgba(217,165,20,.55)'; g.lineWidth = 6; g.strokeRect(3, 3, c.width - 6, c.height - 6);
-  g.fillStyle = '#fbbf24'; g.font = '800 44px system-ui, sans-serif'; g.fillText(title, 40, 78);
-  g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
-  lines.forEach(function (ln, i) { g.fillText(ln, 40, 150 + i * (h || 62)); });
-}
-function paintTextures () {
-  var c = document.getElementById('tex-rackfront'), g = c.getContext('2d'), y, i;
-  g.fillStyle = '#2b2f34'; g.fillRect(0, 0, 256, 512);
-  g.fillStyle = '#121518';
-  for (y = 24; y < 470; y += 34) { g.fillRect(18, y, 220, 20); }
-  g.fillStyle = '#8b9199';
-  for (y = 24; y < 470; y += 34) { for (i = 0; i < 8; i++) { g.fillRect(26 + i * 26, y + 8, 14, 4); } }
-  g.fillStyle = '#34d399'; g.fillRect(222, 30, 8, 8);
-  g.fillStyle = '#22d3ee'; g.fillRect(222, 46, 8, 8);
-  g.fillStyle = '#3f444a'; g.fillRect(0, 478, 256, 34);
-  g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 253, 509);
-
-  c = document.getElementById('tex-lbfront'); g = c.getContext('2d');
-  g.fillStyle = '#26292e'; g.fillRect(0, 0, 256, 256);
-  g.fillStyle = '#121518'; g.fillRect(20, 20, 216, 60);
-  g.fillStyle = '#22d3ee'; g.font = '700 22px system-ui, sans-serif'; g.fillText('EDGE-LB 01', 32, 58);
-  g.fillStyle = '#0d1424';
-  for (i = 0; i < 12; i++) { g.fillRect(24 + (i % 6) * 36, 100 + Math.floor(i / 6) * 26, 26, 16); }
-  g.fillStyle = '#d9a514'; g.fillRect(20, 168, 216, 10);
-  g.fillStyle = '#34d399';
-  for (i = 0; i < 6; i++) { g.fillRect(24 + i * 36, 196, 10, 10); }
-  g.fillStyle = '#8b9199'; g.font = '600 13px system-ui, sans-serif';
-  g.fillText('L4/L7 · 2N PSU · 40 GbE', 24, 236);
-  g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 3; g.strokeRect(1.5, 1.5, 253, 253);
-
-  c = document.getElementById('tex-concrete'); g = c.getContext('2d');
-  g.fillStyle = '#d4d6d8'; g.fillRect(0, 0, 512, 512);
-  for (i = 0; i < 26; i++) {
-    var x = 60 + (i * 97) % 392, yy = 60 + (i * 211) % 392, r = 30 + (i * 37) % 60;
-    var gr = g.createRadialGradient(x, yy, 0, x, yy, r);
-    gr.addColorStop(0, i % 2 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.06)');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(x - r, yy - r, r * 2, r * 2);
+  function startProc (s, spawnAt, now) {
+    s.inFlight.push({ doneAt: now + 300 + Math.random() * 2100 });
+    waitSamples.push(now - spawnAt); if (waitSamples.length > 120) { waitSamples.shift(); }
   }
-  g.strokeStyle = 'rgba(0,0,0,.42)'; g.lineWidth = 2;
-  [0, 256, 512].forEach(function (v) {
-    g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 512); g.stroke();
-    g.beginPath(); g.moveTo(0, v); g.lineTo(512, v); g.stroke();
-  });
-  g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 1;
-  [2, 258].forEach(function (v) {
-    g.beginPath(); g.moveTo(v, 0); g.lineTo(v, 512); g.stroke();
-    g.beginPath(); g.moveTo(0, v); g.lineTo(512, v); g.stroke();
-  });
-  paintBoard('tex-legend', 'HOW TO READ THIS ROOM', [
-    'coloured tokens  = users pressing refresh',
-    'cyan spheres     = one request in flight',
-    'cabinets         = pool servers (click one)',
-    'cyan octahedron  = the load balancer core',
-    'light bar green / amber / red = idle / busy / over',
-    'small red block  = queue overflow',
-    'walk to a gold door = next chapter',
-    'gold spark = a WRITE going to the PRIMARY db',
-    'teal spark = a READ served by a REPLICA db'], 54);
-  paintBoard('tex-db', 'THE DATABASE TIER - BEHIND EVERY REQUEST', [
-    '1  a pool server finishes a request -> it touches the db',
-    '2  WRITE (gold spark): only the PRIMARY may change data;',
-    '     it then streams the change down both cyan links',
-    '     (that travel time is the replication lag bar)',
-    '3  READ (teal spark, ~4 of 5): served by a REPLICA,',
-    '     round-robin - the balancer trick, one tier down',
-    '4  replica down? its reads fail over; both down? the',
-    '     primary serves everything and heats up red',
-    'try: read-share slider + kill/restore in TRAFFIC & POOL,',
-    'live numbers on the console board above the cylinders'], 46);
-  paintBoard('tex-takeaways', 'WHAT THIS ROOM TEACHES', [
-    '1  one entry point spreads load across many workers',
-    '2  least-connections beats round-robin when work is uneven',
-    '3  cooldown stops the pool from flapping up and down',
-    '4  queues form when every worker is already busy'], 74);
-  document.querySelectorAll('#shell a-box, #world > a-plane').forEach(function (e) {
-    var m = e.getAttribute('material') || {};
-    if (m.shader === 'flat' && !m.src && (m.color === '#5a616b' || m.color === '#363c44')) {
-      e.setAttribute('material', 'src', '#tex-concrete');
-    }
-  });
-}
-
-function startProc (srv, spawnAt, now) {
-    srv.inFlight.push({ doneAt: now + 200 + Math.random() * 1800 });
-    waitSamples.push(now - spawnAt);
-    if (waitSamples.length > 120) { waitSamples.shift(); }
-  }
-
   function arrive (it, now) {
-    var srv = it.srv;
-    it.phase = 0; it.srv = null; it.el.object3D.visible = false;
-    if (!srv || srv.state !== 'active') { return; }
-    if (srv.inFlight.length < CAP) { startProc(srv, it.spawnAt, now); }
-    else { srv.queue.push(it.spawnAt); }
+    var s = it.srv; it.phase = 0; dropParticle(it.p); it.p = null;
+    if (!s || s.state !== 'active') { return; }
+    if (s.inFlight.length < CAP) { startProc(s, now, now); } else { s.queue.push(now); }   /* wait = time in the queue only */
   }
-
   function scaleOut (now) {
     for (var i = 0; i < servers.length; i++) {
-      if (servers[i].state === 'hidden') {
-        servers[i].state = 'spawning'; servers[i].scaleT = 0;
-        servers[i].el.object3D.visible = true;
-        layoutRow(); lastScale = now; aboveSince = 0; scaleEvents++;
-        caption = 'scaled OUT - ' + activeServersCount() + ' active (cooldown ' +
-          (cooldownOn ? '10 s' : 'off') + ')';
-        setStatus(caption, 'warn');
-        return;
+      var s = servers[i];
+      if (s.state === 'hidden') {
+        s.state = 'launching'; s.launchT = 0; lastScale = now; aboveSince = 0; scaleEvents++;
+        caption = 'scaling OUT - launching instance ' + (s.id + 1); setStatus(caption, 'warn');
+        layout(); return;
       }
     }
-  }
-  function activeServersCount () {
-    return servers.filter(function (s) { return s.state === 'active' || s.state === 'spawning'; }).length;
   }
   function scaleIn (now) {
     var act = activeServers();
     if (act.length <= MIN_SERVERS) { return; }
-    var cand = act.reduce(function (b, s) {
-      return (s.inFlight.length + s.queue.length) < (b.inFlight.length + b.queue.length) ? s : b;
-    });
-    cand.state = 'draining'; lastScale = now; belowSince = 0; scaleEvents++;
-    caption = 'draining S' + (cand.id + 1) + ' for scale-in';
-    setStatus(caption, 'warn');
+    var c = act.reduce(function (b, s) { return (s.inFlight.length + s.queue.length) < (b.inFlight.length + b.queue.length) ? s : b; });
+    c.state = 'draining'; lastScale = now; belowSince = 0; scaleEvents++;
+    caption = 'scaling IN - draining instance ' + (c.id + 1); setStatus(caption, 'warn');
   }
-
-  var LB_TOP = new THREE.Vector3(0, 1.0, 2.5);
-  var vA = new THREE.Vector3(), vB = new THREE.Vector3(), vM = new THREE.Vector3(),
-      vD = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
-  function setTube (cyl, a, b) {
-    vD.subVectors(b, a);
-    var len = vD.length();
-    if (len < 0.001) { cyl.object3D.visible = false; return; }
-    vM.addVectors(a, b).multiplyScalar(0.5);
-    cyl.object3D.position.copy(vM);
-    cyl.object3D.quaternion.setFromUnitVectors(UP, vD.normalize());
-    cyl.object3D.scale.set(1, len / 2, 1);
-  }
-
-  function refreshLinks () {
-    var lc = document.getElementById('link-clients');
-    lc.object3D.visible = true;
-    setTube(lc, vA.set(0, 0.9, 6), LB_TOP);
-    for (var i = 0; i < MAX_SERVERS; i++) {
-      var cyl = document.getElementById('link-s' + i);
-      var srv = servers[i];
-      if (!srv || srv.state === 'hidden') { cyl.object3D.visible = false; continue; }
-      cyl.object3D.visible = true;
-      setTube(cyl, LB_TOP, vB.set(srv.el.object3D.position.x, 0.9, 0));
-    }
-  }
-
-  var lastText = 0, lastScaleCheck = 0;
-  function metricsTick (now) {
-    var act = activeServers(), sum = 0, mx = 0, mn = 99;
-    for (var i = 0; i < servers.length; i++) {
-      var s = servers[i];
-      if (s.state === 'hidden') { continue; }
-      s.load = s.inFlight.length + s.queue.length;
-      s.util = Math.min(1, s.load / CAP);
-      if (s.state === 'active') {
-        sum += s.util;
-        mx = Math.max(mx, s.load); mn = Math.min(mn, s.load);
-      }
-      s.txt.setAttribute('value', 'S' + (s.id + 1) + '  ' + s.inFlight.length + '/' + CAP +
-        '  q' + s.queue.length);
-      s.box.setAttribute('material', 'color',
-        s.state === 'draining' ? '#475569' : '#' + utilColor(s.util, tmpC).getHexString());
-      var q = s.queue.length;
-      if (q > 0) {
-        s.qbar.object3D.visible = true;
-        s.qbar.object3D.scale.y = Math.min(2.4, 0.12 * q) / 0.02;
-        s.qbar.object3D.position.y = Math.min(2.4, 0.12 * q) / 2;
-      } else { s.qbar.object3D.visible = false; }
-    }
-    var mean = act.length ? sum / act.length : 0;
-    var imb = act.length ? mx - mn : 0;
-    var avgWait = waitSamples.length ?
-      waitSamples.reduce(function (a, b) { return a + b; }, 0) / waitSamples.length : 0;
-    if (window.dbTick) { window.dbTick(now); }
-    var cdLeft = cooldownOn ? Math.max(0, (lastScale + COOLDOWN - now) / 1000) : 0;
-    document.getElementById('metrics-text').setAttribute('value',
-      'algorithm: ' + (algo === 'rr' ? 'round-robin' : 'least-connections') +
-      '   auto-scale: ' + (autoOn ? 'on' : 'off') + '\n' +
-      'active servers: ' + act.length + '   mean utilisation: ' + Math.round(mean * 100) + '%\n' +
-      'avg wait: ' + Math.round(avgWait) + ' ms   imbalance: ' + imb +
-      '   served: ' + served + '\n' +
-      'cooldown: ' + (cooldownOn ? cdLeft.toFixed(0) + ' s' : 'DISABLED') +
-      '\n' + (window.dbLine ? window.dbLine() : '') + (caption ? '\n' + caption : ''));
-    return mean;
-  }
-
   function autoscaleTick (now, mean) {
     if (!autoOn || !activeServers().length) { return; }
     var cdOk = !cooldownOn || (now - lastScale >= COOLDOWN);
@@ -856,481 +1327,487 @@ function startProc (srv, spawnAt, now) {
       if (now - belowSince >= SCALE_IN_HOLD && cdOk && activeServers().length > MIN_SERVERS) { scaleIn(now); }
     } else { aboveSince = 0; belowSince = 0; }
   }
-
-  scene.addEventListener('loaded', function () {
-    buildStatics();
-    for (var i = 0; i < MAX_SERVERS; i++) { makeServer(i); }
-    servers[0].state = 'active'; servers[1].state = 'active';
-    servers[0].el.object3D.visible = true; servers[1].el.object3D.visible = true;
-    layoutRow();
-    for (var j = 0; j < 2; j++) { servers[j].el.object3D.position.x = servers[j].homeX; }
-
-    document.getElementById('explain-text').setAttribute('value',
-      'A load balancer is the single door in front of many servers.\n' +
-      'Round-robin hands requests out in a fixed rotation. Least-\n' +
-      'connections hands each one to the idlest server. When every\n' +
-      'request costs the same (200-2000 ms here, randomised) both\n' +
-      'look equal. With varied cost, rotation piles work onto busy\n' +
-      'servers: queues and avg wait climb. Least-connections avoids\n' +
-      'that. Auto-scaling adds a server above 70% mean utilisation\n' +
-      'held 3 s, removes one below 30% held 5 s, and waits 10 s\n' +
-      'between actions. Kill the cooldown and watch the pool flap.');
-    document.getElementById('explain').object3D.visible = false;
-
-    scene.addEventListener('enter-vr', function () {
-      document.getElementById('vrmenu').object3D.visible = true;
-    });
-    scene.addEventListener('exit-vr', function () {
-      document.getElementById('vrmenu').object3D.visible = false;
-    });
-
-  /* ---- database tier: one primary, two read replicas ------------------ */
-  var DB = { ready: false, readShare: 0.8, rr: 0, ops: [], free: [], writes: 0, reads: 0,
-             primary: null, reps: [] };
-  var vDb = new THREE.Vector3();
-
-  function lerpHex (a, b, t) {
-    var pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-    var r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * t);
-    var g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * t);
-    var bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * t);
-    return '#' + ((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1);
+  var C_CYAN = new THREE.Color('#38bdf8'), C_GOLD = new THREE.Color('#fbbf24'), C_RED = new THREE.Color('#f87171'), C_GREY = new THREE.Color('#64748b');
+  function loadColor (u, out) {
+    if (u <= 0.6) { out.copy(C_CYAN).lerp(C_GOLD, u / 0.6); } else { out.copy(C_GOLD).lerp(C_RED, (u - 0.6) / 0.4); }
+    return out;
+  }
+  var tc2 = new THREE.Color();
+  function tintServer (s) {
+    if (s.state === 'draining') { tc2.copy(C_GREY); } else if (s.state === 'launching') { tc2.set('#7dd3fc'); } else { loadColor(s.util, tc2); }
+    s.capMat.color.copy(tc2); s.edgeMat.color.copy(tc2); s.ringMat.color.copy(tc2); s.halo.material.color.copy(tc2);
+    s.frontMat.color.copy(tc2).lerp(new THREE.Color('#ffffff'), 0.35);
+    if (s.bundle) { s.bundle.core.material.color.copy(tc2); s.bundle.glow.material.color.copy(tc2); }
+    if (s.dbBundle) { s.dbBundle.core.material.color.set('#60a5fa'); s.dbBundle.glow.material.color.set('#60a5fa'); }
+    var launching = s.state === 'launching';
+    s.body.visible = !launching; s.cap.visible = !launching; s.edge.visible = !launching;
+    s.holo.visible = launching; s.holoFill.visible = launching;
   }
 
-  function dbUnit (elId, ringId, labelId, kind, num) {
-    var el = document.getElementById(elId);
-    var u = { el: el, kind: kind, id: num, ops: 0, load: 0, state: 'live', lagMs: 0, ledAt: 0,
-      ring: document.getElementById(ringId), label: document.getElementById(labelId),
-      stat: document.getElementById(kind === 'primary' ? 'dbp-stat' : 'dbr' + num + '-stat'),
-      lag: document.getElementById('dbr' + num + '-lag'),
-      led: document.getElementById(kind === 'primary' ? 'dbp-led' : 'dbr' + num + '-led') };
-    el.addEventListener('click', function () {
-      openInfo(kind === 'primary' ? 'PRIMARY DATABASE' : 'READ REPLICA ' + num,
-        kind === 'primary'
-          ? 'the single writable copy\nevery gold spark lands here\nops served ' + u.ops +
-            ' · heat ' + Math.round(Math.min(1, u.load / 6) * 100) +
-            '%\nstreams each write to both replicas'
-          : 'read-only copy of the primary\nserves teal sparks round-robin\nops served ' + u.ops +
-            ' · state ' + u.state + '\nreplication lag ~' + Math.round(u.lagMs) + ' ms',
-        el.object3D.position);
-    });
-    return u;
-  }
-
-  function dbTop (u) {
-    u.el.object3D.getWorldPosition(vDb);
-    vDb.y += u.kind === 'primary' ? 1.6 : 1.25;
-    return vDb.clone();
-  }
-
-  function dbSphere (color, radius) {
-    for (var i = 0; i < DB.free.length; i++) {
-      var f = DB.free[i];
-      if (f.rad === radius) { DB.free.splice(i, 1); f.el.object3D.visible = true;
-        f.el.setAttribute('material', 'color', color); return f.el; }
-    }
-    var el = document.createElement('a-sphere');
-    el.setAttribute('radius', String(radius));
-    el.setAttribute('material', 'color: ' + color + '; shader: flat');
-    document.getElementById('db-ops').appendChild(el);
-    return el;
-  }
-
-  function dbFreeSphere (el) {
-    el.object3D.visible = false;
-    DB.free.push({ el: el, rad: parseFloat(el.getAttribute('radius')) });
-  }
-
-  function dbOp (kind) {
-    var act = activeServers();
-    var src = act.length ? act[Math.floor(Math.random() * act.length)].el.object3D
-      : document.getElementById('lb').object3D;
-    var from = src.getWorldPosition(vDb).clone();
-    from.y += 1.9;
+  /* ---------------- database tier --------------------------------------- */
+  var DB = { readShare: 0.85, rr: 0, ops: [], writes: 0, reads: 0, primary: null, reps: [], lastEvent: '' };
+  function dbUnit (key, num) { return { key: key, id: num, ops: 0, load: 0, state: 'live', lagMs: 160 + Math.random() * 60 }; }
+  function dbOp (kind, s) {
+    if (DB.ops.length > 40 || !s || !s.dbLut) { return; }
     var target = DB.primary;
     if (kind === 'read') {
       var live = DB.reps.filter(function (r) { return r.state === 'live'; });
       if (live.length) { DB.rr = (DB.rr + 1) % live.length; target = live[DB.rr]; }
     }
-    var el = dbSphere(kind === 'write' ? '#f59e0b' : '#22d3ee', 0.07);
-    DB.ops.push({ el: el, from: from, to: dbTop(target), t: 0,
-      dur: 620 + Math.random() * 260, kind: kind, target: target });
+    var p = takeParticle(kind === 'write' ? '#fbbf24' : '#2dd4bf'); if (!p) { return; }
+    DB.ops.push({ p: p, a: s.dbLut, b: DB_LUTS[target.key][(Math.random() * 2) | 0], t: 0, dur: 1100 + Math.random() * 300,
+      kind: kind, target: target });
   }
-
   function dbReplicate () {
     DB.reps.forEach(function (r) {
       if (r.state !== 'live') { return; }
-      var dur = 140 + Math.random() * 220;
-      var el = dbSphere('#67e8f9', 0.045);
-      el.setAttribute('material', 'color: #67e8f9; shader: flat; opacity: .8; transparent: true');
-      DB.ops.push({ el: el, from: dbTop(DB.primary), to: dbTop(r), t: 0, dur: dur,
-        kind: 'repl', target: r });
+      var p = takeParticle('#bae6fd'); if (!p) { return; }
+      var dur = 260 + Math.random() * 260;
+      DB.ops.push({ p: p, a: REPL_LUTS[r.key], b: null, t: 0, dur: dur, kind: 'repl', target: r });
     });
   }
-
   function dbTick (now, dt) {
-    if (!dt) { dt = Math.min(400, Math.max(1, now - (DB.last || now))); }
-    DB.last = now;
     for (var i = DB.ops.length - 1; i >= 0; i--) {
-      var o = DB.ops[i];
-      o.t += dt / o.dur;
+      var o = DB.ops[i]; o.t += dt / o.dur;
       if (o.t >= 1) {
-        if (o.kind === 'repl') { o.target.lagMs = o.dur; }
-        else {
-          o.target.ops++; o.target.load += 1; o.target.ledAt = nowMs();
-          if (o.kind === 'write') { DB.writes++; dbReplicate(); } else { DB.reads++; }
-        }
-        dbFreeSphere(o.el);
-        DB.ops.splice(i, 1);
-        continue;
+        if (o.kind === 'repl') { o.target.lagMs = o.dur * 0.7 + 40; }
+        else { o.target.ops++; o.target.load += 1; if (o.kind === 'write') { DB.writes++; dbReplicate(); } else { DB.reads++; } }
+        dropParticle(o.p); DB.ops.splice(i, 1); continue;
       }
-      vDb.lerpVectors(o.from, o.to, o.t);
-      vDb.y += Math.sin(Math.PI * o.t) * 0.25;
-      o.el.object3D.position.copy(vDb);
+      if (o.b) { if (o.t < 0.5) { sample(o.a, o.t * 2, vP); } else { sample(o.b, (o.t - 0.5) * 2, vP); } }
+      else { sample(o.a, o.t, vP); }
+      putParticle(o.p, vP);
     }
     var k = Math.exp(-dt / 1400);
-    DB.primary.load *= k;
-    document.getElementById('dbp-heat').setAttribute('material', 'color',
-      lerpHex('#d9a514', '#f87171', Math.min(1, DB.primary.load / 6)));
-    DB.reps.forEach(function (r) {
-      r.load *= k;
-      if (r.state === 'dead') { return; }
-      r.ring.setAttribute('material', 'color', r.state === 'resync' ? '#f59e0b'
-        : lerpHex('#14b8a6', '#f87171', Math.min(1, r.load / 6)));
+    DB.primary.load *= k; DB.reps.forEach(function (r) { r.load *= k; });
+    var heat = Math.min(1, DB.primary.load / 6);
+    DBV.primary.topMat.color.set('#fbbf24').lerp(C_RED, heat);
+    DB.reps.forEach(function (r, j) {
+      var v = DBV[r.key], c = r.state === 'dead' ? '#ef4444' : r.state === 'resync' ? (Math.sin(now / 160) > 0 ? '#fbbf24' : '#7c5a10') : '#2dd4bf';
+      v.topMat.color.set(c); v.ringMat.color.set(r.state === 'dead' ? '#7f1d1d' : c); v.halo.material.color.set(c);
+      v.halo.material.opacity = r.state === 'dead' ? 0.25 : 0.65;
     });
-    if (now - (DB.uiAt || 0) < 500) { return; }
-    DB.uiAt = now;
-    DB.primary.stat.setAttribute('value', 'ops ' + DB.primary.ops + ' · heat ' +
-      Math.round(Math.min(1, DB.primary.load / 6) * 100) + '%');
-    DB.primary.led.setAttribute('visible', String(now - DB.primary.ledAt < 260));
-    DB.reps.forEach(function (r) {
-      r.stat.setAttribute('value', r.state === 'live'
-        ? 'ops ' + r.ops + ' · lag ~' + Math.round(r.lagMs) + ' ms'
-        : r.state === 'resync' ? 'RESYNCING from primary' : 'DOWN - reads failed over');
-      r.led.setAttribute('visible', String(r.state === 'live' && now - r.ledAt < 260));
-      var f = Math.min(1, Math.max(0.04, r.lagMs / 400));
-      r.lag.object3D.scale.x = f;
-      r.lag.object3D.position.x = -0.47 + 0.47 * f;
-      r.lag.setAttribute('material', 'color', r.state === 'live'
-        ? lerpHex('#22d3ee', '#f59e0b', Math.min(1, r.lagMs / 400)) : '#3a3f46');
-    });
-    dbConsole();
   }
-
-  function dbConsole () {
-    var c = document.getElementById('tex-dbconsole');
-    if (!c) { return; }
-    var g = c.getContext('2d');
-    g.fillStyle = '#1b1e22'; g.fillRect(0, 0, 1024, 640);
-    g.strokeStyle = '#d9a514'; g.lineWidth = 6; g.strokeRect(8, 8, 1008, 624);
-    g.fillStyle = '#fbbf24'; g.font = '700 44px system-ui, sans-serif';
-    g.fillText('DATABASE TIER - LIVE CONSOLE', 40, 74);
-    g.fillStyle = '#94a3b8'; g.font = '400 30px system-ui, sans-serif';
-    g.fillText('every finished request touches this corner', 40, 116);
-    g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
-    g.fillText('writes ' + DB.writes + '   reads ' + DB.reads +
-      '   read share ' + Math.round(DB.readShare * 100) + '%', 40, 178);
-    var row = function (y, name, state, ops, lag, load) {
-      g.fillStyle = '#e2e8f0'; g.font = '400 32px system-ui, sans-serif';
-      g.fillText(name + '  ' + state, 40, y);
-      g.fillText('ops ' + ops + (lag !== null ? '   lag ~' + Math.round(lag) + ' ms' : ''), 560, y);
-      g.fillStyle = '#22262b'; g.fillRect(40, y + 14, 940, 18);
-      g.fillStyle = name.indexOf('PRIMARY') === 0 ? '#d9a514' : '#14b8a6';
-      g.fillRect(40, y + 14, 940 * Math.min(1, load), 18);
-    };
-    row(250, 'PRIMARY', DB.primary.state, DB.primary.ops, null, Math.min(1, DB.primary.load / 6));
-    row(350, 'REPLICA 1', DB.reps[0].state, DB.reps[0].ops, DB.reps[0].lagMs, Math.min(1, DB.reps[0].load / 6));
-    row(450, 'REPLICA 2', DB.reps[1].state, DB.reps[1].ops, DB.reps[1].lagMs, Math.min(1, DB.reps[1].load / 6));
-    g.fillStyle = '#94a3b8'; g.font = '400 28px system-ui, sans-serif';
-    g.fillText('last event: ' + (DB.lastEvent || 'none yet - watch the sparks fly'), 40, 560);
-    g.fillText('gold = write path   teal = read path   pale teal = replication', 40, 604);
-    var plane = document.querySelector('#dbconsole a-plane');
-    if (plane && plane.components && plane.components.material &&
-        plane.components.material.material.map) {
-      plane.components.material.material.map.needsUpdate = true;
-    }
+  function dbInfo (k) {
+    var u = k === 'primary' ? DB.primary : DB.reps[k === 'r1' ? 0 : 1];
+    openInfo(k === 'primary' ? 'PRIMARY DATABASE' : 'READ REPLICA ' + u.id,
+      k === 'primary' ? 'the single writable copy\nevery gold spark (a write) lands here\nthen streams to both replicas\nops ' + u.ops
+        : 'read-only copy of the primary\nserves teal sparks (reads) in rotation\nops ' + u.ops + ' · state ' + u.state + '\nreplication lag ~' + Math.round(u.lagMs) + ' ms',
+      DBP[k]);
   }
-
-  function dbLine () {
-    var live = DB.reps.filter(function (r) { return r.state === 'live'; });
-    var lag = live.reduce(function (a, r) { return a + r.lagMs; }, 0) / Math.max(1, live.length);
-    return 'db tier: ' + DB.writes + ' writes · ' + DB.reads + ' reads · ' +
-      live.length + '/2 replicas · lag ~' + Math.round(lag) + ' ms';
-  }
-
   function dbSyncButtons () {
     var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
     document.getElementById('b-db').textContent = anyDead ? 'restore replica' : 'kill a replica';
-    var vt = document.getElementById('vm-db-t');
-    if (vt) { vt.setAttribute('value', anyDead ? 'restore replica' : 'kill a replica'); }
+    var vt = document.getElementById('vm-db-t'); if (vt) { vt.setAttribute('value', anyDead ? 'restore replica' : 'kill a replica'); }
+    if (VM) { vmPaint(); }
   }
-
   function dbKill () {
     var live = DB.reps.filter(function (r) { return r.state === 'live'; });
     if (!live.length) { setStatus('both replicas are already down'); return false; }
-    var r = live[live.length - 1];
-    r.state = 'dead';
-    DB.ops.forEach(function (o) {
-      if (o.kind === 'read' && o.target === r) { o.target = DB.primary; o.to = dbTop(DB.primary); }
-    });
-    r.ring.setAttribute('material', 'color', '#3a3f46');
-    r.label.setAttribute('value', 'REPLICA ' + r.id + ' - FAULT');
-    r.label.setAttribute('color', '#f87171');
-    setStatus('replica ' + r.id + ' killed - its reads fail over to ' +
-      (live.length > 1 ? 'the other replica' : 'the primary, watch it heat up'));
-    DB.lastEvent = 'replica ' + r.id + ' KILLED - reads fail over';
-    dbSyncButtons();
-    return true;
+    var r = live[live.length - 1]; r.state = 'dead';
+    DB.ops.forEach(function (o) { if (o.kind === 'read' && o.target === r) { o.target = DB.primary; o.b = DB_LUTS.primary[0]; } });
+    setStatus('replica ' + r.id + ' killed - its reads fail over to ' + (live.length > 1 ? 'the other replica' : 'the primary'), 'bad');
+    DB.lastEvent = 'replica ' + r.id + ' KILLED - reads fail over'; dbSyncButtons(); return true;
   }
-
   function dbRestore () {
     var dead = DB.reps.filter(function (r) { return r.state !== 'live'; });
     if (!dead.length) { setStatus('both replicas are healthy'); return false; }
-    var r = dead[0];
-    r.state = 'resync';
-    r.ring.setAttribute('material', 'color', '#f59e0b');
-    r.label.setAttribute('value', 'REPLICA ' + r.id + ' - RESYNCING');
-    r.label.setAttribute('color', '#fbbf24');
-    setStatus('replica ' + r.id + ' resyncs from the primary before taking reads again');
-    setTimeout(function () {
-      if (r.state !== 'resync') { return; }
-      r.state = 'live';
-      r.label.setAttribute('value', 'REPLICA ' + r.id + ' - serves reads');
-      r.label.setAttribute('color', '#5eead4');
-      DB.lastEvent = 'replica ' + r.id + ' RESYNCED - back in rotation';
-      setStatus('replica ' + r.id + ' caught up - back in the read rotation');
-      dbSyncButtons();
-    }, 3000);
-    dbSyncButtons();
-    return true;
+    var r = dead[0]; r.state = 'resync';
+    setStatus('replica ' + r.id + ' resyncs from the primary first', 'warn');
+    setTimeout(function () { if (r.state !== 'resync') { return; } r.state = 'live';
+      DB.lastEvent = 'replica ' + r.id + ' RESYNCED - back in rotation'; setStatus('replica ' + r.id + ' back in the read rotation'); dbSyncButtons(); }, 3000);
+    dbSyncButtons(); return true;
+  }
+  function dbToggle () { if (DB.reps.some(function (r) { return r.state !== 'live'; })) { dbRestore(); } else { dbKill(); } }
+
+  /* ---------------- metrics (simulated "big" numbers in the concept's style) -- */
+  var lastSample = 0;
+  function metricsTick (now) {
+    var act = activeServers(), sum = 0, q = 0;
+    servers.forEach(function (s) {
+      if (s.state === 'hidden') { return; }
+      s.load = s.inFlight.length + s.queue.length; s.util = Math.min(1, s.load / CAP);
+      if (s.state === 'active') { sum += s.util; }
+      q += s.queue.length;
+      var targetCpu = s.state === 'active' ? 8 + s.util * 82 + Math.random() * 6 : s.state === 'draining' ? 6 : 0;
+      s.cpu += (targetCpu - s.cpu) * 0.35;
+      s.conns = s.inFlight.length * 7 + s.queue.length * 3 + ((Math.random() * 3) | 0);
+      s.lat = Math.round(14 + s.util * 22 + s.queue.length * 6);
+      tintServer(s);
+    });
+    var mean = act.length ? sum / act.length : 0;
+    var avgWait = waitSamples.length ? waitSamples.reduce(function (a, b) { return a + b; }, 0) / waitSamples.length : 0;
+    M.users = Math.round(rate * 42 + 6 * Math.sin(now / 7000) + Math.random() * 4);
+    M.rps = Math.round(rate * 142 + Math.random() * 14 - 7);
+    M.latency = Math.round(9 + avgWait * 0.02 + mean * 9);
+    M.err = Math.min(9.9, 0.1 + q * 0.05);
+    M.waiting = q * 6 + (q ? (Math.random() * 4) | 0 : 0);
+    M.avgWait = Math.round(avgWait);
+    M.cdLeft = cooldownOn ? Math.max(0, Math.ceil((lastScale + COOLDOWN - now) / 1000)) : 0;
+    var launching = servers.filter(function (s) { return s.state === 'launching'; })[0];
+    var draining = servers.filter(function (s) { return s.state === 'draining'; })[0];
+    if (launching) { M.scaleText = 'Scaling out... adding instance ' + (launching.id + 1); M.scaleProgress = launching.launchT; }
+    else if (draining) { M.scaleText = 'Scaling in... draining instance ' + (draining.id + 1); M.scaleProgress = -1; }
+    else if (!autoOn) { M.scaleText = 'Auto-scaling is OFF - the pool stays fixed'; M.scaleProgress = -1; }
+    else if (M.cdLeft > 0) { M.scaleText = 'Cooldown: ' + M.cdLeft + ' s before the next scaling action'; M.scaleProgress = -1; }
+    else { M.scaleText = mean > SCALE_OUT_UTIL ? 'CPU above target - will add an instance' : mean < SCALE_IN_UTIL ? 'CPU low - may remove an instance' : 'Stable - CPU within target'; M.scaleProgress = -1; }
+    if (now - lastSample > 600) {
+      lastSample = now;
+      M.cpuHist.push(mean); M.cpuHist.shift();
+      M.rpsHist.push(M.rps); M.rpsHist.shift();
+      M.queueHist.push(q); M.queueHist.shift();
+      M.lag1.push(DB.reps[0].state === 'live' ? DB.reps[0].lagMs : 0); M.lag1.shift();
+      M.lag2.push(DB.reps[1].state === 'live' ? DB.reps[1].lagMs : 0); M.lag2.shift();
+      M.regions.forEach(function (r) { r.p = Math.max(8, Math.min(40, r.p + (Math.random() - 0.5) * 1.2)); });
+    }
+    return mean;
   }
 
-  window.dbTick = dbTick;
-  window.dbLine = dbLine;
-  window.dbOpAuto = function () {
-    if (DB.ready && DB.ops.length < 22) { dbOp(Math.random() < DB.readShare ? 'read' : 'write'); }
-  };
-  window.LBDB = {
-    kill: dbKill, restore: dbRestore,
-    setReadShare: function (v) { DB.readShare = v; },
-    stats: function () {
-      return { writes: DB.writes, reads: DB.reads, primaryOps: DB.primary.ops,
-        reps: DB.reps.map(function (r) { return { id: r.id, state: r.state, ops: r.ops }; }),
-        opsInFlight: DB.ops.length };
-    }
-  };
-
-  DB.primary = dbUnit('db-primary', 'dbp-heat', 'dbp-label', 'primary', 0);
-  DB.reps = [dbUnit('db-r1', 'dbr1-ring', 'dbr1-label', 'rep', 1),
-             dbUnit('db-r2', 'dbr2-ring', 'dbr2-label', 'rep', 2)];
-  DB.ready = true;
-
-  document.getElementById('b-db').addEventListener('click', function () {
-    var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
-    if (anyDead) { dbRestore(); } else { dbKill(); }
-  });
-  document.getElementById('vm-db').addEventListener('click', function () {
-    var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
-    if (anyDead) { dbRestore(); } else { dbKill(); }
-  });
-  document.getElementById('db-share').addEventListener('input', function (e) {
-    DB.readShare = Number(e.target.value) / 100;
-  });
-
-  document.getElementById('dbexplain-text').setAttribute('value',
-    'WHAT HAPPENS WHEN A REQUEST FINISHES\n' +
-    '1  server finishes -> the result must be stored:\n' +
-    '   RAM is volatile, the database is the record\n' +
-    '2  WRITE (gold): only the PRIMARY changes data,\n' +
-    '   then replays it down both cyan links - the bars\n' +
-    '   on the replicas time that replay (= lag)\n' +
-    '3  READ (teal, 4 of 5): any replica answers,\n' +
-    '   round-robin: cheap reads, one source of truth\n' +
-    '4  FAILURE: kill a replica -> reads fail over;\n' +
-    '   kill both -> the primary serves all and heats up\n' +
-    '5  RESTORE: a returning replica resyncs first,\n' +
-    '   then rejoins the read rotation\n' +
-    'try: read-share slider + kill/restore, TRAFFIC & POOL');
-  var dbExOn = false;
-  document.getElementById('b-dbex').addEventListener('click', function () {
-    dbExOn = !dbExOn;
-    document.getElementById('dbexplain').object3D.visible = dbExOn;
-    document.getElementById('b-dbex').textContent = dbExOn ? 'hide the explanation' : 'explain the db tier';
-    if (dbExOn) { setStatus('explanation board open beside the database tier'); }
-  });
-
-    wireUI();
-
-    /* main loop, driven by the lbsim component registered in <head> */
-    var sim = { tick: function (t, dt) {
-      var now = performance.now();
-      dt = Math.min(dt, 100);
-      acc += rate * dt / 1000;
-      while (acc >= 1) { acc -= 1; spawnRequest(now); }
-
-      for (var p = 0; p < pool.length; p++) {
-        var it = pool[p];
-        if (it.phase === 0) { continue; }
-        it.t += dt / 400;
-        if (it.t >= 1) {
-          if (it.phase === 1) {
-            it.phase = 2; it.t = 0;
-            it.from.copy(LB_TOP);
-            var srv = pickServer();
-            if (!srv) { it.phase = 0; it.el.object3D.visible = false; continue; }
-            it.srv = srv;
-            it.to.set(srv.el.object3D.position.x, 0.95, 0);
-          } else { arrive(it, now); continue; }
-        }
-        var k = it.t;
-        vA.lerpVectors(it.from, it.to, k);
-        vA.y += Math.sin(Math.PI * k) * 0.35;
-        it.el.object3D.position.copy(vA);
-      }
-
-      for (var i = 0; i < servers.length; i++) {
-        var s = servers[i];
-        if (s.state === 'hidden') { continue; }
-        for (var f = s.inFlight.length - 1; f >= 0; f--) {
-          if (s.inFlight[f].doneAt <= now) { s.inFlight.splice(f, 1); served++;
-            if (window.dbOpAuto) { window.dbOpAuto(); } }
-        }
-        while (s.inFlight.length < CAP && s.queue.length && s.state === 'active') {
-          startProc(s, s.queue.shift(), now);
-        }
-        if (s.state === 'draining' && s.load === 0 && s.inFlight.length === 0 && s.queue.length === 0) {
-          s.state = 'hidden'; s.el.object3D.visible = false; layoutRow();
-          caption = 'scaled IN - ' + activeServersCount() + ' active';
-          setStatus(caption, 'warn');
-        }
-        if (s.state === 'spawning') {
-          s.scaleT = Math.min(1, s.scaleT + dt / 500);
-          s.el.object3D.scale.setScalar(s.scaleT);
-          if (s.scaleT >= 1) { s.state = 'active'; }
-        }
-        var dx = s.homeX - s.el.object3D.position.x;
-        if (Math.abs(dx) > 0.002) { s.el.object3D.position.x += dx * Math.min(1, dt / 180); }
-        s.el.object3D.position.z = 0; s.el.object3D.position.y = 0;
-      }
-
-      if (now - lastText > 250) {
-        lastText = now;
-        var mean = metricsTick(now);
-        refreshLinks();
-        if (now - lastScaleCheck > 500) { lastScaleCheck = now; autoscaleTick(now, mean); }
-      }
-    } };
-    window.__lbSimTick = sim.tick;
-
-    setStatus('pool online - 2 servers, least-connections');
-    paintTextures();
-  window.LB = {
-      get servers () { return servers; }, get pool () { return pool; },
-      get rate () { return rate; }, set rate (v) { rate = v; },
-      get algo () { return algo; }, get autoOn () { return autoOn; },
-      get cooldownOn () { return cooldownOn; }, get served () { return served; },
-      get scaleEvents () { return scaleEvents; },
-      activeCount: function () { return activeServers().length; },
-      get waitSamples () { return waitSamples; },
-      pick: function () { var s = pickServer(); return s ? s.id : -1; },
-      setAlgo: function (a) { algo = a; syncUI(); },
-      setAuto: function (v) { autoOn = v; syncUI(); },
-      setCooldown: function (v) { cooldownOn = v; syncUI(); },
-      reset: doReset,
-      metricsText: function () { return document.getElementById('metrics-text').getAttribute('value'); }
-    };
-    window.LB.ready = true;
-  });
-
+  /* ---------------- info popup, explain boards --------------------------- */
+  var infoEl = null, BOARDS = {};
+  /* canvas boards replace 3-D text (sharper, matches the holographic panels) */
+  function board (id, w, h, accent) {
+    var e = document.getElementById(id);
+    Array.prototype.slice.call(e.children).forEach(function (c) { e.removeChild(c); });
+    var W = Math.round(w * PX), H = Math.round(h * PX), c = canvas(W, H);
+    var B = { c: c, g: c.getContext('2d'), t: ctex(c), W: W, H: H, accent: accent || '#38bdf8' };
+    var m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: B.t, transparent: true,
+      toneMapped: false, depthWrite: false, side: THREE.DoubleSide }));
+    m.renderOrder = 8; e.object3D.add(m); BOARDS[id] = B; return B;
+  }
+  function drawBoard (id, title, lines, size) {
+    var B = BOARDS[id], g = B.g;
+    panelBg(g, B.W, B.H, title, B.accent);
+    (lines || []).forEach(function (ln, i) { txt(g, ln, 44, 132 + i * (size + 14), size, '#e6f6ff', 500); });
+    B.t.needsUpdate = true;
+  }
+  function openInfo (title, body, pos) {
+    if (!infoEl) { infoEl = document.getElementById('info'); }
+    drawBoard('info', title, String(body).split('\n'), 34);
+    infoEl.object3D.position.set(pos.x, Math.max(2.3, pos.y + 2.2), pos.z + 0.4);
+    infoEl.setAttribute('visible', true);
+    clearTimeout(openInfo.t); openInfo.t = setTimeout(function () { infoEl.setAttribute('visible', false); }, 8000);
+  }
+  function algoName () { return ALGOS.filter(function (a) { return a.k === algo; })[0].n; }
   function syncUI () {
-    document.getElementById('b-algo').textContent =
-      'algorithm: ' + (algo === 'rr' ? 'round-robin' : 'least-connections');
-    document.getElementById('b-algo').classList.toggle('on', algo === 'lc');
+    document.getElementById('b-algo').textContent = 'algorithm: ' + algoName().toLowerCase();
     document.getElementById('b-auto').textContent = 'auto-scaling: ' + (autoOn ? 'on' : 'off');
     document.getElementById('b-auto').classList.toggle('on', autoOn);
     document.getElementById('b-cd').textContent = 'cooldown: ' + (cooldownOn ? 'on' : 'off');
     document.getElementById('b-cd').classList.toggle('on', cooldownOn);
     document.getElementById('rateval').textContent = rate + ' req/s';
     document.getElementById('rate').value = rate;
-    document.querySelector('#vm-algo a-text').setAttribute('value',
-      algo === 'rr' ? 'round-robin' : 'least-conn');
-    document.querySelector('#vm-auto a-text').setAttribute('value',
-      'autoscale ' + (autoOn ? 'on' : 'off'));
-    document.querySelector('#vm-cd a-text').setAttribute('value',
-      'cooldown ' + (cooldownOn ? 'on' : 'off'));
+    document.querySelector('#vm-algo a-text').setAttribute('value', algoName().toLowerCase());
+    document.querySelector('#vm-auto a-text').setAttribute('value', 'autoscale ' + (autoOn ? 'on' : 'off'));
+    document.querySelector('#vm-cd a-text').setAttribute('value', 'cooldown ' + (cooldownOn ? 'on' : 'off'));
+    document.getElementById('vm-rate-t').setAttribute('value', 'traffic ' + rate + ' +');
+    DIRTY.algos = true; DIRTY.auto = true;
+    if (VM) { vmPaint(); }
   }
-
-  function toggleAlgo () { algo = algo === 'rr' ? 'lc' : 'rr'; rrIndex = -1;
-    caption = 'algorithm switched to ' + (algo === 'rr' ? 'round-robin' : 'least-connections');
-    setStatus(caption); syncUI(); }
+  var DIRTY = { algos: true, auto: true };
+  function setAlgo (k) { algo = k; rrIndex = -1; wrrCur = [0, 0, 0, 0, 0, 0, 0, 0];
+    caption = 'algorithm: ' + algoName(); setStatus(caption); syncUI(); drawAlgos(); drawLbFace(); }
+  function cycleAlgo () { var i = ALGOS.map(function (a) { return a.k; }).indexOf(algo); setAlgo(ALGOS[(i + 1) % ALGOS.length].k); }
   function toggleAuto () { autoOn = !autoOn; aboveSince = 0; belowSince = 0;
     setStatus('auto-scaling ' + (autoOn ? 'enabled' : 'disabled'), autoOn ? undefined : 'warn'); syncUI(); }
   function toggleCd () { cooldownOn = !cooldownOn;
-    setStatus('cooldown ' + (cooldownOn ? 'enabled - scaling settles' : 'DISABLED - watch the pool flap'),
-      cooldownOn ? undefined : 'bad'); syncUI(); }
-  function bumpRate (d) { rate = Math.max(1, Math.min(30, rate + d)); syncUI();
-    setStatus('traffic ' + rate + ' req/s'); }
+    setStatus('cooldown ' + (cooldownOn ? 'enabled - scaling settles' : 'DISABLED - watch the pool flap'), cooldownOn ? undefined : 'bad'); syncUI(); }
+  function bumpRate (d) { rate = rate + d > 30 ? 2 : rate + d; syncUI(); setStatus('traffic ' + rate + ' req/s'); }
   function toggleExplain () {
-    var e = document.getElementById('explain');
-    e.object3D.visible = !e.object3D.visible;
-    setStatus(e.object3D.visible ? 'explainer open' : 'explainer closed');
+    var e = document.getElementById('explain'); var on = !e.object3D.visible;
+    e.object3D.visible = on; if (on && window.XRQ && XRQ.inXR && XRQ.inXR(scene)) { XRQ.faceUser(e, 2.3, 1.7); }
+    setStatus(on ? 'explainer open' : 'explainer closed');
   }
   function doReset () {
-    for (var i = 0; i < servers.length; i++) {
-      servers[i].state = i < 2 ? 'active' : 'hidden';
-      servers[i].inFlight = []; servers[i].queue = [];
-      servers[i].el.object3D.visible = i < 2;
-      servers[i].el.object3D.scale.setScalar(1); servers[i].scaleT = 1;
-    }
-    for (var p = 0; p < pool.length; p++) { pool[p].phase = 0; pool[p].el.object3D.visible = false; }
-    rate = 4; algo = 'lc'; autoOn = true; cooldownOn = true;
-    rrIndex = -1; lastScale = 0; aboveSince = 0; belowSince = 0;
-    waitSamples = []; served = 0; acc = 0; caption = '';
-    layoutRow();
-    for (var j = 0; j < 2; j++) { servers[j].el.object3D.position.x = servers[j].homeX; }
-    syncUI(); setStatus('reset - 2 servers, least-connections, 4 req/s');
+    servers.forEach(function (s, i) { s.state = i < 2 ? 'active' : 'hidden'; s.inFlight = []; s.queue = []; s.cpu = 10; s.launchT = 1; });
+    REQS.forEach(function (r) { if (r.phase) { dropParticle(r.p); r.p = null; } r.phase = 0; });
+    DB.ops.forEach(function (o) { dropParticle(o.p); }); DB.ops = [];
+    rate = 6; algo = 'lc'; autoOn = true; cooldownOn = true; rrIndex = -1; wrrCur = [0, 0, 0, 0, 0, 0, 0, 0];
+    lastScale = 0; aboveSince = 0; belowSince = 0; waitSamples = []; served = 0; acc = 0; caption = '';
+    layout(); syncUI(); drawAlgos(); drawLbFace(); setStatus('reset - 2 instances, least connections, 6 req/s');
   }
 
-  function wireUI () {
-    document.getElementById('rate').addEventListener('input', function (e) {
-      rate = +e.target.value; syncUI();
+
+  /* VR control deck painted on canvas (crisp in the headset, matches the panels).
+     The a-text labels stay as the source of truth (tests and syncUI use them). */
+  var VM = null;
+  function vmPaint () {
+    var menu = document.getElementById('vrmenu'); if (!menu) { return; }
+    if (!VM) {
+      VM = { btns: [] };
+      var bgPlane = menu.querySelector(':scope > a-plane');
+      var bc = canvas(870, 570); VM.bg = { c: bc, g: bc.getContext('2d'), t: ctex(bc) };
+      var bm = bgPlane.getObject3D('mesh'); if (bm) { bm.material = new THREE.MeshBasicMaterial({ map: VM.bg.t, transparent: true, toneMapped: false }); }
+      menu.querySelectorAll(':scope > a-plane:not(:first-of-type)').forEach(function (p) { p.object3D.visible = false; });
+      menu.querySelectorAll('.clickable').forEach(function (b) {
+        var pl = b.querySelector('a-plane'), w = pl.getAttribute('geometry').width, c = canvas(Math.round(w * 300), 66);
+        var o = { el: b, plane: pl, c: c, g: c.getContext('2d'), t: ctex(c), label: b.querySelector('a-text') };
+        var m = pl.getObject3D('mesh'); if (m) { m.material = new THREE.MeshBasicMaterial({ map: o.t, transparent: true, toneMapped: false, color: '#ffffff' }); }
+        b.addEventListener('mouseenter', function () { o.hot = true; vmPaint(); });
+        b.addEventListener('mouseleave', function () { o.hot = false; vmPaint(); });
+        VM.btns.push(o);
+      });
+      menu.querySelectorAll('a-text').forEach(function (t) { t.object3D.visible = false; });
+    }
+    var g = VM.bg.g; panelBg(g, 870, 570, 'CONTROL DECK', '#38bdf8');
+    var st = document.getElementById('vm-status'); txt(g, st ? st.getAttribute('value') : '', 435, 540, 24, '#8fb8dc', 400, 'center');
+    VM.bg.t.needsUpdate = true;
+    VM.btns.forEach(function (o) {
+      var c = o.c, g2 = o.g, W = c.width, H = c.height, lab = o.label ? o.label.getAttribute('value') : '';
+      var red = o.el.id === 'vm-exit', view = /^vm-v/.test(o.el.id);
+      g2.clearRect(0, 0, W, H);
+      rr(g2, 3, 3, W - 6, H - 6, 14); g2.fillStyle = o.hot ? (red ? 'rgba(160,30,50,.98)' : 'rgba(37,99,235,.95)') : red ? 'rgba(80,16,30,.95)' : view ? 'rgba(14,65,110,.95)' : 'rgba(10,32,58,.95)'; g2.fill();
+      g2.strokeStyle = o.hot ? '#e0f2fe' : red ? '#f87171' : '#38bdf8'; g2.lineWidth = o.hot ? 5 : 3; g2.stroke();
+      txt(g2, lab, W / 2, 44, 28, red ? '#fecaca' : '#e0f2fe', 600, 'center');
+      o.t.needsUpdate = true;
     });
-    document.getElementById('b-algo').addEventListener('click', toggleAlgo);
+  }
+  /* ---------------- viewpoints (top tabs) -------------------------------- */
+  var vdir = new V3();
+  function goView (i) {
+    var v = VIEWS[i], rig = document.getElementById('rig').object3D, cam = scene.camera;
+    rig.position.set(v.pos.x, 0, v.pos.z);
+    var d = v.look.clone().sub(new V3(v.pos.x, 1.6, v.pos.z));
+    var want = Math.atan2(-d.x, -d.z);
+    var lc = document.getElementById('cam').components['look-controls'];
+    var inXR = window.XRQ && XRQ.inXR && XRQ.inXR(scene);
+    if (!inXR && lc && lc.yawObject) {
+      rig.rotation.y = 0; lc.yawObject.rotation.y = want;
+      lc.pitchObject.rotation.x = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    } else if (cam) {
+      cam.getWorldDirection(vdir);
+      var camYaw = Math.atan2(-vdir.x, -vdir.z) - rig.rotation.y;
+      rig.rotation.y = want - camYaw;
+    }
+    [1, 2, 3].forEach(function (n) {
+      var b = document.getElementById('vp-' + n); if (!b) { return; }
+      b.classList.toggle('on', n === i + 1);
+      b.innerHTML = (n === i + 1 ? '<span class="dot"></span>' : '') + ['1. OVERVIEW', '2. LOAD BALANCING &amp; AUTO-SCALING', '3. DATABASE TIER'][n - 1];
+    });
+    setStatus(['overview - the whole hall', 'load balancing - balancer, instances, auto-scaling', 'database tier - primary, replicas, live console'][i]);
+  }
+
+  /* ---------------- portals to the other chapters ------------------------ */
+  function buildPortal (id, label, sub, facePlusZ) {
+    var e = document.getElementById(id), g = e.object3D, flip = facePlusZ ? 0 : Math.PI;
+    var grp = new THREE.Group(); grp.rotation.y = flip; g.add(grp);
+    var gold = basic({ color: '#fbbf24' });
+    [[-1.45, 1.4, 0.16, 2.8], [1.45, 1.4, 0.16, 2.8]].forEach(function (p) {
+      add(grp, new THREE.Mesh(new THREE.BoxGeometry(p[2], p[3], 0.16), gold)).position.set(p[0], p[1], 0);
+    });
+    add(grp, new THREE.Mesh(new THREE.BoxGeometry(3.06, 0.16, 0.16), gold)).position.set(0, 2.8, 0);
+    var pc = canvas(4, 256), pg = pc.getContext('2d'), gr = pg.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, 'rgba(56,189,248,.05)'); gr.addColorStop(1, 'rgba(56,189,248,.6)'); pg.fillStyle = gr; pg.fillRect(0, 0, 4, 256);
+    add(grp, new THREE.Mesh(new THREE.PlaneGeometry(2.74, 2.72), addMat('#38bdf8', 0.9, ctex(pc)))).position.set(0, 1.36, 0);
+    halo(grp, new V3(0, 1.4, 0.2), 4.2, '#fbbf24', 0.25);
+    var lc = canvas(1024, 200), lg = lc.getContext('2d');
+    lg.save(); lg.shadowColor = '#fbbf24'; lg.shadowBlur = 16; txt(lg, label, 512, 86, 72, '#fde68a', 700, 'center'); lg.restore();
+    txt(lg, sub, 512, 160, 40, '#e0f2fe', 600, 'center');
+    var lm = add(grp, new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.66),
+      new THREE.MeshBasicMaterial({ map: ctex(lc), transparent: true, toneMapped: false, depthWrite: false })));
+    lm.position.set(0, 3.32, 0.02);
+    var hit = document.createElement('a-entity');
+    hit.setAttribute('geometry', 'primitive: plane; width: 2.7; height: 2.7');
+    hit.setAttribute('material', 'visible: false; side: double'); hit.setAttribute('position', '0 1.36 0');
+    e.appendChild(hit);
+  }
+
+  /* ---------------- explanation texts ----------------------------------- */
+  function explainTexts () {
+    board('info', 2.2, 1.25); board('explain', 3.3, 2.1); board('dbexplain', 3.3, 2.1, '#fbbf24');
+    drawBoard('explain', 'HOW THIS ROOM WORKS', [
+      'A load balancer is the single door in front of many servers.',
+      'Least connections: each request goes to the idlest instance.',
+      'Round robin: a fixed rotation, blind to how busy each one is.',
+      'Weighted: bigger instances get a bigger share (weights 2-5).',
+      'IP hash: the same user always lands on the same instance.',
+      'Auto-scaling adds an instance above 70% CPU held for 3 s,',
+      'removes one below 30% held for 5 s, waits 10 s in between.',
+      'Turn the cooldown off and watch the pool flap up and down.'], 29);
+    drawBoard('dbexplain', 'WHEN A REQUEST FINISHES', [
+      '1  The result is stored: the database is the record.',
+      '2  WRITE (gold): only the PRIMARY changes data, then it',
+      '    replays the change to both replicas (replication lag).',
+      '3  READ (teal, most requests): a replica answers, in turn.',
+      '4  Kill a replica: its reads fail over to the other one;',
+      '    kill both and the primary serves everything.',
+      '5  Restore: a replica resyncs first, then rejoins.'], 29);
+  }
+
+  /* ---------------- boot ------------------------------------------------- */
+  var panelQueue = [], pq = 0, lastPanel = 0, lastText = 0, lastScaleCheck = 0;
+  scene.addEventListener('loaded', function () {
+    root = document.getElementById('world').object3D;
+    refl = new THREE.Group(); root.add(refl);
+    SRV_TEX = serverFrontTex();
+    buildRoom(); buildRacks(); buildStage(); buildDb(); buildMap(); buildParticles();
+    buildPortal('door-ch1', 'CHAPTER 1', 'INSIDE A DATA CENTRE - WALK IN TO GO BACK', false);
+    buildPortal('door-ch3', 'CHAPTER 3', 'CDN & EDGE CACHING - WALK IN TO CONTINUE', true);
+    makePanel('teach', 3.3, 2.75, new V3(-7.4, 2.5, -0.6));
+    makePanel('users', 3.45, 2.3, new V3(-5.3, 3.15, -4.3));
+    makePanel('auto', 3.6, 2.0, new V3(5.3, 3.2, -4.3));
+    makePanel('algos', 3.3, 2.5, new V3(7.4, 2.5, -0.6));
+    makePanel('queue', 2.5, 1.62, new V3(6.2, 1.75, 5.2), '#f59e0b', new V3(1.0, 1.7, 9.4));
+    makePanel('db', 3.6, 1.32, new V3(-6.2, 1.7, 5.2), '#fbbf24', new V3(-2.4, 1.7, 9.4));
+    buildUserStrands(PANELS.users);
+    buildDbStrands();
+    for (var i = 0; i < MAX_SERVERS; i++) { newServer(i); }
+    servers[0].state = 'active'; servers[1].state = 'active';
+    for (i = 0; i < POOL_N; i++) { REQS.push({ phase: 0 }); }
+    DB.primary = dbUnit('primary', 0); DB.reps = [dbUnit('r1', 1), dbUnit('r2', 2)];
+    layout();
+    /* panel click zones */
+    ALGOS.forEach(function (a, k) { zone(PANELS.algos, 36, 108 + k * 158, PANELS.algos.W - 72, 140, function () { setAlgo(a.k); }); });
+    zone(PANELS.auto, PANELS.auto.W - 160, 26, 120, 62, toggleAuto);
+    zone(PANELS.auto, 40, 110 + 4 * 56, 470, 60, toggleCd);
+    zone(PANELS.db, 44, 270, 400, 64, dbToggle);
+    zone(PANELS.users, 40, 90, 380, 150, function () {
+      openInfo('USERS (LIVE)', 'people around the world pressing refresh\neach strand of light is a stream of requests\ninto the load balancer\ntraffic ' + rate + ' req/s (TRAFFIC & POOL)', PANELS.users.holder.position);
+    });
+    var lbHit = document.createElement('a-entity');
+    lbHit.setAttribute('class', 'clickable'); lbHit.setAttribute('geometry', 'primitive: box; width: 2.1; height: 3.0; depth: 1.0');
+    lbHit.setAttribute('material', 'visible: false'); lbHit.setAttribute('position', LBP.x + ' ' + (LBP.y + 1.5) + ' ' + LBP.z);
+    document.getElementById('world').appendChild(lbHit);
+    lbHit.addEventListener('click', function () {
+      openInfo('LOAD BALANCER', 'single entry point (L4/L7 reverse proxy)\nalgorithm: ' + algoName() + '\npool min 2 / max 8 instances\ncooldown ' + (cooldownOn ? 'on' : 'off'), LBP);
+    });
+    explainTexts();
+    drawTeach(); drawAlgos(); drawAutoscale(); drawUsers(0); drawQueue(); drawDb(); drawLbFace();
+    panelQueue = ['lb', 'users', 'auto', 'queue', 'db', 'cards'];
+    wireUI();
+    scene.addEventListener('enter-vr', function () {
+      var m = document.getElementById('vrmenu'); m.object3D.visible = true;
+      if (window.XRQ && XRQ.faceUser) { XRQ.faceUser(m, 2.1, 1.45); }
+    });
+    scene.addEventListener('exit-vr', function () { document.getElementById('vrmenu').object3D.visible = false; });
+    window.__lbSimTick = tick;
+    setStatus('pool online - 2 instances, least connections');
+    vmPaint();
+    goView(0);
+    window.LB = {
+      get servers () { return servers; }, get rate () { return rate; }, set rate (v) { rate = v; syncUI(); },
+      get algo () { return algo; }, get autoOn () { return autoOn; }, get cooldownOn () { return cooldownOn; },
+      get served () { return served; }, get scaleEvents () { return scaleEvents; },
+      activeCount: function () { return activeServers().length; }, get waitSamples () { return waitSamples; },
+      pick: function (u) { var s = pickServer(u || 0); return s ? s.id : -1; },
+      setAlgo: setAlgo, setAuto: function (v) { autoOn = v; syncUI(); }, setCooldown: function (v) { cooldownOn = v; syncUI(); },
+      reset: doReset, view: goView, metrics: function () { return JSON.parse(JSON.stringify(M)); }, ready: true
+    };
+    window.LBDB = { kill: dbKill, restore: dbRestore, setReadShare: function (v) { DB.readShare = v; },
+      stats: function () { return { writes: DB.writes, reads: DB.reads, primaryOps: DB.primary.ops,
+        reps: DB.reps.map(function (r) { return { id: r.id, state: r.state, ops: r.ops }; }), opsInFlight: DB.ops.length }; } };
+  });
+
+  function wireUI () {
+    document.getElementById('rate').addEventListener('input', function (e) { rate = +e.target.value; syncUI(); });
+    document.getElementById('b-algo').addEventListener('click', cycleAlgo);
     document.getElementById('b-auto').addEventListener('click', toggleAuto);
     document.getElementById('b-cd').addEventListener('click', toggleCd);
     document.getElementById('b-explain').addEventListener('click', toggleExplain);
     document.getElementById('b-reset').addEventListener('click', doReset);
     document.getElementById('b-hub').addEventListener('click', function () { location.href = 'index.html'; });
-    document.getElementById('vm-algo').addEventListener('click', toggleAlgo);
+    document.getElementById('b-db').addEventListener('click', dbToggle);
+    document.getElementById('db-share').addEventListener('input', function (e) { DB.readShare = Number(e.target.value) / 100; });
+    var dbExOn = false;
+    document.getElementById('b-dbex').addEventListener('click', function () {
+      dbExOn = !dbExOn; document.getElementById('dbexplain').object3D.visible = dbExOn;
+      document.getElementById('b-dbex').textContent = dbExOn ? 'hide the explanation' : 'explain the db tier';
+    });
+    document.getElementById('t-explain').addEventListener('click', toggleExplain);
+    document.getElementById('t-reset').addEventListener('click', doReset);
+    document.getElementById('t-gear').addEventListener('click', function () { window.HUDTAB && HUDTAB.toggle('traffic'); });
+    [1, 2, 3].forEach(function (n) {
+      document.getElementById('vp-' + n).addEventListener('click', function () { goView(n - 1); });
+      document.getElementById('vm-v' + n).addEventListener('click', function () { goView(n - 1); });
+    });
+    document.getElementById('vm-algo').addEventListener('click', cycleAlgo);
     document.getElementById('vm-auto').addEventListener('click', toggleAuto);
     document.getElementById('vm-cd').addEventListener('click', toggleCd);
     document.getElementById('vm-rate').addEventListener('click', function () { bumpRate(4); });
     document.getElementById('vm-expl').addEventListener('click', toggleExplain);
+    document.getElementById('vm-reset').addEventListener('click', doReset);
+    document.getElementById('vm-db').addEventListener('click', dbToggle);
     document.getElementById('vm-exit').addEventListener('click', function () { scene.exitVR(); });
-    document.getElementById('metrics-board').addEventListener('click', function () {
-    openInfo('LIVE METRICS', 'active servers: cabinets taking traffic now\nmean utilisation: how busy they are on average\navg wait: time a request queued before a worker\nimbalance: spread of load between workers\nserved: requests completed this session',
-      new THREE.Vector3(0, 0, 2.5));
-  });
-  document.getElementById('lb-core').addEventListener('click', function () {
-    openInfo('LOAD BALANCER', 'L4/L7 reverse proxy · single entry point\nalgorithm: ' +
-      (algo === 'rr' ? 'round-robin' : 'least-connections') + '\npool MIN 2 / MAX 8 cabinets · cooldown ' +
-      (cooldownOn ? 'on' : 'off') + '\nclick a server cabinet for its stats', new THREE.Vector3(0, 0, 2.5));
-      setStatus('balancer · ' + (algo === 'rr' ? 'round-robin' : 'least-connections') +
-        ' · ' + rate + ' req/s in · ' + activeServers().length + ' servers out');
+    window.addEventListener('keydown', function (e) {
+      if (window.XRQ && XRQ.typing && XRQ.typing(e)) { return; }
+      if (e.key === '1' || e.key === '2' || e.key === '3') { goView(+e.key - 1); }
     });
     syncUI();
+  }
+
+  /* ---------------- main loop ------------------------------------------- */
+  function tick (t, dt) {
+    var now = performance.now();
+    dt = Math.min(dt || 16, 100);
+    acc += rate * dt / 1000;
+    while (acc >= 1) { acc -= 1; spawnRequest(now); }
+    for (var p = 0; p < REQS.length; p++) {
+      var it = REQS[p];
+      if (!it.phase) { continue; }
+      it.t += dt / it.dur;
+      if (it.t >= 1) {
+        if (it.phase === 1) {
+          var s = pickServer(it.user);
+          if (!s || !s.luts.length) { it.phase = 0; dropParticle(it.p); it.p = null; continue; }
+          it.srv = s; it.phase = 2; it.t = 0; it.dur = 600; it.lut = s.luts[(Math.random() * s.luts.length) | 0];
+          tmpC.copy(loadColor(s.util, tc2)).lerp(new THREE.Color('#ffffff'), 0.5);
+          PCOL[it.p.i * 3] = tmpC.r; PCOL[it.p.i * 3 + 1] = tmpC.g; PCOL[it.p.i * 3 + 2] = tmpC.b; PGEO.attributes.color.needsUpdate = true;
+        } else { arrive(it, now); continue; }
+      }
+      putParticle(it.p, sample(it.lut, it.t, vP));
+    }
+    servers.forEach(function (s) {
+      if (s.state === 'hidden') { return; }
+      for (var f = s.inFlight.length - 1; f >= 0; f--) {
+        if (s.inFlight[f].doneAt <= now) { s.inFlight.splice(f, 1); served++;
+          if (Math.random() < 0.85) { dbOp(Math.random() < DB.readShare ? 'read' : 'write', s); } }
+      }
+      while (s.inFlight.length < CAP && s.queue.length && s.state === 'active') { startProc(s, s.queue.shift(), now); }
+      if (s.state === 'draining' && !s.inFlight.length && !s.queue.length) {
+        s.state = 'hidden'; layout(); caption = 'scaled IN - ' + activeServersCount() + ' active'; setStatus(caption, 'warn');
+      }
+      if (s.state === 'launching') {
+        s.launchT = Math.min(1, s.launchT + dt / LAUNCH_MS);
+        s.holoMat.opacity = 0.55 + 0.45 * Math.sin(now / 120);
+        s.holo.position.y = s.body.position.y + Math.sin(now / 300) * 0.03;
+        if (s.launchT >= 1) { s.state = 'active'; caption = 'instance ' + (s.id + 1) + ' is live - ' + activeServers().length + ' active';
+          setStatus(caption); tintServer(s); }
+      }
+    });
+    dbTick(now, dt);
+    PGEO.attributes.position.needsUpdate = true;
+    /* motion: strand pulses speed up with traffic, the core spins */
+    STRAND.offset.x -= dt / 1000 * (0.18 + rate * 0.02);
+    STRAND_SOFT.offset.x -= dt / 1000 * 0.05;
+    if (CORE) { CORE.rotation.y += dt / 1000 * 0.9; CORE_IN.rotation.y -= dt / 1000 * 1.4;
+      var bob = Math.sin(now / 700) * 0.05; CORE.position.y = CORE_Y + bob; CORE_IN.position.y = CORE_Y + bob; }
+    BEAMS.forEach(function (b, i) { b.material.opacity = (i ? 0.38 : 0.85) * (0.85 + 0.15 * Math.sin(now / 260 + i)); });
+    if (BOKEH) { BOKEH.material.opacity = 0.75 + 0.2 * Math.sin(now / 900); }
+    for (var mi = 0; mi < MIRROR.length; mi++) {
+      var mr = MIRROR[mi]; mr.dst.rotation.copy(mr.src.rotation); mr.dst.position.x = mr.src.position.x;
+      mr.dst.position.z = mr.src.position.z; mr.dst.position.y = -mr.src.position.y;
+    }
+    if (now - lastText > 250) {
+      lastText = now; var mean = metricsTick(now);
+      if (now - lastScaleCheck > 500) { lastScaleCheck = now; autoscaleTick(now, mean); }
+    }
+    if (now - lastPanel > 200) {                     /* one canvas per slot keeps texture uploads small */
+      lastPanel = now;
+      var key = panelQueue[pq % panelQueue.length]; pq++;
+      if (key === 'lb') { drawLbFace(); } else if (key === 'users') { drawUsers(now); } else if (key === 'auto') { drawAutoscale(); }
+      else if (key === 'queue') { drawQueue(); } else if (key === 'db') { drawDb(); }
+      else if (key === 'cards') { servers.forEach(function (s) { if (s.state !== 'hidden') { drawCard(s); } }); }
+      else if (key === 'dbcards') { drawDbCard('primary'); drawDbCard('r1'); drawDbCard('r2'); }
+      if (DIRTY.algos) { DIRTY.algos = false; drawAlgos(); }
+    }
   }
 })();
 </script>
 <script>
 window.HUDTAB = {
   open: function (n) {
-    document.querySelectorAll('.tabpanel').forEach(function (p) {
-      p.classList.toggle('open', p.getAttribute('data-tab') === n);
-    });
-    document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
-      b.classList.toggle('on', b.getAttribute('data-tab') === n);
-    });
+    document.querySelectorAll('.tabpanel').forEach(function (p) { p.classList.toggle('open', p.getAttribute('data-tab') === n); });
+    document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === n); });
   },
   closeAll: function () { this.open(null); },
   toggle: function (n) {
@@ -1342,6 +1819,7 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   b.addEventListener('click', function () { window.HUDTAB.toggle(b.getAttribute('data-tab')); });
 });
 </script>
+
 <script>
 /* thumb stick -> window.TOUCHJOY, consumed by rig-walk */
 (function () {
@@ -1404,6 +1882,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 23</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 24</div>
 </body>
 </html>
