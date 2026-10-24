@@ -590,42 +590,60 @@ document.addEventListener('DOMContentLoaded', function () {
 
   <!-- In-scene control wall: the HTML HUD cannot be seen inside a headset,
        so every HUD action also exists here as a laser-clickable button. -->
-  <a-entity id="vrmenu" visible="false">
-    <a-plane geometry="width: 2.7; height: 1.35" material="color: #131a2e; shader: flat; opacity: 0.94"></a-plane>
-    <a-text value="HALL CONTROLS" position="0 0.55 0.01" align="center" color="#22d3ee" width="3.4" material="shader: flat"></a-text>
-    <a-entity id="vm-tour" class="clickable" position="-0.86 0.26 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="tour" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+  <!-- build 30: compact control panel that floats at your lower-left and follows you (Y hides it).
+       The HTML HUD cannot be seen inside a headset, so every HUD action also exists here. -->
+  <a-entity id="vrmenu" visible="false" scale="0.36 0.36 0.36"
+            lazy-follow="vrOnly: true; dist: 0.9; side: -0.42; down: 0.36">
+    <a-plane geometry="width: 2.0; height: 2.06" material="color: #0b1220; shader: flat; opacity: 0.94; transparent: true"></a-plane>
+    <a-plane geometry="width: 2.0; height: 0.02" position="0 1.03 0.004" material="color: #22d3ee; shader: flat"></a-plane>
+    <a-text value="HALL CONTROLS" position="0 0.86 0.01" align="center" color="#22d3ee" width="2.4" material="shader: flat"></a-text>
+    <a-entity id="vm-tour" class="clickable" position="-0.48 0.6 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="tour" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-a" class="clickable" position="-0.02 0.26 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="fail CRAC" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-flow" class="clickable" position="0.48 0.6 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="airflow" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-b" class="clickable" position="0.86 0.26 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="fail UPS" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-a" class="clickable" position="-0.48 0.35 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="fail CRAC" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-c" class="clickable" position="-0.86 0.0 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="heat spike" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-b" class="clickable" position="0.48 0.35 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="fail UPS" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-flow" class="clickable" position="-0.02 0.0 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="airflow" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-c" class="clickable" position="-0.48 0.1 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="heat spike" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-reset" class="clickable" position="0.86 0.0 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="reset" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-reset" class="clickable" position="0.48 0.1 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="reset" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-guides" class="clickable" position="-0.86 -0.28 0.01">
-      <a-plane geometry="width: 0.78; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text id="vm-guides-label" value="guides off" align="center" color="#e2e8f0" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-guides" class="clickable" position="-0.48 -0.15 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text id="vm-guides-label" value="guides off" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-entity id="vm-exit" class="clickable" position="0 -0.28 0.01">
-      <a-plane geometry="width: 1.1; height: 0.22" material="color: #1e2a44; shader: flat"></a-plane>
-      <a-text value="leave VR" align="center" color="#f87171" width="2.6" position="0 0 0.01" material="shader: flat"></a-text>
+    <a-entity id="vm-exit" class="clickable" position="0.48 -0.15 0.01">
+      <a-plane geometry="width: 0.9; height: 0.2" material="color: #3a1420; shader: flat"></a-plane>
+      <a-text value="leave VR" align="center" color="#fca5a5" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
     </a-entity>
-    <a-text id="vm-status" value="" position="0 -0.52 0.01" align="center" color="#9fb0cc" width="4.6" material="shader: flat"></a-text>
+    <a-text value="chapters" position="-0.9 -0.37 0.01" align="left" color="#94a3b8" width="1.6" material="shader: flat"></a-text>
+    <a-entity id="vm-hall" class="clickable" position="-0.62 -0.56 0.01">
+      <a-plane geometry="width: 0.58; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="main hall" align="center" color="#fde68a" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-ch2" class="clickable" position="0.0 -0.56 0.01">
+      <a-plane geometry="width: 0.58; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="ch 2" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-entity id="vm-ch3" class="clickable" position="0.62 -0.56 0.01">
+      <a-plane geometry="width: 0.58; height: 0.2" material="color: #1e2a44; shader: flat"></a-plane>
+      <a-text value="ch 3" align="center" color="#e2e8f0" width="1.9" position="0 0 0.01" material="shader: flat"></a-text>
+    </a-entity>
+    <a-text value="Y hides this panel" position="0 -0.78 0.01" align="center" color="#64748b" width="1.5" material="shader: flat"></a-text>
+    <a-text id="vm-status" value="" position="0 -0.93 0.01" align="center" color="#9fb0cc" width="1.9" material="shader: flat"></a-text>
   </a-entity>
 
   <!-- build 13: everything below is one group so AR can show it as a table-size model -->
@@ -773,30 +791,14 @@ document.addEventListener('DOMContentLoaded', function () {
   </a-entity>
 
 
-  <!-- ============ DOORWAY TO CHAPTER 2 (north wall centre) =================
-       Walk into the glow (or click / trigger it) to continue the journey. -->
+  <!-- ============ EXIT TO THE MAIN HALL (north wall centre) ===============
+       Walk up to the doors (they slide open) or click them to return to the entrance hall. -->
   <canvas id="tex-takeaways" width="1024" height="512" style="display:none"></canvas>
     <a-entity id="takeaways" position="3.6 2.1 14.7" rotation="0 180 0">
       <a-plane geometry="width: 4.4; height: 2.2" material="color: #ffffff; shader: flat; src: #tex-takeaways"></a-plane>
     </a-entity>
-    <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html"
-            position="0 0 -14.9">
-    <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
-           material="color:#d9a514; shader: flat; roughness:.6; metalness:.1; emissive:#8a6a0e; emissiveIntensity:.35"></a-box>
-    <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5"
-           material="color:#d9a514; shader: flat; roughness:.6; metalness:.1; emissive:#8a6a0e; emissiveIntensity:.35"></a-box>
-    <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5"
-           material="color:#d9a514; shader: flat; roughness:.6; metalness:.1; emissive:#8a6a0e; emissiveIntensity:.35"></a-box>
-    <a-plane position="0 1.3 0.05" width="2.55" height="2.6"
-             material="color:#22d3ee; shader:flat; transparent:true; opacity:.22; side:double"></a-plane>
-    <a-plane position="0 0.02 0.6" rotation="-90 0 0" width="2.4" height="1.2"
-             material="color:#22d3ee; shader:flat; transparent:true; opacity:.35"></a-plane>
-    <a-text value="CHAPTER 2" position="0 3.45 0.1" align="center" width="4.2"
-            color="#fbbf24"></a-text>
-    <a-text value="LOAD BALANCING &amp; AUTO-SCALING - WALK IN TO CONTINUE"
-            position="0 3.16 0.1" align="center" width="4.6" wrap-count="60"
-            color="#e2e8f0"></a-text>
-  </a-entity>
+    <!-- build 30: the exit - a secure server-room door to the main hall (chapters are switched from the menu) -->
+    <a-entity id="door-hall" class="clickable" door-zone="href: index.html" secure-door position="0 0 -14.9"></a-entity>
   <!-- ============================ COOLING PLANT (M1.3 A) =====================
        Three CRAC units on the west wall: CRAC-1 and CRAC-2 on duty,
        CRAC-3 on standby. That is N+1 - one spare absorbs a failure.      -->
@@ -1267,6 +1269,92 @@ document.addEventListener('DOMContentLoaded', function () {
     /* --- door-zone: stand in a doorway (or click it) to travel to the next
          chapter's room. Page-per-chapter keeps each file self-contained while
          the doors make the three rooms feel like one building. ------------ */
+  /* --- build 30: secure server-room exit door ------------------------------
+     Surface-mounted sliding steel doors on a top rail (they glide open as you
+     walk up), narrow vision panels, push bars, kick plates, a card reader with
+     a status LED, a backlit MAIN HALL sign, a green EXIT sign and a hazard
+     threshold. Behind the doors: a lit corridor glow. Faces +z. */
+  AFRAME.registerComponent('secure-door', {
+    init: function () {
+      var g = new THREE.Group(), self = this; this.el.object3D.add(g); this.g = g;
+      function cv (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+      function tx (c) { var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
+      function put (geo, mat, x, y, z, parent) { var m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (parent || g).add(m); return m; }
+      var steelTex = new THREE.TextureLoader().load('assets/tex/brushed_steel.jpg', function (t) { t.needsUpdate = true; });
+      steelTex.colorSpace = THREE.SRGBColorSpace; steelTex.wrapS = steelTex.wrapT = THREE.RepeatWrapping; steelTex.repeat.set(1, 2);
+      var leafM = new THREE.MeshStandardMaterial({ color: '#eef2f6', map: steelTex, metalness: 0.45, roughness: 0.4 });
+      var frameM = new THREE.MeshStandardMaterial({ color: '#7d8791', metalness: 0.7, roughness: 0.32 });
+      var darkM = new THREE.MeshStandardMaterial({ color: '#2a3038', metalness: 0.5, roughness: 0.5 });
+      var chromeM = new THREE.MeshStandardMaterial({ color: '#e5e9ee', metalness: 0.9, roughness: 0.18 });
+      /* corridor glow behind the doors */
+      var bc = cv(64, 256), bg = bc.getContext('2d'), gr = bg.createLinearGradient(0, 0, 0, 256);
+      gr.addColorStop(0, '#05080f'); gr.addColorStop(0.55, '#0b2236'); gr.addColorStop(1, '#22d3ee');
+      bg.fillStyle = gr; bg.fillRect(0, 0, 64, 256);
+      for (var i = 0; i < 6; i++) { bg.fillStyle = 'rgba(165,243,252,.55)'; bg.fillRect(0, 30 + i * 30, 64, 2); }
+      put(new THREE.PlaneGeometry(2.2, 2.5), new THREE.MeshBasicMaterial({ map: tx(bc), toneMapped: false }), 0, 1.25, -0.08);
+      /* frame + top rail + header */
+      [-1, 1].forEach(function (s) { put(new THREE.BoxGeometry(0.14, 2.62, 0.3), frameM, s * 1.17, 1.31, 0); });
+      put(new THREE.BoxGeometry(2.48, 0.18, 0.3), frameM, 0, 2.66, 0);
+      put(new THREE.BoxGeometry(4.6, 0.09, 0.1), darkM, 0, 2.62, 0.17);
+      put(new THREE.BoxGeometry(4.6, 0.02, 0.02), chromeM, 0, 2.575, 0.215);
+      /* the two leaves (each in its own group so it can slide) */
+      this.leaves = [-1, 1].map(function (s) {
+        var L = new THREE.Group(); L.position.set(s * 0.55, 0, 0.2); g.add(L);
+        put(new THREE.BoxGeometry(1.1, 2.5, 0.06), leafM, 0, 1.27, 0, L);
+        put(new THREE.BoxGeometry(1.1, 0.26, 0.012), darkM, 0, 0.15, 0.036, L);                 /* kick plate */
+        var vis = put(new THREE.BoxGeometry(0.16, 1.05, 0.012), new THREE.MeshBasicMaterial({ color: '#0a1322', toneMapped: false }), -s * 0.36, 1.6, 0.036, L);
+        put(new THREE.PlaneGeometry(0.04, 1.0), new THREE.MeshBasicMaterial({ color: '#7dd3fc', transparent: true, opacity: 0.25, toneMapped: false }), -s * 0.39, 1.62, 0.043, L);
+        put(new THREE.BoxGeometry(0.2, 1.11, 0.014), darkM, -s * 0.36, 1.6, 0.031, L);       /* panel bezel */
+        vis.renderOrder = 1;
+        put(new THREE.CylinderGeometry(0.02, 0.02, 0.78, 12).rotateZ(Math.PI / 2), chromeM, 0, 1.02, 0.1, L);   /* push bar */
+        [-0.36, 0.36].forEach(function (bx) { put(new THREE.BoxGeometry(0.04, 0.05, 0.08), chromeM, bx, 1.02, 0.065, L); });
+        put(new THREE.BoxGeometry(0.06, 0.06, 0.04), darkM, 0, 2.5, 0.02, L);                  /* rail carriage */
+        return L;
+      });
+      /* card reader with status LED */
+      put(new THREE.BoxGeometry(0.1, 0.16, 0.035), darkM, 1.48, 1.25, 0.02);
+      put(new THREE.PlaneGeometry(0.07, 0.05), new THREE.MeshBasicMaterial({ color: '#0f172a', toneMapped: false }), 1.48, 1.27, 0.039);
+      this.led = put(new THREE.PlaneGeometry(0.03, 0.012), new THREE.MeshBasicMaterial({ color: '#22c55e', toneMapped: false }), 1.48, 1.19, 0.039);
+      var gc = cv(64, 64), gg = gc.getContext('2d'), rg = gg.createRadialGradient(32, 32, 0, 32, 32, 32);
+      rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)'); gg.fillStyle = rg; gg.fillRect(0, 0, 64, 64);
+      var glowT = tx(gc);
+      this.ledGlow = put(new THREE.PlaneGeometry(0.12, 0.12), new THREE.MeshBasicMaterial({ color: '#22c55e', map: glowT, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), 1.48, 1.19, 0.042);
+      /* backlit MAIN HALL sign + green EXIT sign */
+      var sc = cv(1024, 220), sg = sc.getContext('2d');
+      sg.fillStyle = '#0b1220'; sg.fillRect(0, 0, 1024, 220); sg.strokeStyle = '#22d3ee'; sg.lineWidth = 8; sg.strokeRect(4, 4, 1016, 212);
+      sg.textAlign = 'center'; sg.fillStyle = '#f1f5f9'; sg.font = '800 104px system-ui, "Segoe UI", sans-serif'; sg.fillText('MAIN HALL', 512, 118);
+      sg.fillStyle = '#7dd3fc'; sg.font = '600 40px system-ui, sans-serif'; sg.fillText('ENTRANCE HALL  ·  ALL CHAPTERS', 512, 186);
+      put(new THREE.BoxGeometry(1.75, 0.4, 0.06), darkM, 0, 3.05, 0.02);
+      put(new THREE.PlaneGeometry(1.7, 0.36), new THREE.MeshBasicMaterial({ map: tx(sc), toneMapped: false }), 0, 3.05, 0.055);
+      put(new THREE.PlaneGeometry(2.4, 0.9), new THREE.MeshBasicMaterial({ color: '#22d3ee', map: glowT, transparent: true, opacity: 0.18,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), 0, 3.05, 0.01);
+      var ec = cv(256, 96), eg = ec.getContext('2d');
+      eg.fillStyle = '#15803d'; eg.fillRect(0, 0, 256, 96); eg.fillStyle = '#f0fdf4'; eg.font = '800 62px system-ui, sans-serif';
+      eg.textAlign = 'center'; eg.fillText('EXIT', 128, 70);
+      put(new THREE.BoxGeometry(0.42, 0.17, 0.05), darkM, 1.5, 3.05, 0.02);
+      put(new THREE.PlaneGeometry(0.4, 0.15), new THREE.MeshBasicMaterial({ map: tx(ec), toneMapped: false }), 1.5, 3.05, 0.047);
+      /* cyan status strips on the jambs + light under the doors + hazard threshold */
+      [-1, 1].forEach(function (s) { put(new THREE.PlaneGeometry(0.025, 2.3), new THREE.MeshBasicMaterial({ color: '#67e8f9', toneMapped: false }), s * 1.17, 1.3, 0.152); });
+      var hc = cv(256, 32), hg = hc.getContext('2d');
+      for (i = 0; i < 16; i++) { hg.fillStyle = i % 2 ? '#111' : '#eab308'; hg.beginPath(); hg.moveTo(i * 16, 32); hg.lineTo(i * 16 + 16, 0); hg.lineTo(i * 16 + 32, 0); hg.lineTo(i * 16 + 16, 32); hg.fill(); }
+      var ht = tx(hc); ht.wrapS = THREE.RepeatWrapping; ht.repeat.set(2, 1);
+      var thr = put(new THREE.PlaneGeometry(2.6, 0.22).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ map: ht }), 0, 0.012, 0.55);
+      put(new THREE.PlaneGeometry(2.2, 0.5).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#22d3ee', map: glowT, transparent: true,
+        opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), 0, 0.014, 0.3);
+      this.open = 0;
+    },
+    tick: function (t, dt) {
+      var rig = this.el.sceneEl.querySelector('#rig'); if (!rig) { return; }
+      var p = rig.object3D.position, d = this.el.object3D.position;
+      var near = Math.hypot(p.x - d.x, p.z - d.z) < 4.2 ? 1 : 0;
+      this.open += (near - this.open) * Math.min(1, (dt || 16) / 1000 * 3.5);
+      var o = this.open, e = o * o * (3 - 2 * o);
+      this.leaves[0].position.x = -0.55 - 1.08 * e; this.leaves[1].position.x = 0.55 + 1.08 * e;
+      var c = near ? '#22d3ee' : '#22c55e';
+      this.led.material.color.set(c); this.ledGlow.material.color.set(c);
+    }
+  });
   AFRAME.registerComponent('door-zone', {
     schema: { href: { type: 'string' }, radius: { default: 1.5 }, dwell: { default: 450 } },
     init: function () {
@@ -3022,8 +3110,9 @@ function canvasPainter(w, h) {
     var menu = document.getElementById('vrmenu');
     menu.object3D.visible = !!show;
     if (!show) { return; }
-    XRQ.faceUser(menu, 2.1, 1.5);   /* build 12: was placed behind the user */
+    /* build 30: no wall in front of you - lazy-follow places it at your lower-left and keeps it there */
   };
+  XRQ.yToggle(document.getElementById('vrmenu'));
   vrScene.addEventListener('enter-vr', function () { DC.vrMenu(true); });
   vrScene.addEventListener('exit-vr', function () { DC.vrMenu(false); });
   setInterval(function () {
@@ -3038,7 +3127,10 @@ function canvasPainter(w, h) {
    ['vm-c', function () { DC.runScenario('C'); }],
    ['vm-flow', function () { DC.toggleAirflow(); }],
    ['vm-reset', function () { DC.resetAll(); }],
-   ['vm-exit', function () { vrScene.exitVR(); }]].forEach(function (pair) {
+   ['vm-exit', function () { vrScene.exitVR(); }],
+   ['vm-hall', function () { window.doorGo('index.html'); }],          /* chapters: VR carries over to the next page */
+   ['vm-ch2', function () { window.doorGo('loadbalancer.html'); }],
+   ['vm-ch3', function () { window.doorGo('cdn.html'); }]].forEach(function (pair) {
     var e2 = document.getElementById(pair[0]);
     if (e2) { e2.addEventListener('click', pair[1]); }
   });
@@ -3226,7 +3318,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 29</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 30</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */

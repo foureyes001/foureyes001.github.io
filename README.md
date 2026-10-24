@@ -67,6 +67,18 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 30 (24 Oct 2026) - stay in VR between chapters, side panels, one exit per chapter
+- Chapters 1 and 2 stay in VR when you arrive from a lobby gate. The Quest Browser grants the session and A-Frame re-enters VR. Chapter 3 blocks that grant, so it never auto-enters VR (AR only).
+- The chapter 1 "HALL CONTROLS" wall is gone. Chapters 1 and 2 now use a compact panel that floats at the lower left of the view and follows lazily: it only re-centres after you walk ~0.3 m or turn ~40 degrees.
+  - It is visible when VR starts, and the Y button hides or shows it.
+  - Shared `lazy-follow` component and `XRQ.yToggle` helper in xr-quest.js.
+- Each chapter has exactly one exit, styled to its environment, and it always leads to the main hall (index.html):
+  - Chapter 1: brushed-steel sliding security doors with a card reader, a backlit MAIN HALL sign and a green EXIT sign; the leaves slide open as you approach.
+  - Chapter 2: a cyan energy portal in the rack ring. The old second doorway is filled with racks.
+  - Chapter 3: a teal portal.
+  - Shared `portal-door` component in xr-quest.js.
+- Chapter-to-chapter travel is now through the panels' Chapters row (main hall / chapter 1 / 2 / 3), not doors.
+
 ## Build 29 (24 Oct 2026) - lobby final design pass
 - Floor: 2 m tiles with engraved geometric (circuit-like) patterns - concentric chamfered grooves, corner links, via pads and lit cyan/amber inlays - shaded so the grooves read as depth.
 - Walls: classic raised frames with recessed panels, engraved inset lines, rivets, a lit dado rail and vent panels. Ceiling: coffered bays. All depth comes from light/shadow in the textures (no extra geometry).

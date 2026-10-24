@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 29).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 30).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 29';
+  var BUILD = 'build 30';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -767,4 +767,184 @@
     });
     return merged;
   };
+
+  /* ---------- build 30: lazy-follow side panel (shared; was chapter 3 only) -----
+     Hangs to the lower-left of where you look and drifts after you only when
+     you turn or walk away. vrOnly: ignore it in AR (chapter 1/2 control walls). */
+  AFRAME.registerComponent('lazy-follow', {
+    schema: { dist: { default: 0.8 }, side: { default: -0.30 }, down: { default: 0.32 },
+              maxMove: { default: 0.30 }, maxAngle: { default: 40 }, vrOnly: { default: false } },
+    init: function () {
+      this.h = new THREE.Vector3(); this.f = new THREE.Vector3(); this.t = new THREE.Vector3();
+      this.d = new THREE.Vector3(); this.p = new THREE.Vector3(); this.moving = false; this.wasVisible = false;
+    },
+    target: function (cam) {
+      cam.getWorldPosition(this.h); cam.getWorldDirection(this.f);
+      this.f.y = 0; if (this.f.lengthSq() < 1e-6) { this.f.set(0, 0, -1); } this.f.normalize();
+      var D = this.data;
+      this.t.copy(this.h).addScaledVector(this.f, D.dist);
+      this.t.x += -this.f.z * D.side; this.t.z += this.f.x * D.side;
+      this.t.y = this.h.y - D.down;
+      return this.t;
+    },
+    toLocal: function (v) { var par = this.el.object3D.parent; if (par) { par.updateMatrixWorld(true); par.worldToLocal(v); } return v; },
+    snap: function (cam) {
+      var o = this.el.object3D;
+      o.position.copy(this.toLocal(this.p.copy(this.target(cam)))); this.face(); this.moving = false;
+    },
+    face: function () {
+      var o = this.el.object3D; o.updateMatrixWorld(true);
+      var par = o.parent, hl = this.p.copy(this.h); if (par) { par.worldToLocal(hl); }
+      o.lookAt(this.h);
+    },
+    tick: function (t, dt) {
+      var sc = this.el.sceneEl, cam = sc.camera, o = this.el.object3D;
+      if (!cam) { return; }
+      if (this.data.vrOnly && sc.is('ar-mode')) { this.wasVisible = false; return; }
+      var vis = o.visible;
+      if (vis && !this.wasVisible) { this.snap(cam); }
+      this.wasVisible = vis;
+      if (!vis) { return; }
+      var tg = this.toLocal(this.p.copy(this.target(cam)));
+      var wp = new THREE.Vector3(); o.getWorldPosition(wp);
+      if (!this.moving) {
+        this.d.subVectors(wp, this.h).setY(0);
+        var ang = this.d.lengthSq() > 1e-6 ? THREE.MathUtils.radToDeg(this.d.angleTo(this.f)) : 0;
+        if (o.position.distanceTo(tg) > this.data.maxMove || ang > this.data.maxAngle + 30) { this.moving = true; }
+      }
+      if (this.moving) {
+        o.position.lerp(tg, Math.min(1, (dt || 16) / 1000 * 4));
+        if (o.position.distanceTo(tg) < 0.02) { this.moving = false; }
+      }
+      o.lookAt(this.h);
+    }
+  });
+  /* Y on the left controller hides/shows a panel while in XR. */
+  XRQ.yToggle = function (el, onToggle) {
+    var hand = document.getElementById('handL');
+    if (!hand || !el) { return; }
+    hand.addEventListener('ybuttondown', function () {
+      var sc = el.sceneEl; if (!sc || !XRQ.inXR(sc)) { return; }
+      var on = !el.object3D.visible; el.setAttribute('visible', on); el.object3D.visible = on;
+      if (onToggle) { onToggle(on); }
+    });
+  };
+
+  /* ---------- build 30: glowing portal exit door (chapters 2 and 3) --------------
+     <a-entity portal-door="col: #22d3ee; title: MAIN HALL; sub: ...; flip: true">
+     Same family as the lobby gates: chamfered metal frame, bright rim, pulsing
+     glow band, scrolling energy, tunnel rings, label plate, orbiting motes,
+     floor pad and a soft wet-floor streak. Built-in materials only. */
+  var PD = {};
+  function pdCanvas (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function pdTex (c, rep) { var t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; } return t; }
+  function pdShared () {
+    if (PD.glow) { return PD; }
+    var c = pdCanvas(128, 128), g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); PD.glow = pdTex(c);
+    c = pdCanvas(4, 128); g = c.getContext('2d'); gr = g.createLinearGradient(0, 0, 0, 128);
+    gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(255,255,255,1)'); g.fillStyle = gr; g.fillRect(0, 0, 4, 128); PD.vfade = pdTex(c);
+    c = pdCanvas(512, 640); g = c.getContext('2d'); gr = g.createRadialGradient(256, 340, 30, 256, 320, 380);
+    gr.addColorStop(0, 'rgba(255,255,255,.03)'); gr.addColorStop(0.62, 'rgba(255,255,255,.07)'); gr.addColorStop(0.86, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = gr; g.fillRect(0, 0, 512, 640); PD.portal = pdTex(c);
+    c = pdCanvas(256, 512); g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 256, 512);
+    var seed = 3; function r () { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    for (var i = 0; i < 220; i++) { var x = r() * 256, y = r() * 512, hh = 20 + r() * 120, w = 1 + r() * 3, lg = g.createLinearGradient(0, y, 0, y + hh);
+      lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,' + (0.15 + r() * 0.5).toFixed(2) + ')'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = lg; g.fillRect(x, y, w, hh); }
+    PD.noise = pdTex(c, true);
+    return PD;
+  }
+  function pdShape (w, h, c) {
+    var s = new THREE.Shape(), x = -w / 2;
+    s.moveTo(x + c, 0); s.lineTo(x + w - c, 0); s.lineTo(x + w, c); s.lineTo(x + w, h - c);
+    s.lineTo(x + w - c, h); s.lineTo(x + c, h); s.lineTo(x, h - c); s.lineTo(x, c); s.closePath(); return s;
+  }
+  function pdRing (wo, ho, co, wi, hi, ci, yi, depth) {
+    var s = pdShape(wo, ho, co), hole = pdShape(wi, hi, ci);
+    s.holes.push(new THREE.Path(hole.getPoints().map(function (p) { return new THREE.Vector2(p.x, p.y + yi); }).reverse()));
+    return new THREE.ExtrudeGeometry(s, { depth: depth, bevelEnabled: false, curveSegments: 1 });
+  }
+  function pdAdd (color, op, map) {
+    return new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: op, map: map || null, blending: THREE.AdditiveBlending,
+      depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  }
+  AFRAME.registerComponent('portal-door', {
+    schema: { col: { default: '#22d3ee' }, title: { default: 'MAIN HALL' }, sub: { default: '' }, flip: { default: false } },
+    init: function () {
+      var S = pdShared(), D = this.data, root = new THREE.Group(), self = this;
+      root.rotation.y = D.flip ? Math.PI : 0; this.el.object3D.add(root); this.root = root;
+      var col = new THREE.Color(D.col), hot = col.clone().lerp(new THREE.Color('#ffffff'), 0.35);
+      var frameM = new THREE.MeshStandardMaterial({ color: '#1c2433', metalness: 0.75, roughness: 0.38 });
+      var trimM = new THREE.MeshStandardMaterial({ color: '#2c3748', metalness: 0.8, roughness: 0.3 });
+      function put (geo, mat, x, y, z) { var m = new THREE.Mesh(geo, mat); m.position.set(x || 0, y || 0, z || 0); root.add(m); return m; }
+      put(pdRing(3.3, 3.55, 0.55, 2.3, 2.85, 0.38, 0.12, 0.45), frameM, 0, 0, -0.2);
+      put(pdRing(3.55, 3.75, 0.62, 3.3, 3.55, 0.55, 0.1, 0.22), trimM, 0, 0, -0.3);
+      [-1, 1].forEach(function (s) {
+        put(new THREE.BoxGeometry(0.42, 3.3, 0.6), frameM, s * 1.95, 1.65, -0.1);
+        put(new THREE.BoxGeometry(0.5, 0.26, 0.7), trimM, s * 1.95, 0.13, -0.1);
+        put(new THREE.BoxGeometry(0.05, 2.4, 0.02), new THREE.MeshBasicMaterial({ color: hot, toneMapped: false }), s * 1.95, 1.65, 0.21);
+      });
+      put(pdRing(2.42, 2.97, 0.42, 2.3, 2.85, 0.38, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: hot, toneMapped: false }), 0, 0.06, 0.27);
+      this.band = put(pdRing(2.78, 3.32, 0.5, 2.42, 2.97, 0.42, 0.18, 0.01), pdAdd(col, 0.75), 0, -0.12, 0.28);
+      put(pdRing(3.62, 3.82, 0.64, 3.55, 3.75, 0.62, 0.035, 0.01), new THREE.MeshBasicMaterial({ color: hot, toneMapped: false }), 0, -0.035, -0.07);
+      var pg = new THREE.ShapeGeometry(pdShape(2.3, 2.85, 0.38));
+      put(pg, new THREE.MeshBasicMaterial({ color: '#02040a', toneMapped: false }), 0, 0.18, -0.02);
+      this.base = put(pg, pdAdd(col, 1.0, S.portal), 0, 0.18, 0.05);
+      this.ntex = S.noise.clone(); this.ntex.needsUpdate = true; this.ntex.repeat.set(1.4, 1);
+      this.energy = put(pg, pdAdd(col, 0.28, this.ntex), 0, 0.18, 0.08);
+      this.rings = [0.84, 0.68, 0.52, 0.36].map(function (k, i) {
+        return put(pdRing(2.3 * k + 0.05, 2.85 * k + 0.05, 0.38 * k + 0.02, 2.3 * k, 2.85 * k, 0.38 * k, 0.025, 0.01), pdAdd(col, 0.4),
+          0, 0.18 + 2.85 * (1 - k) / 2 - 0.025, -i * 0.012);
+      });
+      put(new THREE.PlaneGeometry(1.3, 1.7), pdAdd(col, 0.5, S.glow), 0, 1.55, -0.005);
+      put(new THREE.PlaneGeometry(5.6, 5.6), pdAdd(col, 0.3, S.glow), 0, 1.6, 0.02);
+      put(new THREE.PlaneGeometry(2.7, 3.2), pdAdd(col, 0.3, S.vfade), 0, 1.5, 0.35);
+      var pad = put(new THREE.PlaneGeometry(3.0, 1.9).rotateX(-Math.PI / 2), pdAdd(col, 0.65, S.glow), 0, 0.025, 1.0); pad.renderOrder = 2;
+      var st = put(new THREE.PlaneGeometry(2.6, 5.5).rotateX(-Math.PI / 2), pdAdd(col, 0.35, S.vfade), 0, 0.02, 2.9); st.rotation.y = Math.PI; st.renderOrder = 2;
+      /* label plate */
+      var lc = pdCanvas(1024, 300), g = lc.getContext('2d');
+      g.fillStyle = 'rgba(4,8,16,.84)'; g.beginPath(); g.moveTo(40, 10); g.lineTo(984, 10); g.lineTo(1014, 40); g.lineTo(1014, 260); g.lineTo(984, 290);
+      g.lineTo(40, 290); g.lineTo(10, 260); g.lineTo(10, 40); g.closePath(); g.fill(); g.lineWidth = 6; g.strokeStyle = D.col; g.stroke();
+      g.textAlign = 'center'; g.save(); g.shadowColor = D.col; g.shadowBlur = 24; g.fillStyle = hot.getStyle(); g.font = '800 120px system-ui, sans-serif';
+      g.fillText(D.title, 512, 150); g.restore();
+      g.fillStyle = '#cbd5e1'; g.font = '600 46px system-ui, sans-serif'; g.fillText(D.sub, 512, 232);
+      var lab = put(new THREE.PlaneGeometry(2.1, 0.62), new THREE.MeshBasicMaterial({ map: pdTex(lc), transparent: true, depthWrite: false, toneMapped: false }), 0, 2.45, 0.32);
+      /* orbiting motes */
+      var N = 130, pos = new Float32Array(N * 3), colA = new Float32Array(N * 3), c2 = new THREE.Color();
+      this.motes = [];
+      for (var i = 0; i < N; i++) {
+        this.motes.push({ a: Math.random() * Math.PI * 2, sp: (0.12 + Math.random() * 0.25) * (Math.random() < 0.5 ? -1 : 1),
+          rx: 1.55 + Math.random() * 0.55, ry: 1.75 + Math.random() * 0.55, z: 0.35 + Math.random() * 0.9, w: Math.random() * 6.28 });
+        c2.copy(col).lerp(new THREE.Color('#ffffff'), Math.random() * 0.4); colA[i * 3] = c2.r; colA[i * 3 + 1] = c2.g; colA[i * 3 + 2] = c2.b;
+      }
+      this.mgeo = new THREE.BufferGeometry(); this.mgeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.mgeo.setAttribute('color', new THREE.BufferAttribute(colA, 3));
+      var pts = new THREE.Points(this.mgeo, new THREE.PointsMaterial({ size: 0.075, map: S.glow, vertexColors: true, transparent: true,
+        blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+      pts.frustumCulled = false; pts.renderOrder = 6; root.add(pts);
+      /* click target */
+      var hit = document.createElement('a-entity');
+      hit.setAttribute('geometry', 'primitive: plane; width: 2.4; height: 3.0');
+      hit.setAttribute('material', 'visible: false; side: double');
+      hit.setAttribute('position', '0 1.6 ' + (D.flip ? -0.35 : 0.35));
+      this.el.appendChild(hit);
+    },
+    tick: function (t, dt) {
+      var now = performance.now(), k = Math.min(dt || 16, 100) / 1000;
+      this.ntex.offset.y -= k * 0.35; this.ntex.offset.x = Math.sin(now / 2300) * 0.08;
+      this.energy.material.opacity = 0.24 + 0.08 * Math.sin(now / 420);
+      this.base.material.opacity = 0.88 + 0.12 * Math.sin(now / 700);
+      this.band.material.opacity = 0.6 + 0.25 * Math.sin(now / 520);
+      this.rings.forEach(function (r, i) { r.material.opacity = 0.12 + 0.4 * Math.pow(0.5 + 0.5 * Math.sin(now / 380 - i * 1.1), 2); });
+      var a = this.mgeo.attributes.position.array;
+      for (var i = 0; i < this.motes.length; i++) {
+        var q = this.motes[i]; q.a += q.sp * k;
+        var wob = Math.sin(now / 900 + q.w) * 0.12, y = 1.65 + Math.sin(q.a) * (q.ry + wob) + Math.sin(now / 1300 + q.w) * 0.1;
+        a[i * 3] = Math.cos(q.a) * (q.rx + wob); a[i * 3 + 1] = Math.max(0.05, y); a[i * 3 + 2] = q.z + Math.sin(now / 1100 + q.w * 2) * 0.15;
+      }
+      this.mgeo.attributes.position.needsUpdate = true;
+    }
+  });
 })();

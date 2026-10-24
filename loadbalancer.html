@@ -285,8 +285,9 @@ window.doorGo = function (href) {
     <!-- the hall (floor, walls, ceiling, background racks) is built in script: see buildRoom() -->
     <a-entity id="shell"></a-entity>
 
-    <a-entity id="door-ch1" class="clickable" door-zone="href: datacentre.html" position="0 0 11.3"></a-entity>
-    <a-entity id="door-ch3" class="clickable" door-zone="href: cdn.html" position="0 0 -11.3"></a-entity>
+    <!-- build 30: one exit, behind where you start, to the main hall (chapters are switched from the menu) -->
+    <a-entity id="door-hall" class="clickable" door-zone="href: index.html" position="0 0 11.3"
+              portal-door="col: #22d3ee; title: MAIN HALL; sub: back to the entrance hall - walk in; flip: true"></a-entity>
 
     <a-entity id="info" position="0 2.2 0" billboard visible="false">
       <a-plane geometry="width: 2.0; height: 1.1" material="color: #06142a; shader: flat; opacity: 0.93; transparent: true"></a-plane>
@@ -306,8 +307,9 @@ window.doorGo = function (href) {
       <a-text id="dbexplain-text" value="" position="-1.5 0.95 0.01" align="left" color="#e0f2fe" width="2.9" baseline="top" material="shader: flat"></a-text>
     </a-entity>
 
-    <a-entity id="vrmenu" position="0 1.45 6.4" visible="false">
-      <a-plane geometry="width: 2.9; height: 1.9" material="color: #06142a; shader: flat; opacity: 0.94; transparent: true"></a-plane>
+    <a-entity id="vrmenu" position="0 1.45 6.4" visible="false" scale="0.3 0.3 0.3"
+              lazy-follow="vrOnly: true; dist: 0.9; side: -0.45; down: 0.36">
+      <a-plane geometry="width: 2.9; height: 2.5" position="0 -0.3 0" material="color: #06142a; shader: flat; opacity: 0.94; transparent: true"></a-plane>
       <a-plane geometry="width: 2.9; height: 0.02" position="0 0.94 0.004" material="color: #38bdf8; shader: flat"></a-plane>
       <a-text value="CONTROL DECK" position="0 0.8 0.01" align="center" color="#7dd3fc" width="3" material="shader: flat"></a-text>
       <a-entity id="vm-v1" class="clickable" position="-0.95 0.52 0.01">
@@ -354,7 +356,19 @@ window.doorGo = function (href) {
         <a-plane geometry="width: 0.88; height: 0.22" material="color: #2a1020; shader: flat"></a-plane>
         <a-text value="leave VR" align="center" color="#fca5a5" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
       </a-entity>
-      <a-text id="vm-status" value="" position="0 -0.74 0.01" align="center" color="#8fb4d4" width="2.7" material="shader: flat"></a-text>
+      <a-entity id="vm-hall" class="clickable" position="-0.95 -0.76 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="main hall" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-ch1" class="clickable" position="0 -0.76 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="chapter 1" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-entity id="vm-ch3" class="clickable" position="0.95 -0.76 0.01">
+        <a-plane geometry="width: 0.88; height: 0.22" material="color: #10233b; shader: flat"></a-plane>
+        <a-text value="chapter 3" align="center" color="#e0f2fe" width="2.0" position="0 0 0.01" material="shader: flat"></a-text>
+      </a-entity>
+      <a-text id="vm-status" value="" position="0 -1.08 0.01" align="center" color="#8fb4d4" width="2.7" material="shader: flat"></a-text>
     </a-entity>
   </a-entity>
 </a-scene>
@@ -565,7 +579,7 @@ window.doorGo = function (href) {
     var targets = [], n = 0;
     for (var i = 0; i < 118; i++) {
       var th = i / 118 * TAU;
-      if (Math.abs(Math.sin(th)) < 0.16) { continue; }     /* doorways */
+      if (Math.abs(Math.sin(th)) < 0.16 && Math.cos(th) < 0) { continue; }     /* build 30: one doorway now (the main-hall exit at +z) */
       var o = new THREE.Object3D(), rr = R_HALL - 0.55;
       o.position.set(Math.sin(th) * rr, 0, -Math.cos(th) * rr); o.rotation.y = -th;
       root.add(o); targets.push({ object3D: o }); n++;
@@ -1624,7 +1638,7 @@ window.doorGo = function (href) {
     if (!VM) {
       VM = { btns: [] };
       var bgPlane = menu.querySelector(':scope > a-plane');
-      var bc = canvas(870, 570); VM.bg = { c: bc, g: bc.getContext('2d'), t: ctex(bc) };
+      var bc = canvas(870, 750); VM.bg = { c: bc, g: bc.getContext('2d'), t: ctex(bc) };
       var bm = bgPlane.getObject3D('mesh'); if (bm) { bm.material = new THREE.MeshBasicMaterial({ map: VM.bg.t, transparent: true, toneMapped: false }); }
       menu.querySelectorAll(':scope > a-plane:not(:first-of-type)').forEach(function (p) { p.object3D.visible = false; });
       menu.querySelectorAll('.clickable').forEach(function (b) {
@@ -1637,8 +1651,9 @@ window.doorGo = function (href) {
       });
       menu.querySelectorAll('a-text').forEach(function (t) { t.object3D.visible = false; });
     }
-    var g = VM.bg.g; panelBg(g, 870, 570, 'CONTROL DECK', '#38bdf8');
-    var st = document.getElementById('vm-status'); txt(g, st ? st.getAttribute('value') : '', 435, 540, 24, '#8fb8dc', 400, 'center');
+    var g = VM.bg.g; panelBg(g, 870, 750, 'CONTROL DECK', '#38bdf8');
+    txt(g, 'CHAPTERS', 40, 468, 24, '#94a3b8', 600, 'left'); txt(g, 'Y hides this panel', 830, 468, 22, '#64748b', 400, 'right');
+    var st = document.getElementById('vm-status'); txt(g, st ? st.getAttribute('value') : '', 435, 612, 24, '#8fb8dc', 400, 'center');
     VM.bg.t.needsUpdate = true;
     VM.btns.forEach(function (o) {
       var c = o.c, g2 = o.g, W = c.width, H = c.height, lab = o.label ? o.label.getAttribute('value') : '';
@@ -1729,8 +1744,6 @@ window.doorGo = function (href) {
     refl = new THREE.Group(); root.add(refl);
     SRV_TEX = serverFrontTex();
     buildRoom(); buildRacks(); buildStage(); buildDb(); buildMap(); buildParticles();
-    buildPortal('door-ch1', 'CHAPTER 1', 'INSIDE A DATA CENTRE - WALK IN TO GO BACK', false);
-    buildPortal('door-ch3', 'CHAPTER 3', 'CDN & EDGE CACHING - WALK IN TO CONTINUE', true);
     makePanel('teach', 3.3, 2.75, new V3(-7.4, 2.5, -0.6));
     makePanel('users', 3.45, 2.3, new V3(-5.3, 3.15, -4.3));
     makePanel('auto', 3.6, 2.0, new V3(5.3, 3.2, -4.3));
@@ -1764,8 +1777,7 @@ window.doorGo = function (href) {
     panelQueue = ['lb', 'users', 'auto', 'queue', 'db', 'cards'];
     wireUI();
     scene.addEventListener('enter-vr', function () {
-      var m = document.getElementById('vrmenu'); m.object3D.visible = true;
-      if (window.XRQ && XRQ.faceUser) { XRQ.faceUser(m, 2.1, 1.45); }
+      var m = document.getElementById('vrmenu'); m.object3D.visible = true;   /* lazy-follow puts it at your lower-left */
     });
     scene.addEventListener('exit-vr', function () { document.getElementById('vrmenu').object3D.visible = false; });
     window.__lbSimTick = tick;
@@ -1816,6 +1828,10 @@ window.doorGo = function (href) {
     document.getElementById('vm-reset').addEventListener('click', doReset);
     document.getElementById('vm-db').addEventListener('click', dbToggle);
     document.getElementById('vm-exit').addEventListener('click', function () { scene.exitVR(); });
+    [['vm-hall', 'index.html'], ['vm-ch1', 'datacentre.html'], ['vm-ch3', 'cdn.html']].forEach(function (c) {   /* VR carries over */
+      document.getElementById(c[0]).addEventListener('click', function () { window.doorGo(c[1]); });
+    });
+    XRQ.yToggle(document.getElementById('vrmenu'));
     window.addEventListener('keydown', function (e) {
       if (window.XRQ && XRQ.typing && XRQ.typing(e)) { return; }
       if (e.key === '1' || e.key === '2' || e.key === '3') { goView(+e.key - 1); }
@@ -1970,6 +1986,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 29</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 30</div>
 </body>
 </html>
