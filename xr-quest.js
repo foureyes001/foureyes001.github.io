@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 30).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 31).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 30';
+  var BUILD = 'build 31';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -130,6 +130,9 @@
     var wrapped = function (href) {
       var sc = document.querySelector('a-scene');
       if (sc && sc.is('ar-mode')) { setResume(); }
+      /* build 31: teleport sound on every door / chapter jump, except chapter 1's
+         sliding exit, which already played its own door sound */
+      if (!window.__dooring && !window.__xrqNoWhoosh && XRQ.sfx) { XRQ.sfx.whoosh(); }
       return orig.apply(this, arguments);
     };
     wrapped.__xrq = true;
@@ -945,6 +948,208 @@
         a[i * 3] = Math.cos(q.a) * (q.rx + wob); a[i * 3 + 1] = Math.max(0.05, y); a[i * 3 + 2] = q.z + Math.sin(now / 1100 + q.w * 2) * 0.15;
       }
       this.mgeo.attributes.position.needsUpdate = true;
+    }
+  });
+
+  /* ---------- build 31: sound effects ---------------------------------------
+     All sounds are generated with Web Audio (no audio files, nothing to license,
+     works offline). Footsteps are quiet; doors are louder. ?sound=0 mutes.
+     Browsers only start audio after a user action, so the context is resumed
+     on any click / key / touch / trigger press and when VR or AR starts. */
+  var SFX = XRQ.sfx = (function () {
+    var ctx = null, master = null, verb = null, noiseBuf = null, side = 1, lastWhoosh = 0;
+    var muted = /[?&]sound=0/.test(location.search);
+    function make () {
+      if (ctx || muted) { return ctx; }
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) { return null; }
+      try { ctx = new AC(); } catch (e) { ctx = null; return null; }
+      master = ctx.createGain(); master.gain.value = 0.9;
+      /* no compressor: Chromium's adds automatic make-up gain, which evened out the
+         quiet footsteps and the louder doors. Levels are set per sound instead. */
+      master.connect(ctx.destination);
+      /* a short dark echo so the sounds sit in a room rather than in your ears */
+      verb = ctx.createDelay(1.0); verb.delayTime.value = 0.13;
+      var fb = ctx.createGain(); fb.gain.value = 0.32;
+      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+      var wet = ctx.createGain(); wet.gain.value = 0.35;
+      verb.connect(lp); lp.connect(fb); fb.connect(verb); lp.connect(wet); wet.connect(master);
+      var len = Math.floor(ctx.sampleRate * 1.5);
+      noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+      var d = noiseBuf.getChannelData(0);
+      for (var i = 0; i < len; i++) { d[i] = Math.random() * 2 - 1; }
+      return ctx;
+    }
+    function wake () {
+      if (!make()) { return false; }
+      if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume().catch(function () {}); } catch (e) {} }
+      return ctx.state === 'running';
+    }
+    function noise (t0, dur) {
+      var s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+      s.start(t0, Math.random() * 1.2); s.stop(t0 + dur + 0.05);
+      return s;
+    }
+    function env (g, t0, a, peak, hold, rel) {
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + a);
+      g.gain.setValueAtTime(Math.max(0.0002, peak), t0 + a + hold);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + a + hold + rel);
+      return g;
+    }
+    /* gains start silent: a GainNode defaults to 1 until its envelope begins, which let a
+       full-volume click through wherever a source started a few ms before its envelope */
+    function gain () { var g = ctx.createGain(); g.gain.value = 0; return g; }
+    function filt (type, f, q) { var b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q) { b.Q.value = q; } return b; }
+    function osc (type, f) { var o = ctx.createOscillator(); o.type = type; o.frequency.value = f; return o; }
+
+    /* quiet footstep: a soft heel thump plus a short scuff on the floor */
+    function step (vol) {
+      if (!wake()) { return; }                     /* never queue steps while audio is blocked */
+      var t = ctx.currentTime + 0.005, v = (vol || 1) * 0.25 * (0.85 + Math.random() * 0.3);
+      side = -side;
+      var out = master;
+      if (ctx.createStereoPanner) { out = ctx.createStereoPanner(); out.pan.value = side * 0.18; out.connect(master); }
+      var o = osc('sine', 110 + Math.random() * 25);
+      o.frequency.setValueAtTime(110 + Math.random() * 25, t);
+      o.frequency.exponentialRampToValueAtTime(52, t + 0.09);
+      var g = env(gain(), t, 0.006, v, 0.018, 0.12);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.2);
+      var n = noise(t, 0.12), f = filt('bandpass', 900 + Math.random() * 500, 0.9);
+      var g2 = env(gain(), t + 0.01, 0.006, v * 0.55, 0.01, 0.07);
+      n.connect(f); f.connect(g2); g2.connect(out);
+    }
+
+    /* louder futuristic teleport: rising filtered noise + a vibrato synth chirp + sparkle */
+    function whoosh () {
+      wake(); if (!ctx) { return; }
+      var t = ctx.currentTime + 0.01, V = 1.4;
+      lastWhoosh = Date.now();
+      var n = noise(t, 1.0), bp = filt('bandpass', 260, 2.2);
+      bp.frequency.setValueAtTime(260, t);
+      bp.frequency.exponentialRampToValueAtTime(3800, t + 0.55);
+      bp.frequency.exponentialRampToValueAtTime(1200, t + 0.95);
+      var g = env(gain(), t, 0.18, V * 0.9, 0.2, 0.55);
+      n.connect(bp); bp.connect(g); g.connect(master); g.connect(verb);
+      var o = osc('sawtooth', 140);
+      o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(1100, t + 0.6);
+      var lp = filt('lowpass', 600);
+      lp.frequency.setValueAtTime(600, t); lp.frequency.exponentialRampToValueAtTime(4200, t + 0.6);
+      var lfo = osc('sine', 14), lg = gain(); lg.gain.value = 18; lfo.connect(lg); lg.connect(o.frequency);
+      var g2 = env(gain(), t, 0.25, V * 0.28, 0.15, 0.4);
+      o.connect(lp); lp.connect(g2); g2.connect(master); g2.connect(verb);
+      o.start(t); o.stop(t + 0.9); lfo.start(t); lfo.stop(t + 0.9);
+      [1760, 2637].forEach(function (fr, i) {
+        var s = osc('sine', fr), sg = env(gain(), t + 0.42 + i * 0.05, 0.02, V * 0.12, 0.05, 0.5);
+        s.connect(sg); sg.connect(master); sg.connect(verb); s.start(t + 0.4); s.stop(t + 1.2);
+      });
+    }
+
+    /* chapter 1 exit: pneumatic sliding door - hiss, rail rumble, end clunk */
+    function slide (opening) {
+      wake(); if (!ctx) { return; }
+      var t = ctx.currentTime + 0.01, V = 0.7, dur = 0.85;
+      var n = noise(t, dur + 0.2), bp = filt('bandpass', opening ? 3200 : 2400, 1.4);
+      bp.frequency.setValueAtTime(opening ? 3200 : 2400, t);
+      bp.frequency.linearRampToValueAtTime(opening ? 1900 : 1500, t + dur);
+      var g = env(gain(), t, 0.03, V * 0.7, dur * 0.45, dur * 0.5);
+      n.connect(bp); bp.connect(g); g.connect(master); g.connect(verb);
+      var o = osc('sawtooth', 48);
+      o.frequency.setValueAtTime(48, t); o.frequency.linearRampToValueAtTime(opening ? 62 : 44, t + dur);
+      var lp = filt('lowpass', 220), g2 = env(gain(), t, 0.08, V * 0.5, dur * 0.5, dur * 0.35);
+      o.connect(lp); lp.connect(g2); g2.connect(master); o.start(t); o.stop(t + dur + 0.1);
+      var tc = t + dur * 0.92, k = osc('sine', 90);
+      k.frequency.setValueAtTime(90, tc); k.frequency.exponentialRampToValueAtTime(45, tc + 0.12);
+      var g3 = env(gain(), tc, 0.004, V * 0.8, 0, 0.16);
+      k.connect(g3); g3.connect(master); g3.connect(verb); k.start(tc); k.stop(tc + 0.2);
+      var c = noise(tc, 0.05), cf = filt('lowpass', 1500), g4 = env(gain(), tc, 0.002, V * 0.4, 0, 0.04);
+      c.connect(cf); cf.connect(g4); g4.connect(master);
+    }
+
+    /* softer portal "charge-up" when you walk up to a gate (lobby gates, ch2/ch3 exits) */
+    function approach () {
+      if (!wake()) { return; }
+      var t = ctx.currentTime + 0.01, V = 0.3;
+      var o = osc('triangle', 220), o2 = osc('sine', 331);
+      o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(440, t + 0.7);
+      o2.frequency.setValueAtTime(331, t); o2.frequency.exponentialRampToValueAtTime(662, t + 0.7);
+      var lfo = osc('sine', 7), lg = gain(); lg.gain.value = 0.35; lfo.connect(lg);
+      var trem = gain(); trem.gain.value = 0.65; lg.connect(trem.gain);
+      var g = env(gain(), t, 0.3, V * 0.5, 0.25, 0.5);
+      o.connect(trem); o2.connect(trem); trem.connect(g); g.connect(master); g.connect(verb);
+      [o, o2, lfo].forEach(function (x) { x.start(t); x.stop(t + 1.2); });
+      var n = noise(t, 1.0), hp = filt('highpass', 5000), gn = env(gain(), t, 0.4, V * 0.18, 0.1, 0.45);
+      n.connect(hp); hp.connect(gn); gn.connect(master);
+    }
+
+    /* how long a page should wait before navigating, so the whoosh is heard */
+    function navDelay () {
+      return (ctx && ctx.state === 'running' && Date.now() - lastWhoosh < 400) ? 650 : 170;
+    }
+
+    ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(function (ev) {
+      window.addEventListener(ev, wake, true);
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+      var sc = document.querySelector('a-scene');
+      if (!sc) { return; }
+      wake();                                     /* allowed straight away if the browser permits it */
+      sc.addEventListener('enter-vr', function () {
+        wake();
+        var s = sc.xrSession;
+        if (s && s.addEventListener) { s.addEventListener('selectstart', wake); }
+      });
+      sc.addEventListener('triggerdown', wake);
+      var addSteps = function () {
+        var rig = document.getElementById('rig');
+        if (rig && !rig.hasAttribute('xrq-footsteps')) { rig.setAttribute('xrq-footsteps', ''); }
+        /* every gate / portal gets an approach chime (ch1's sliding door has its own sound) */
+        Array.prototype.forEach.call(document.querySelectorAll('[door-zone]'), function (d) {
+          if (!d.hasAttribute('secure-door') && !d.hasAttribute('xrq-door-sfx')) { d.setAttribute('xrq-door-sfx', ''); }
+        });
+      };
+      if (sc.hasLoaded) { addSteps(); } else { sc.addEventListener('loaded', addSteps); }
+    });
+    return { step: step, whoosh: whoosh, slide: slide, approach: approach, wake: wake, navDelay: navDelay,
+             state: function () { return ctx ? ctx.state : (muted ? 'muted' : 'none'); } };
+  })();
+
+  /* approach chime: plays once when you come within `near` metres of a gate;
+     re-arms after you step back beyond `far` */
+  AFRAME.registerComponent('xrq-door-sfx', {
+    schema: { near: { default: 3.2 }, far: { default: 4.2 } },
+    init: function () { this.inside = null; this.w = new THREE.Vector3(); XRQ.doorChimes = XRQ.doorChimes || 0; },
+    tick: function () {
+      var rig = this.el.sceneEl.querySelector('#rig'); if (!rig) { return; }
+      var sc = this.el.sceneEl;
+      if (sc.is('ar-mode') || !this.el.object3D.visible || window.__dooring) { return; }
+      this.el.object3D.getWorldPosition(this.w);
+      var p = rig.object3D.position, d = Math.hypot(p.x - this.w.x, p.z - this.w.z);
+      if (this.inside === null) { this.inside = d < this.data.far; return; }   /* no chime for where you spawn */
+      if (!this.inside && d < this.data.near) { this.inside = true; XRQ.doorChimes++; SFX.approach(); }
+      else if (this.inside && d > this.data.far) { this.inside = false; }
+    }
+  });
+
+  /* footsteps whenever the player is moved (stick, WASD, touch joystick) -
+     not for real walking in AR, snap turns or teleport jumps */
+  AFRAME.registerComponent('xrq-footsteps', {
+    schema: { stride: { default: 0.8 } },
+    init: function () { this.last = new THREE.Vector3(); this.have = false; this.acc = 0; this.ry = 0; this.tLast = 0; XRQ.steps = 0; },
+    tick: function (t, dt) {
+      var o = this.el.object3D, p = o.position, sc = this.el.sceneEl;
+      if (!this.have || o.rotation.y !== this.ry || sc.is('ar-mode') || XRQ.arModel || window.__dooring) {
+        this.last.copy(p); this.ry = o.rotation.y; this.have = true; return;
+      }
+      var d = Math.hypot(p.x - this.last.x, p.z - this.last.z);
+      this.last.copy(p);
+      var sp = d / Math.max(0.001, (dt || 16) / 1000);
+      if (d > 1 || sp < 0.3) { this.acc = Math.min(this.acc, this.data.stride * 0.6); return; }
+      this.acc += d;
+      if (this.acc >= this.data.stride && t - this.tLast > 260) {
+        this.acc = 0; this.tLast = t; XRQ.steps++;
+        SFX.step(Math.min(1.2, 0.75 + sp / 8));
+      }
     }
   });
 })();

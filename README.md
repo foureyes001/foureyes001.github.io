@@ -67,6 +67,20 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 31 (24 Oct 2026) - sounds, and chapter 3 opens in VR with a VR <-> AR switch
+- Sound effects on every page, generated with Web Audio (no audio files, nothing to license, works offline; `?sound=0` mutes):
+  - quiet footsteps whenever you move with the thumb stick, WASD or the touch joystick (about one per 0.8 m; none for real walking in AR, snap turns or teleport jumps);
+  - a softer "charge-up" chime when you walk up to any gate (the three main-hall gates, the chapter 2 and 3 portals);
+  - a louder futuristic teleport whoosh when you go through a gate or switch chapter from a menu - the page waits 0.65 s so it is heard;
+  - chapter 1's exit plays a pneumatic sliding-door sound as the doors open and close (no whoosh there).
+  - Browsers only start audio after a user action, so sound wakes on any click, key, touch, trigger press or VR/AR start.
+- Chapter 3 now opens in VR like chapters 1 and 2 (the build 30 block on the browser's session hand-over is removed). The flat page shows both VR and AR buttons.
+  - In VR the CDN panel floats at the lower left with all controls (size works on the VR globe too) and a teal "Switch to AR" button; the readout card floats above the globe.
+  - "Switch to AR" ends the VR session, waits for the headset to really end it, then starts AR. In AR the button reads "Back to VR" and does the reverse. Lobby / Ch 1 / Ch 2 from AR first return to VR, so the next chapter also opens in VR.
+  - If the headset refuses to start the new mode from a controller press, a full-screen card offers "Start AR" / "Start VR" as one ordinary click.
+  - A-Frame's own VR/AR buttons offer a new session to the browser whenever one ends; those offers are now skipped mid-switch and while any session is active.
+- Chapter 3's ceiling no longer writes depth: as one huge disc above the viewer it wrote wrong depth and hid the VR readout card and the ceiling light rings.
+
 ## Build 30 (24 Oct 2026) - stay in VR between chapters, side panels, one exit per chapter
 - Chapters 1 and 2 stay in VR when you arrive from a lobby gate. The Quest Browser grants the session and A-Frame re-enters VR. Chapter 3 blocks that grant, so it never auto-enters VR (AR only).
 - The chapter 1 "HALL CONTROLS" wall is gone. Chapters 1 and 2 now use a compact panel that floats at the lower left of the view and follows lazily: it only re-centres after you walk ~0.3 m or turn ~40 degrees.

@@ -382,7 +382,7 @@ window.doorGo = function (href) {
   document.head.appendChild(l);
   var sc = document.querySelector('a-scene');
   if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
-  setTimeout(function () { location.href = href; }, 170);
+  setTimeout(function () { location.href = href; }, (window.XRQ && XRQ.sfx) ? XRQ.sfx.navDelay() : 170);   /* build 31: let the door sound play */
 };
 (function () {
   var v = document.getElementById('veil');
@@ -1348,6 +1348,12 @@ document.addEventListener('DOMContentLoaded', function () {
       var rig = this.el.sceneEl.querySelector('#rig'); if (!rig) { return; }
       var p = rig.object3D.position, d = this.el.object3D.position;
       var near = Math.hypot(p.x - d.x, p.z - d.z) < 4.2 ? 1 : 0;
+      /* build 31: sliding-door sound when the leaves start to open or close;
+         walking through then goes to the hall without the teleport whoosh */
+      if (this.wasNear !== undefined && near !== this.wasNear && !window.__dooring && window.XRQ && XRQ.sfx) {
+        XRQ.sfx.slide(!!near); XRQ.doorSlides = (XRQ.doorSlides || 0) + 1;
+      }
+      this.wasNear = near; window.__xrqNoWhoosh = !!near;
       this.open += (near - this.open) * Math.min(1, (dt || 16) / 1000 * 3.5);
       var o = this.open, e = o * o * (3 - 2 * o);
       this.leaves[0].position.x = -0.55 - 1.08 * e; this.leaves[1].position.x = 0.55 + 1.08 * e;
@@ -3318,7 +3324,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 30</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 31</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */

@@ -117,12 +117,9 @@ html.coarse #stick{display:block}
 
 <script>
 /* Registered before <a-scene> is parsed. Later registration silently never attaches. */
-/* build 30: chapter 3 is AR-only. Arriving from another chapter while in VR, the browser
-   offers the session again ('sessiongranted') and A-Frame would enter VR. Stop that here;
-   this listener is registered before A-Frame's, so it runs first. */
-if (navigator.xr && navigator.xr.addEventListener) {
-  navigator.xr.addEventListener('sessiongranted', function (e) { e.stopImmediatePropagation(); window.__grantBlocked = true; });
-}
+/* build 31: chapter 3 opens in VR like chapters 1 and 2 (A-Frame accepts the session the
+   browser hands over on arrival). AR is one button away on the in-headset panel:
+   "Switch to AR" / "Back to VR". The build 30 'sessiongranted' block is gone. */
 if (typeof AFRAME === 'undefined') {
   console.error('A-Frame failed to load.');
 } else {
@@ -382,7 +379,7 @@ window.doorGo = function (href) {
   document.head.appendChild(l);
   var sc = document.querySelector('a-scene');
   if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
-  setTimeout(function () { location.href = href; }, 170);
+  setTimeout(function () { location.href = href; }, (window.XRQ && XRQ.sfx) ? XRQ.sfx.navDelay() : 170);   /* build 31: let the door sound play */
 };
 (function () {
   var v = document.getElementById('veil');
@@ -415,7 +412,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 30</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 31</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -454,7 +451,7 @@ window.doorGo = function (href) {
   background="color: #03060c"
   fog="type: linear; color: #03060c; near: 16; far: 40"
   renderer="antialias: true; colorManagement: true; multiviewStereo: true"
-  xr-mode-ui="XRMode: ar"
+  xr-mode-ui="XRMode: xr"
   quest-ar="hide: #room, #door-hall, #takeaways; env: false"
   webxr="requiredFeatures: local-floor;
          optionalFeatures: hit-test, anchors, dom-overlay;
@@ -495,7 +492,7 @@ window.doorGo = function (href) {
     <a-entity id="handL" laser-controls="hand: left"
               raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
   </a-entity>
-  <!-- build 30: chapter 3 is AR-only; the in-headset controls are #arPanel on the left controller -->
+  <!-- build 31: VR first, AR on request; the in-headset controls are #arPanel (VR and AR) -->
 </a-scene>
 
 <script>
@@ -534,7 +531,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 30\n' +
+    'build 31\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -724,7 +721,11 @@ function buildHall () {
   put(new THREE.Mesh(new THREE.CylinderGeometry(RH, RH, HH, 72, 1, true).translate(0, HH / 2, 0),
     basicM({ map: wt, side: THREE.BackSide })));
   /* ceiling + concentric light rings */
-  put(new THREE.Mesh(new THREE.CircleGeometry(RH, 72).rotateX(Math.PI / 2).translate(0, HH, 0), basicM({ color: '#03060c' })));
+  /* build 31: the ceiling is one 9.5 m disc whose triangles all fan out from a point right above
+     you; it wrote wrong (too near) depth there and hid the VR readout card floating above the globe.
+     Nothing sits above the ceiling, so it does not need to write depth at all. */
+  var ceil = put(new THREE.Mesh(new THREE.CircleGeometry(RH, 72).rotateX(Math.PI / 2).translate(0, HH, 0), basicM({ color: '#03060c', depthWrite: false })));
+  ceil.renderOrder = -1;
   [[8.4, 0.045, '#7dd3fc'], [5.9, 0.032, '#38bdf8'], [3.5, 0.028, '#38bdf8']].forEach(function (r) {
     put(new THREE.Mesh(new THREE.TorusGeometry(r[0], r[1], 6, 120).rotateX(Math.PI / 2).translate(0, HH - 0.12, 0), basicM({ color: r[2] })));
     put(new THREE.Mesh(new THREE.RingGeometry(r[0] - 0.45, r[0] + 0.45, 96).rotateX(Math.PI / 2).translate(0, HH - 0.14, 0),
@@ -1538,11 +1539,17 @@ function enterVR () {
   document.getElementById('overlay').classList.remove('ar');
   arRow.style.display = 'none';
   scene.setAttribute('background', 'transparent', false);
-  globeRoot.object3D.scale.setScalar(1.0);
+  globeRoot.object3D.scale.setScalar(vrScale);
   globeRoot.setAttribute('position', '0 1.5 -3.0');
   setLabelScale(1.0);
   hintEl.textContent = 'Point a controller at a city and pull the trigger.';
   setStatus('VR session active');
+  arUI.enter('vr');                                   /* build 31: same panel, with "Switch to AR" */
+  /* came back from AR to leave for another chapter: go now, while VR is on, so it carries over */
+  if (arUI.state.pendingHref) {
+    var h = arUI.state.pendingHref; arUI.state.pendingHref = '';
+    setTimeout(function () { window.doorGo(h); }, 300);
+  }
 }
 
 function restoreDesktop () {
@@ -1722,7 +1729,7 @@ var arUI = (function () {
     lobby:   [30, 584, 175, 64, function () { return 'Lobby'; }],
     ch1:     [212, 584, 176, 64, function () { return 'Ch 1'; }],
     ch2:     [395, 584, 175, 64, function () { return 'Ch 2'; }],
-    exit:    [30, 680, 540, 80, function () { return 'Exit AR'; }]
+    exit:    [30, 680, 540, 80, function () { return ui.mode === 'vr' ? 'Switch to AR' : 'Back to VR'; }]
   };
   function canvasOf (w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
   function texOf (c) { var t = new THREE.CanvasTexture(c); t.colorSpace = 'srgb'; t.anisotropy = 4; return t; }
@@ -1756,10 +1763,10 @@ var arUI = (function () {
         g.lineWidth = 3; g.strokeStyle = '#e2e8f0'; g.stroke();
         continue;
       }
-      var exit = k === 'exit';
+      var exit = k === 'exit', toAR = ui.mode === 'vr';     /* build 31: teal = go to AR, blue = back to VR */
       rr(g, b[0], b[1], b[2], b[3], 12);
-      g.fillStyle = exit ? (hov ? '#b91c1c' : '#7f1d1d') : (hov ? '#475569' : '#334155'); g.fill();
-      g.lineWidth = hov ? 4 : 2; g.strokeStyle = hov ? '#22d3ee' : (exit ? '#f87171' : '#475569'); g.stroke();
+      g.fillStyle = exit ? (toAR ? (hov ? '#0f9488' : '#115e59') : (hov ? '#2563eb' : '#1e3a8a')) : (hov ? '#475569' : '#334155'); g.fill();
+      g.lineWidth = hov ? 4 : 2; g.strokeStyle = hov ? '#22d3ee' : (exit ? (toAR ? '#2dd4bf' : '#60a5fa') : '#475569'); g.stroke();
       g.fillStyle = '#e2e8f0'; g.font = (exit ? '700 ' : '500 ') + (b[3] > 70 ? 34 : 30) + 'px system-ui, sans-serif';
       g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b[4](), b[0] + b[2] / 2, b[1] + b[3] / 2 + 1);
       g.textBaseline = 'alphabetic';
@@ -1772,8 +1779,8 @@ var arUI = (function () {
     else if (k === 'spin') { document.getElementById('btnSpin').click(); }
     else if (k === 'hud') { document.getElementById('btnHud').click(); }
     else if (k === 'diag') { document.getElementById('btnDiag').click(); }
-    else if (k === 'smaller') { setArScale(arScale / 1.3); }
-    else if (k === 'bigger') { setArScale(arScale * 1.3); }
+    else if (k === 'smaller') { if (ui.mode === 'vr') { setVrScale(1 / 1.3); } else { setArScale(arScale / 1.3); } }
+    else if (k === 'bigger') { if (ui.mode === 'vr') { setVrScale(1.3); } else { setArScale(arScale * 1.3); } }
     else if (k === 'ttlDown' || k === 'ttlUp' || k === 'ttlBar') {
       var v = ttlSeconds;
       if (k === 'ttlDown') { v -= 5; } else if (k === 'ttlUp') { v += 5; }
@@ -1789,12 +1796,13 @@ var arUI = (function () {
       t.value = String(Math.max(0, Math.min(60, v))); t.dispatchEvent(new Event('input'));
     }
     else if (k === 'lobby' || k === 'ch1' || k === 'ch2') {
-      /* leave AR first, so the next chapter opens normally for VR (no "continue in AR" prompt) */
-      ui.pendingHref = { lobby: 'index.html', ch1: 'datacentre.html', ch2: 'loadbalancer.html' }[k];
-      try { scene.exitVR(); } catch (e) {}
-      setTimeout(function () { if (ui.pendingHref) { var h = ui.pendingHref; ui.pendingHref = ''; location.href = h; } }, 1500);
+      var href = { lobby: 'index.html', ch1: 'datacentre.html', ch2: 'loadbalancer.html' }[k];
+      /* build 31: in VR the next chapter keeps VR (teleport sound plays). In AR, switch back
+         to VR first, then go - so the next chapter also opens in VR. */
+      if (ui.mode === 'vr') { window.doorGo(href); }
+      else { ui.pendingHref = href; switchMode('vr'); }
     }
-    else if (k === 'exit') { try { scene.exitVR(); } catch (e2) {} }
+    else if (k === 'exit') { switchMode(ui.mode === 'vr' ? 'ar' : 'vr'); }
     ui.last = ''; refresh(true);
   }
   function buildPanel () {
@@ -1813,8 +1821,10 @@ var arUI = (function () {
     ui.panel = P;
     ui.pc = canvasOf(CW, CH); ui.pg = ui.pc.getContext('2d'); ui.pt = texOf(ui.pc);
     /* object3D exists from creation; adding now avoids missing an early 'loaded' event */
-    P.object3D.add(new THREE.Mesh(new THREE.PlaneGeometry(PW, PH),
-      new THREE.MeshBasicMaterial({ map: ui.pt, transparent: true, toneMapped: false, depthWrite: false })));
+    var pm = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH),
+      new THREE.MeshBasicMaterial({ map: ui.pt, transparent: true, toneMapped: false, depthWrite: false }));
+    pm.renderOrder = 20;              /* build 31: in VR the room's glow layers draw with raised orders - stay on top of them */
+    P.object3D.add(pm);
     Object.keys(BTN).forEach(function (k) {
       var b = BTN[k], z = document.createElement('a-plane');
       var w = b[2] / CW * PW, h = b[3] / CH * PH;
@@ -1835,8 +1845,9 @@ var arUI = (function () {
     D.setAttribute('visible', 'false');
     P.appendChild(D); ui.dbg = D;
     ui.dc = canvasOf(640, 560); ui.dg = ui.dc.getContext('2d'); ui.dt = texOf(ui.dc);
-    D.object3D.add(new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.2625),
-      new THREE.MeshBasicMaterial({ map: ui.dt, transparent: true, toneMapped: false, depthWrite: false })));
+    var dm = new THREE.Mesh(new THREE.PlaneGeometry(0.30, 0.2625),
+      new THREE.MeshBasicMaterial({ map: ui.dt, transparent: true, toneMapped: false, depthWrite: false }));
+    dm.renderOrder = 20; D.object3D.add(dm);
     paintPanel();
   }
   /* ---- readout card above the globe ---- */
@@ -1848,8 +1859,10 @@ var arUI = (function () {
     scene.appendChild(C);
     ui.card = C;
     ui.cc = canvasOf(900, 430); ui.cg = ui.cc.getContext('2d'); ui.ct = texOf(ui.cc);
-    C.object3D.add(new THREE.Mesh(new THREE.PlaneGeometry(0.80, 0.382),
-      new THREE.MeshBasicMaterial({ map: ui.ct, transparent: true, toneMapped: false, depthWrite: false, side: THREE.DoubleSide })));
+    var cm = new THREE.Mesh(new THREE.PlaneGeometry(0.80, 0.382),
+      new THREE.MeshBasicMaterial({ map: ui.ct, transparent: true, toneMapped: false, depthWrite: false, side: THREE.DoubleSide }));
+    cm.renderOrder = 20;              /* build 31: was hidden behind the room's glow layers in VR */
+    C.object3D.add(cm);
   }
   function paintCard () {
     var g = ui.cg, W = 900, H = 430;
@@ -1885,7 +1898,7 @@ var arUI = (function () {
     globeRoot.object3D.getWorldPosition(gp); if (scene.camera) { scene.camera.getWorldPosition(cp); }
     var s = scene.renderer && scene.renderer.xr && scene.renderer.xr.getSession && scene.renderer.xr.getSession();
     var lines = [
-      'mode: ' + (XRQ.headsetAR(scene) ? 'headset AR (world-space)' : 'phone AR'),
+      'mode: ' + (ui.mode === 'vr' ? 'VR (room)' : (XRQ.headsetAR(scene) ? 'headset AR (world-space)' : 'phone AR')),
       'session: ' + (s ? (s.environmentBlendMode || 'active') : 'none'),
       'globe placed: ' + placed + '   radius ' + (0.975 * arScale).toFixed(2) + ' m',
       'globe at ' + gp.x.toFixed(2) + ', ' + gp.y.toFixed(2) + ', ' + gp.z.toFixed(2),
@@ -1895,7 +1908,7 @@ var arUI = (function () {
       'TTL: ' + ttlText() + '   labels ' + (labelsOn ? 'on' : 'off') + '   spin ' + (spinning ? 'on' : 'off'),
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
-      'build 30'
+      'build 31'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 96 + i * 42); });
@@ -1903,13 +1916,13 @@ var arUI = (function () {
   }
   function placeCard () {
     var gp = new THREE.Vector3(); globeRoot.object3D.getWorldPosition(gp);
-    ui.card.object3D.position.set(gp.x, gp.y + 0.975 * arScale + 0.36, gp.z);
+    ui.card.object3D.position.set(gp.x, gp.y + 0.975 * globeRoot.object3D.scale.x + 0.36, gp.z);
   }
   function refresh (force) {
     if (!ui.on) { return; }
     var key = [labelsOn, spinning, hudOn, diagOn, ttlSeconds, ui.hover].join('|');
     if (force || key !== ui.last) { ui.last = key; paintPanel(); }
-    ui.card.object3D.visible = placed && hudOn;
+    ui.card.object3D.visible = (placed || ui.mode === 'vr') && hudOn;
     if (ui.card.object3D.visible) { placeCard(); paintCard(); }
     ui.dbg.object3D.visible = diagOn;
     if (diagOn) { paintDebug(); }
@@ -1921,12 +1934,14 @@ var arUI = (function () {
     ui.panel.setAttribute('visible', !ui.hidden);
     setStatus(ui.hidden ? 'controls hidden - press Y to bring them back' : 'controls shown');
   }
-  function enter () {
-    if (!XRQ.headsetAR(scene)) { return; }            /* phones keep their HTML bar */
+  function enter (mode) {
+    ui.mode = mode === 'vr' ? 'vr' : 'ar';
+    if (ui.mode === 'ar' && !XRQ.headsetAR(scene)) { return; }   /* phones keep their HTML bar */
     if (!ui.panel) { buildPanel(); buildCard(); }
     ui.on = true; ui.hover = ''; ui.hidden = false;
     ui.panel.setAttribute('visible', true);          /* the attribute, or A-Frame's visible component wins */
-    XRQ.arModel = true;                               /* thumb sticks never slide you in AR: walk for real */
+    ui.panel.setAttribute('lazy-follow', 'side', ui.mode === 'vr' ? -0.40 : -0.30);   /* VR: clear of the globe */
+    XRQ.arModel = ui.mode === 'ar';                   /* AR: walk for real. VR: the thumb stick walks */
     clearInterval(ui.timer); ui.timer = setInterval(function () { refresh(false); }, 250);
     refresh(true);
   }
@@ -1937,11 +1952,92 @@ var arUI = (function () {
     clearInterval(ui.timer); ui.timer = null;
     ui.panel.setAttribute('visible', false); ui.card.object3D.visible = false; ui.dbg.object3D.visible = false;
     if (hudEl) { hudEl.object3D.visible = hudOn; }
-    if (ui.pendingHref) { var h = ui.pendingHref; ui.pendingHref = ''; setTimeout(function () { location.href = h; }, 60); }
   }
   return { enter: enter, exit: exit, refresh: refresh, state: ui, act: act, BTN: BTN, toggleHidden: function () { toggleHidden(); } };
 })();
 window.__arUI = arUI;
+
+/* ---- build 31: VR <-> AR switching ------------------------------------------
+   WebXR allows one immersive session at a time, and A-Frame's exitVR() reports
+   'exit-vr' BEFORE the headset has really ended the session. So: ask the session
+   to end, wait for its own 'end' event, then request the other mode.
+   The browser must still count the trigger press as a user action; if it refuses,
+   a full-screen card offers the same step as one ordinary click. */
+var vrScale = 1.0;
+function setVrScale (f) {
+  vrScale = Math.min(1.4, Math.max(0.5, vrScale * f));      /* 1.4: the globe stays clear of the floor */
+  globeRoot.object3D.scale.setScalar(vrScale);
+  setStatus('globe radius about ' + (0.975 * vrScale).toFixed(2) + ' m');
+}
+var modeSwitch = { busy: false, last: null };
+/* A-Frame's VR/AR buttons react to 'exit-vr' by OFFERING a new session to the browser
+   (navigator.xr.offerSession). An outstanding offer would count as a pending immersive
+   session and could make our own request fail, so offers are skipped mid-switch (and while
+   any session is active - A-Frame only checks for VR, so it even offered VR during AR). */
+scene.__enterVRRaw = scene.enterVR;
+scene.enterVR = function (useAR, useOffer) {
+  if (useOffer && (modeSwitch.busy || XRQ.inXR(scene))) { return Promise.resolve('offer skipped: in XR or switching'); }
+  return scene.__enterVRRaw.apply(scene, arguments);
+};
+function switchMode (mode) {
+  if (modeSwitch.busy) { return; }
+  modeSwitch.last = { mode: mode, t: Date.now(), result: 'pending' };
+  var s = scene.xrSession;
+  if (!s || !XRQ.inXR(scene)) { startMode(mode); return; }
+  modeSwitch.busy = true;
+  setStatus('switching to ' + mode.toUpperCase());
+  if (XRQ.sfx && !arUI.state.pendingHref) { XRQ.sfx.whoosh(); }
+  var done = false;
+  var go = function () {
+    if (done) { return; } done = true;
+    setTimeout(function () { modeSwitch.busy = false; startMode(mode); }, 60);
+  };
+  try { s.addEventListener('end', go, { once: true }); } catch (e) {}
+  setTimeout(go, 2500);                                    /* in case 'end' never arrives */
+  try { scene.exitVR(); } catch (e2) { go(); }
+}
+function startMode (mode) {
+  var p;
+  try { p = mode === 'ar' ? scene.enterAR() : scene.enterVR(); }
+  catch (e) { switchFailed(mode, e); return; }
+  if (p && p.then) {
+    p.then(function () {
+      if (modeSwitch.last) { modeSwitch.last.result = XRQ.inXR(scene) ? 'ok' : 'not entered'; }
+      if (!XRQ.inXR(scene)) { switchFailed(mode, new Error('session not started')); }
+    }, function (e) { switchFailed(mode, e); });
+  }
+}
+function switchFailed (mode, e) {
+  if (modeSwitch.last) { modeSwitch.last.result = 'failed: ' + ((e && e.message) || e); }
+  console.warn('mode switch to ' + mode + ' failed:', e && e.message);
+  var h = arUI.state.pendingHref;
+  if (h) { arUI.state.pendingHref = ''; location.href = h; return; }   /* leaving anyway */
+  showSwitchPrompt(mode);
+}
+function showSwitchPrompt (mode) {
+  var old = document.getElementById('switchPrompt'); if (old) { old.remove(); }
+  var other = mode === 'ar' ? 'vr' : 'ar', M = mode.toUpperCase(), O = other.toUpperCase();
+  var box = document.createElement('div');
+  box.id = 'switchPrompt';
+  box.setAttribute('style', 'position:fixed;inset:0;z-index:300;display:flex;align-items:center;' +
+    'justify-content:center;background:rgba(3,6,12,.82);font-family:system-ui,sans-serif');
+  box.innerHTML =
+    '<div style="background:#131a2e;border:1px solid #22d3ee;border-radius:16px;padding:26px 30px;' +
+    'text-align:center;color:#e2e8f0;max-width:380px">' +
+    '<div style="font-weight:700;font-size:20px;margin-bottom:8px">Continue in ' + M + '</div>' +
+    '<div style="font-size:14px;color:#94a3b8;margin-bottom:18px">The headset needs one more click to start ' + M + '.</div>' +
+    '<button data-go="' + mode + '" style="font:700 18px system-ui;padding:16px 22px;border-radius:12px;border:none;' +
+    'background:#22d3ee;color:#0b1020;cursor:pointer;width:100%">Start ' + M + '</button>' +
+    '<button data-go="' + other + '" style="font:600 15px system-ui;margin-top:12px;padding:12px 16px;border-radius:10px;' +
+    'border:1px solid #475569;background:transparent;color:#e2e8f0;cursor:pointer;width:100%">Start ' + O + ' instead</button>' +
+    '<button data-go="" style="font:500 13px system-ui;margin-top:10px;padding:8px 14px;border:none;' +
+    'background:transparent;color:#94a3b8;cursor:pointer">Stay on this page</button></div>';
+  document.body.appendChild(box);
+  Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) {
+    b.addEventListener('click', function () { var m = b.getAttribute('data-go'); box.remove(); if (m) { startMode(m); } });
+  });
+}
+window.__modeSwitch = { switchMode: switchMode, state: modeSwitch, prompt: showSwitchPrompt };
 
 /* ---- startup ------------------------------------------------------------- */
 function reportSupport () {
@@ -2011,7 +2107,7 @@ var TOUR = [
     x: 'Readouts on: every label shows the simulated round trip. Light in fibre is about 200,000 km/s, so Auckland can never beat Vancouver to a US origin. Caching is the only way to beat geography.',
     act: function () { setReadouts(true); } },
   { t: 'YOUR TURN',
-    x: 'Tap any coloured city to launch its request and watch hit or miss. Walk the room with WASD, walk through the teal MAIN HALL portal to return to the entrance hall, or press AR to place the whole network on your desk and tap cities in your room.',
+    x: 'Tap any coloured city to launch its request and watch hit or miss. Walk the room with WASD, walk through the teal MAIN HALL portal to return to the entrance hall, or press AR to place the whole network on your desk and tap cities in your room. In the headset this chapter opens in VR; the panel\'s Switch to AR button brings the globe into your room and Back to VR returns.',
     act: function () { globeRoot.setAttribute('globe-orbit', 'spin', false); } }
 ];
 var tourI = -1;

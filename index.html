@@ -152,7 +152,7 @@ window.doorGo = function (href) {
   document.head.appendChild(l);
   var sc = document.querySelector('a-scene');
   if (sc && sc.pause) { try { sc.pause(); } catch (e) {} }
-  setTimeout(function () { location.href = href; }, 170);
+  setTimeout(function () { location.href = href; }, (window.XRQ && XRQ.sfx) ? XRQ.sfx.navDelay() : 170);   /* build 31: let the door sound play */
 };
 (function () {
   var v = document.getElementById('veil');
@@ -266,6 +266,6 @@ window.doorGo = function (href) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 30</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 31</div>
 </body>
 </html>
