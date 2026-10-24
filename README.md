@@ -67,6 +67,9 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 23 (24 Oct 2026)
+- Cooling-unit fans: the blades are now brushed aluminium behind a dark graphite guard, so the spin is easy to see against the black unit.
+
 ## Build 22 (24 Oct 2026) - chapter 1: cabling, containment, realistic cooling units
 - Cabling:
   - Steel cable trays run over both rack rows, with blue, black and fibre-yellow bundles inside.

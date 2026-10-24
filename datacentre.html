@@ -3226,7 +3226,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 22</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 23</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
@@ -3873,11 +3873,11 @@ function canvasPainter(w, h) {
   }
   function realCracs () {
     var M = looks();
-    var bladeM = new THREE.MeshLambertMaterial({ color: '#41464d', side: THREE.DoubleSide });
-    var hubM = new THREE.MeshLambertMaterial({ color: '#2a2d31' });
+    var bladeM = new THREE.MeshLambertMaterial({ color: '#c9cfd5', side: THREE.DoubleSide });   /* brushed aluminium: reads against the black back */
+    var hubM = new THREE.MeshLambertMaterial({ color: '#8d949b' });
     var backM = new THREE.MeshBasicMaterial({ color: '#111315' });
     var ringM = new THREE.MeshLambertMaterial({ color: '#5b6168', side: THREE.DoubleSide });
-    var guardM = new THREE.MeshLambertMaterial({ color: '#b3b9bf', alphaMap: grilleTex(), alphaTest: 0.5, transparent: false, side: THREE.DoubleSide });
+    var guardM = new THREE.MeshLambertMaterial({ color: '#3f454c', alphaMap: grilleTex(), alphaTest: 0.5, transparent: false, side: THREE.DoubleSide });
     var slatM = new THREE.MeshLambertMaterial({ map: slatTex() });
     /* one blade: a swept, widening paddle in the plane facing +x, pitched 32 deg */
     var sh = new THREE.Shape();
