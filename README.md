@@ -67,6 +67,14 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 28 (24 Oct 2026) - lobby rebuilt as a sci-fi corridor
+- index.html + new lobby.js: a 13 x 17 m corridor after the user's concept image - ribbed sloped ceiling with converging cyan/orange neon tubes, panelled walls with pilasters, pipes and drooping cable bundles, a circuit-pattern floor with soft reflections (mirrored glow under a semi-transparent floor), and an "INSIDE THE CLOUD" title wall.
+- Three chapter gates (Ch 1 yellow, Ch 2 cyan, Ch 3 teal): chamfered metal frames, glowing rims, animated energy portals with pulsing tunnel rings, a label plate (chapter, title, one-line teaser) and floor light pads. Walk into a gate or click it with the laser - same behaviour as before.
+- Liquid-cooling tank (replaces the concept's plant tank): glass column with glowing coolant, an orange heat-exchanger coil, rising bubbles, pump plinth with LEDs and a live status gauge, pipes into the wall with flowing light.
+- Props: bench with under-glow, standing consoles with holo screens, wall screens with live graphs, ceiling security cameras with blinking LEDs.
+- The lobby is VR-only now (AR is only chapter 3). Walking is clamped to the corridor.
+- Geometry is batched per material (about 150-220 draw calls depending on the view; 10-35k triangles).
+
 ## Build 27 (24 Oct 2026) - chapter 3 AR panel floats instead of riding the controller
 - The AR control panel is no longer attached to the left controller (it blocked the view and was hard to aim at). It now floats about 0.8 m away at the lower-left of where you look, faces you, and drifts after you only when you turn or walk away (`lazy-follow`).
 - Point EITHER controller at it and pull the trigger. Press **Y** on the left controller to hide/show it.

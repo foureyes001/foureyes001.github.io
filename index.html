@@ -94,9 +94,21 @@ AFRAME.registerComponent('rig-walk', {
   }
 });
 /* thumbstick-locomotion now lives in xr-quest.js (since build 12) */
+/* build 28: keep the rig inside the corridor (x within +-x, z between zmin and zmax) */
+AFRAME.registerComponent('box-clamp', {
+  schema: { x: { default: 5.5 }, zmin: { default: -6.5 }, zmax: { default: 7.6 } },
+  tick: function () {
+    var p = this.el.object3D.position, d = this.data;
+    p.x = Math.max(-d.x, Math.min(d.x, p.x)); p.z = Math.max(d.zmin, Math.min(d.zmax, p.z));
+  }
+});
+/* build 28: per-frame hook for the lobby's animated bits (portals, screens, bubbles) */
+AFRAME.registerComponent('lobby-fx', {
+  tick: function (t, dt) { if (window.LOBBY_TICK) { window.LOBBY_TICK(t, dt); } }
+});
 </script>
 <style>
-  html, body { margin: 0; padding: 0; background: #10151c; overflow: hidden; }
+  html, body { margin: 0; padding: 0; background: #03060c; overflow: hidden; }
   body { font-family: system-ui, -appleSystem, "Segoe UI", Roboto, sans-serif; color: #e2e8f0; }
   a-scene canvas { touch-action: none; }
   #hint { position: fixed; left: 10px; bottom: 10px; z-index: 5; font-size: 12px;
@@ -157,20 +169,19 @@ window.doorGo = function (href) {
 </script>
 
 
-<div id="hint"><b>W A S D</b> / arrows walk · drag to look · walk up to a door (or click it) to enter that chapter</div>
+<div id="hint"><b>W A S D</b> / arrows walk · drag to look · walk into a glowing gate (or click it) to enter that chapter</div>
 
 <a-scene
-  background="color: #10151c"
-  fog="type: linear; color: #10151c; near: 12; far: 44"
+  background="color: #03060c"
+  fog="type: linear; color: #03060c; near: 16; far: 42"
   renderer="antialias: true; colorManagement: true; multiviewStereo: true"
-  xr-mode-ui="enabled: true; XRMode: xr"
-  quest-ar="hide: #shell, .ar-hide"
-  ar-model="mode: lobby; root: #world">
+  xr-mode-ui="enabled: true; XRMode: vr">
 
-  <a-entity light="type: ambient; color: #cdd3dd; intensity: 0.75"></a-entity>
-  <a-entity light="type: directional; color: #fff4e0; intensity: 0.55" position="-2 4 3"></a-entity>
+  <a-entity light="type: ambient; color: #b9c6da; intensity: 0.7"></a-entity>
+  <a-entity light="type: directional; color: #e6f2ff; intensity: 0.6" position="1 5 3"></a-entity>
+  <a-entity light="type: directional; color: #ffb36b; intensity: 0.25" position="-3 2 -6"></a-entity>
 
-  <a-entity id="rig" position="0 0 6" rig-walk="bound: 8.4" thumbstick-locomotion>
+  <a-entity id="rig" position="0 0 6.4" rig-walk="bound: 7.6" box-clamp="x: 5.5; zmin: -6.5; zmax: 7.6" thumbstick-locomotion>
     <a-entity id="cam" camera position="0 1.6 0"
       look-controls="pointerLockEnabled: false; magicWindowTrackingEnabled: true;
                      reverseTouchDrag: true; mouseEnabled: true; touchEnabled: true">
@@ -181,83 +192,18 @@ window.doorGo = function (href) {
               raycaster="objects: .clickable; far: 30; lineColor: #22d3ee"></a-entity>
   </a-entity>
 
-  <a-entity id="world">
-    <a-plane class="ar-hide" rotation="-90 0 0" geometry="width: 20; height: 14"
-             material="color: #363c44; shader: flat; roughness: .95"></a-plane>
-    <a-box class="ar-hide" position="0 -0.1 0" width="20.4" height="0.2" depth="14.4"
-           material="color: #22262b; shader: flat"></a-box>
-
-    <a-entity id="shell">
-      <a-box position="0 2.3 -7.15" width="20" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="-10.15 2.3 0" width="0.3" height="4.6" depth="14" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="10.15 2.3 0" width="0.3" height="4.6" depth="14" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="0 2.3 7.15" width="20" height="4.6" depth="0.3" material="color: #5a616b; shader: flat"></a-box>
-      <a-box position="0 4.7 0" width="20.4" height="0.18" depth="14.4" material="color: #2b3038; shader: flat"></a-box>
-      <a-box position="0 4.55 0" width="0.3" height="0.08" depth="12" material="color: #eaf6ff; shader: flat; opacity: .85; transparent: true"></a-box>
-      <a-box position="-4 4.55 0" width="0.3" height="0.08" depth="12" material="color: #eaf6ff; shader: flat; opacity: .6; transparent: true"></a-box>
-      <a-box position="4 4.55 0" width="0.3" height="0.08" depth="12" material="color: #eaf6ff; shader: flat; opacity: .6; transparent: true"></a-box>
-      <!-- dado rail + hazard line in front of the doors -->
-      <a-box position="0 1.02 -6.98" width="20" height="0.06" depth="0.06" material="color: #3a4046; shader: flat"></a-box>
-      <a-plane rotation="-90 0 0" position="0 0.012 -4.6" geometry="width: 16; height: 0.5"
-               material="color: #d9a514; shader: flat; opacity: .8; transparent: true"></a-plane>
-    </a-entity>
-
-    <canvas id="tex-lobbytitle" width="1024" height="192" style="display:none"></canvas>
-    <a-plane geometry="width: 8.0; height: 1.5" position="0 3.66 -6.94"
-             material="color: #ffffff; shader: flat; src: #tex-lobbytitle; opacity: .99; transparent: true"></a-plane>
-
-    <a-entity id="door-ch1" class="clickable" door-zone="href: datacentre.html" position="-6 0 -6.9">
-      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-plane position="0 1.3 -0.05" width="2.55" height="2.6"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .22; side: double"></a-plane>
-      <a-plane rotation="-90 0 0" position="0 0.014 0.9" geometry="width: 2.6; height: 0.8"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3"></a-plane>
-      <canvas id="tex-door1" width="512" height="128" style="display:none"></canvas>
-      <a-plane geometry="width: 2.6; height: 0.65" position="0 2.25 0.28"
-               material="color: #ffffff; shader: flat; src: #tex-door1; opacity: .99; transparent: true"></a-plane>
-    </a-entity>
-
-    <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html" position="0 0 -6.9">
-      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-plane position="0 1.3 -0.05" width="2.55" height="2.6"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .22; side: double"></a-plane>
-      <a-plane rotation="-90 0 0" position="0 0.014 0.9" geometry="width: 2.6; height: 0.8"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3"></a-plane>
-      <canvas id="tex-door2" width="512" height="128" style="display:none"></canvas>
-      <a-plane geometry="width: 2.6; height: 0.65" position="0 2.25 0.28"
-               material="color: #ffffff; shader: flat; src: #tex-door2; opacity: .99; transparent: true"></a-plane>
-    </a-entity>
-
-    <a-entity id="door-ch3" class="clickable" door-zone="href: cdn.html" position="6 0 -6.9">
-      <a-box position="-1.45 1.35 0" width="0.35" height="2.7" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="1.45 1.35 0" width="0.35" height="2.7" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-box position="0 2.85 0" width="3.25" height="0.35" depth="0.5" material="color: #d9a514; shader: flat"></a-box>
-      <a-plane position="0 1.3 -0.05" width="2.55" height="2.6"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .22; side: double"></a-plane>
-      <a-plane rotation="-90 0 0" position="0 0.014 0.9" geometry="width: 2.6; height:0.8"
-               material="color: #22d3ee; shader: flat; transparent: true; opacity: .3"></a-plane>
-      <canvas id="tex-door3" width="512" height="128" style="display:none"></canvas>
-      <a-plane geometry="width: 2.6; height: 0.65" position="0 2.25 0.28"
-               material="color: #ffffff; shader: flat; src: #tex-door3; opacity: .99; transparent: true"></a-plane>
-    </a-entity>
-
-    <!-- entrance furniture: bench, planters, sign totes -->
-    <a-box position="-8.6 0.28 4.6" width="2.6" height="0.12" depth="0.7" material="color: #8a5a2b; shader: flat"></a-box>
-    <a-box position="-9.6 0.14 4.6" width="0.16" height="0.28" depth="0.6" material="color: #3a4046; shader: flat"></a-box>
-    <a-box position="-7.6 0.14 4.6" width="0.16" height="0.28" depth="0.6" material="color: #3a4046; shader: flat"></a-box>
-    <a-cylinder position="8.6 0.35 4.6" radius="0.5" height="0.7" material="color: #6b7178; shader: flat"></a-cylinder>
-    <a-sphere position="8.6 1.0 4.6" radius="0.55" material="color: #4e7a3f; shader: flat"></a-sphere>
-    <a-cylinder position="8.6 0.35 -2.5" radius="0.5" height="0.7" material="color: #6b7178; shader: flat"></a-cylinder>
-    <a-sphere position="8.6 1.0 -2.5" radius="0.55" material="color: #4e7a3f; shader: flat"></a-sphere>
+  <!-- build 28: the hall is generated by the lobby script below (corridor, neon, gates, props) -->
+  <a-entity id="world" lobby-fx>
+    <a-entity id="shell"></a-entity>
+    <a-entity id="door-ch1" class="clickable" door-zone="href: datacentre.html; radius: 1.7" position="-4.2 0 -7.6"></a-entity>
+    <a-entity id="door-ch2" class="clickable" door-zone="href: loadbalancer.html; radius: 1.7" position="0 0 -7.6"></a-entity>
+    <a-entity id="door-ch3" class="clickable" door-zone="href: cdn.html; radius: 1.7" position="4.2 0 -7.6"></a-entity>
   </a-entity>
 </a-scene>
 <script>
   window.LOBBY = { ready: true };
 </script>
+<script src="lobby.js"></script>
 <script>
 /* thumb stick -> window.TOUCHJOY, consumed by rig-walk */
 (function () {
@@ -298,40 +244,6 @@ window.doorGo = function (href) {
 })();
 </script>
 <script>
-(function () {
-  function paint () {
-    var c = document.getElementById('tex-lobbytitle');
-    var g = c.getContext('2d');
-    g.clearRect(0, 0, 1024, 192);
-    g.textAlign = 'center';
-    g.fillStyle = '#f2f3f4'; g.font = '700 74px system-ui, sans-serif';
-    g.fillText('INSIDE THE CLOUD', 512, 82);
-    g.fillStyle = '#fbbf24'; g.font = '600 34px system-ui, sans-serif';
-    g.fillText('CHOOSE A CHAPTER - WALK THROUGH A DOOR', 512, 148);
-    var subs = { 1: 'INSIDE A DATA CENTRE', 2: 'LOAD BALANCING & AUTO-SCALING', 3: 'CDN & EDGE CACHING' };
-    for (var n = 1; n <= 3; n++) {
-      var d = document.getElementById('tex-door' + n);
-      var q = d.getContext('2d');
-      q.clearRect(0, 0, 512, 128);
-      q.textAlign = 'center';
-      q.fillStyle = '#fbbf24'; q.font = '700 50px system-ui, sans-serif';
-      q.fillText('CHAPTER ' + n, 256, 56);
-      q.fillStyle = '#e2e8f0'; q.font = '500 26px system-ui, sans-serif';
-      q.fillText(subs[n], 256, 102);
-    }
-    ['tex-lobbytitle', 'tex-door1', 'tex-door2', 'tex-door3'].forEach(function (id) {
-      var plane = document.querySelector('a-plane[material*="' + id + '"]');
-      if (plane && plane.components && plane.components.material && plane.components.material.material.map) {
-        plane.components.material.material.map.needsUpdate = true;
-      }
-    });
-  }
-  var sc = document.querySelector('a-scene');
-  if (sc.hasLoaded) { paint(); } else { sc.addEventListener('loaded', paint); }
-  setTimeout(paint, 1500);
-})();
-</script>
-<script>
 /* While the thumb stick is steering, a second thumb dragging the canvas turns
    the rig left/right (stock touch-look tracks only the first touch, so it goes
    silent during multi-touch). Yaw on #rig - camera stays pristine. */
@@ -354,6 +266,6 @@ window.doorGo = function (href) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 27</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 28</div>
 </body>
 </html>
