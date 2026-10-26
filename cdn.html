@@ -420,7 +420,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 35</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 36</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -539,7 +539,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 35\n' +
+    'build 36\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -797,9 +797,18 @@ function buildHall () {
 
 /* ---- globe --------------------------------------------------------------- */
 function buildGlobe () {
-  makeEntity(globeRoot, 'a-sphere', {
-    radius: 0.975, 'segments-width': 44, 'segments-height': 28,
+  earthEl = makeEntity(globeRoot, 'a-sphere', {
+    radius: 0.975, 'segments-width': 44, 'segments-height': 28, class: 'clickable',
     material: 'color: #14335e; roughness: 0.85; metalness: 0.05'   /* build 30: navy, as in the original cdn.html */
+  });
+  earthEl.setAttribute('id', 'earth');
+  /* build 36: in the headset the whole globe is a target. The trigger on any point requests
+     the nearest user city; aiming highlights that city first. City dots stay exact targets. */
+  earthEl.addEventListener('click', function (ev) {
+    if (!headsetPointing()) { return; }
+    var u = cityNear(ev && ev.detail && ev.detail.intersection && ev.detail.intersection.point);
+    if (u) { request(u); }
+    else { caption.setAttribute('value', 'No user city there: aim at a coloured dot'); caption.setAttribute('color', PAL.warn); }
   });
 
   /* Rim glow: a slightly larger sphere rendered from the inside. */
@@ -1029,6 +1038,31 @@ function setHover (u, on) {
   if (on) { setStatus(u.name + ' -> nearest edge ' + u.edge.name + ', ' + Math.round(u.distKm) + ' km'); }
 }
 
+var earthEl = null, earthHoverU = null;
+function headsetPointing () { return scene.is('vr-mode') && (!scene.is('ar-mode') || XRQ.headsetAR(scene)); }
+/* nearest user city to a world point on the globe (within about 40 degrees), or null */
+function cityNear (pt) {
+  if (!pt) { return null; }
+  var d = globeRoot.object3D.worldToLocal(pt.clone()).normalize(), best = null, bestDot = Math.cos(40 * Math.PI / 180);
+  USERS.forEach(function (u) {
+    var c = latLonToVec3(u.lat, u.lon, 1), dot = d.x * c.x + d.y * c.y + d.z * c.z;
+    if (dot > bestDot) { bestDot = dot; best = u; }
+  });
+  return best;
+}
+AFRAME.registerComponent('earth-aim', {
+  tick: function () {
+    if (!earthEl || !headsetPointing()) { if (earthHoverU) { setHover(earthHoverU, false); earthHoverU = null; } return; }
+    var u = null;
+    ['handR', 'handL'].forEach(function (id) {
+      var h = document.getElementById(id), rc = h && h.components && h.components.raycaster;
+      var first = rc && rc.intersectedEls && rc.intersectedEls[0];
+      if (!u && first === earthEl) { var it = rc.getIntersection(earthEl); u = cityNear(it && it.point); }
+    });
+    if (u !== earthHoverU) { if (earthHoverU) { setHover(earthHoverU, false); } if (u) { setHover(u, true); } earthHoverU = u; }
+  }
+});
+
 function refreshCacheVisuals () {
   EDGES.forEach(function (e) {
     var on = isCached(e.name);
@@ -1141,6 +1175,16 @@ function arcCurve (a, b) {
 
 var SEG = 64;
 
+/* build 36: the Quest Browser does not run window.requestAnimationFrame while an immersive
+   (VR/AR) session is active, so packet flights froze, requests never finished and every later
+   city click was refused ("3 requests in flight", shown only in the HTML status). Animations now
+   step on A-Frame's own frame loop, which runs on desktop, phone and headset alike. */
+var frameQ = [];
+function nextFrame (fn) { frameQ.push(fn); }
+AFRAME.registerComponent('frame-pump', {
+  tick: function () { if (!frameQ.length) { return; } var q = frameQ; frameQ = []; for (var i = 0; i < q.length; i++) { q[i](); } }
+});
+
 function flight (a, b, color, ms) {
   return new Promise(function (resolve) {
     var curve = arcCurve(a, b);
@@ -1157,12 +1201,12 @@ function flight (a, b, color, ms) {
       var t = Math.min(1, (performance.now() - t0) / ms);
       s.position.copy(curve.getPointAt(t));
       geo.setDrawRange(0, Math.max(2, Math.floor(t * SEG) + 1));
-      if (t < 1) { requestAnimationFrame(step); return; }
+      if (t < 1) { nextFrame(step); return; }
       releaseSphere(s);
       fadeOut(line, mat, geo);
       resolve();
     }
-    requestAnimationFrame(step);
+    nextFrame(step);
   });
 }
 
@@ -1172,9 +1216,9 @@ function fadeOut (line, mat, geo) {
     var t = (performance.now() - t0) / dur;
     if (t >= 1) { globeRoot.object3D.remove(line); geo.dispose(); mat.dispose(); return; }
     mat.opacity = 0.95 * (1 - t);
-    requestAnimationFrame(step);
+    nextFrame(step);
   }
-  requestAnimationFrame(step);
+  nextFrame(step);
 }
 
 /* Expanding ring where a packet lands. */
@@ -1196,7 +1240,7 @@ function pulse (pos, color) {
     if (t >= 1) { globeRoot.object3D.remove(m); mat.dispose(); return; }
     m.scale.setScalar(0.04 + t * 0.22);
     mat.opacity = 0.9 * (1 - t);
-    requestAnimationFrame(step);
+    nextFrame(step);
   })();
 }
 
@@ -1211,7 +1255,7 @@ function flash (el, color, ms) {
     (function step () {
       var t = Math.min(1, (performance.now() - t0) / ms);
       o.scale.setScalar(s0 * (2.1 - 1.1 * t));
-      if (t < 1) { requestAnimationFrame(step); return; }
+      if (t < 1) { nextFrame(step); return; }
       el.setAttribute('material', 'color', base);
       o.scale.setScalar(s0);
       resolve();
@@ -1979,7 +2023,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 35'
+      'build 36'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */
@@ -2166,6 +2210,7 @@ function start () {
   buildHud();
   refreshCacheVisuals();
   globeRoot.setAttribute('globe-orbit', 'enabled: true; spin: false');
+  scene.setAttribute('frame-pump', ''); scene.setAttribute('earth-aim', '');
   document.querySelectorAll('[raycaster]').forEach(function (el) {
     var rc = el.components && el.components.raycaster;
     if (rc) { rc.refreshObjects(); }

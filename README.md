@@ -67,6 +67,19 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 36 (26 Oct 2026) - chapter 3: clicking the globe works in the headset
+- **Root cause:** the Quest Browser does not run `window.requestAnimationFrame` while a VR/AR session is active. Chapter 3's packet flights, pulses and flashes used it.
+  - The first city click started an animation that never moved, so the request never finished.
+  - After three clicks every further click was refused ("three requests already in flight"). That message only shows in the HTML status, which is invisible in the headset.
+  - The emulator on desktop Chrome keeps it running, so it never showed there.
+- **Fix:** the animations now step on A-Frame's frame loop (`frame-pump`), which runs on desktop, phone and headset.
+- **Easier aiming in the headset:** the whole globe is now a target.
+  - Pointing at it highlights the nearest user city (within about 40 degrees); the trigger requests that city.
+  - The small city dots still work directly.
+  - The ray no longer passes through the globe to cities on the far side.
+  - Desktop and phone behaviour unchanged.
+- Stamps read "build 36".
+
 ## Build 35 (26 Oct 2026) - phone AR: on-screen buttons, wall check on the ring, anchor status
 - **Phone test of build 34:** the panel buttons didn't respond, the 3D panels floated out of reach, and the model sometimes landed against a wall and drifted.
 - **Lobby, chapters 1 and 2 on phones** now use an **on-screen button bar** (WebXR DOM overlay, like chapter 3) instead of 3D panels floating in the room: SIZE -/+, TURN, MOVE, LOBBY / CH1 / CH2 / CH3, EXIT AR. Taps on the bar never reach the scene. The Quest keeps its 3D panels.
