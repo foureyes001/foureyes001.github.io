@@ -800,4 +800,26 @@
   }
   var sc = document.querySelector('a-scene');
   if (sc.hasLoaded) { build(); } else { sc.addEventListener('loaded', build); }
+
+  /* build 34: lobby as an AR table model. Ceiling, neon, walls, pilasters, wall pipes and
+     the mirrored floor reflections are hidden, so you can look into the corridor; the
+     floor, the three gates, the back wall and the props stay. */
+  var AR_HIDE = /^(reflections|batch:(wall|ceil|rib|pil|pipe|neonC|neonO|haloC|haloO|capM|capGlowC|capGlowO|slat|dark|body))$/;
+  var arHidden = [];
+  window.LOBBY_AR = function (on) {
+    var shell = document.getElementById('shell');
+    if (!shell) { return; }
+    if (on) {
+      if (arHidden.length) { return; }
+      shell.object3D.updateMatrixWorld(true);
+      shell.object3D.children.forEach(function (c) {
+        var high = new THREE.Box3().setFromObject(c).min.y > 3.0;      /* anything that lives up at the ceiling */
+        if ((AR_HIDE.test(c.name || '') || high) && c.visible) { c.visible = false; arHidden.push(c); }
+      });
+    } else {
+      arHidden.forEach(function (c) { c.visible = true; }); arHidden = [];
+    }
+  };
+  sc.addEventListener('enter-vr', function () { if (sc.is('ar-mode')) { window.LOBBY_AR(true); } });
+  sc.addEventListener('exit-vr', function () { window.LOBBY_AR(false); });
 })();

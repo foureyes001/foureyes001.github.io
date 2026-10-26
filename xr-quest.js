@@ -305,6 +305,107 @@
     return t;
   }
 
+  /* ---------- build 34: phone AR placement + anchors ------------------------
+     Phones (not headsets): a ring follows the floor / table the phone points
+     at, a tap drops the model there, and a WebXR anchor keeps it fixed to the
+     real room (without one, ARCore's map corrections make content drift). */
+  XRQ.phoneAR = function (sc) { return !!(sc && sc.is('ar-mode') && !XRQ.headsetAR(sc)); };
+  var RING_URL = null;
+  XRQ.ringURL = function () {
+    if (RING_URL) { return RING_URL; }
+    var c = document.createElement('canvas'); c.width = c.height = 256;
+    var g = c.getContext('2d');
+    g.strokeStyle = '#22d3ee'; g.lineWidth = 16; g.beginPath(); g.arc(128, 128, 104, 0, 6.2832); g.stroke();
+    g.globalAlpha = 0.35; g.fillStyle = '#22d3ee'; g.beginPath(); g.arc(128, 128, 96, 0, 6.2832); g.fill();
+    g.globalAlpha = 1; g.fillStyle = '#ffffff'; g.beginPath(); g.arc(128, 128, 14, 0, 6.2832); g.fill();
+    g.lineWidth = 6; g.strokeStyle = '#ffffff';
+    [[128, 18, 128, 58], [128, 198, 128, 238], [18, 128, 58, 128], [198, 128, 238, 128]].forEach(function (l) {
+      g.beginPath(); g.moveTo(l[0], l[1]); g.lineTo(l[2], l[3]); g.stroke();
+    });
+    RING_URL = c.toDataURL('image/png');
+    return RING_URL;
+  };
+  /* ask for hit-test + anchors in AR sessions on phones only (the Quest sessions stay as they were) */
+  XRQ.wantARFeatures = function (sc) {
+    if (IS_QUEST || !sc) { return; }
+    var w = sc.getAttribute('webxr') || {}, opt = (w.optionalFeatures || []).slice(), changed = false;
+    ['hit-test', 'anchors'].forEach(function (f) { if (opt.indexOf(f) < 0) { opt.push(f); changed = true; } });
+    if (changed) { sc.setAttribute('webxr', 'optionalFeatures', opt); }
+  };
+  /* Keeps an object fixed to the real room: step() returns how far (world metres)
+     the anchor moved since the last frame; the caller shifts its object by that. */
+  XRQ.Anchor = function (sc) {
+    this.sc = sc; this.anchor = null; this.want = null; this.busy = false; this.gen = 0;
+    this.last = new THREE.Vector3(); this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion();
+  };
+  XRQ.Anchor.prototype.set = function (worldPos) { this.clear(); this.want = worldPos.clone(); };
+  XRQ.Anchor.prototype.clear = function () {
+    if (this.anchor && this.anchor.delete) { try { this.anchor.delete(); } catch (e) { /* already gone */ } }
+    this.anchor = null; this.want = null; this.gen++;
+  };
+  XRQ.Anchor.prototype.step = function () {
+    var sc = this.sc, fr = sc.frame, xr = sc.renderer && sc.renderer.xr;
+    var ref = xr && xr.getReferenceSpace && xr.getReferenceSpace();
+    if (!fr || !ref || !sc.is('ar-mode')) { return null; }
+    var par = sc.camera && sc.camera.parent;
+    if (this.want && !this.busy) {
+      var p = this.want.clone(), self = this, gen = this.gen;
+      this.want = null;
+      if (typeof fr.createAnchor !== 'function' || typeof XRRigidTransform === 'undefined') {
+        XRQ.anchorState = 'not supported'; return null;
+      }
+      if (par) { par.updateMatrixWorld(true); p.applyMatrix4(this.m.copy(par.matrixWorld).invert()); }   /* world -> XR space */
+      this.busy = true;
+      try {
+        fr.createAnchor(new XRRigidTransform({ x: p.x, y: p.y, z: p.z }), ref).then(function (a) {
+          self.busy = false;
+          if (gen !== self.gen) { try { a.delete(); } catch (e) { /* ignore */ } return; }
+          self.anchor = a; self.last.copy(p); XRQ.anchorState = 'anchored';
+        }, function (e) { self.busy = false; XRQ.anchorState = 'failed: ' + (e && e.message || e); });
+      } catch (e) { this.busy = false; XRQ.anchorState = 'failed: ' + (e && e.message || e); }
+      return null;
+    }
+    if (!this.anchor) { return null; }
+    var pose = fr.getPose(this.anchor.anchorSpace, ref);
+    if (!pose) { return null; }                                   /* tracking lost this frame */
+    var t = pose.transform.position, d = new THREE.Vector3(t.x - this.last.x, t.y - this.last.y, t.z - this.last.z);
+    this.last.set(t.x, t.y, t.z);
+    if (par) { par.getWorldQuaternion(this.q); d.applyQuaternion(this.q); }     /* XR space -> world */
+    return d;
+  };
+  /* small text card that rides 0.7 m in front of the phone camera (phone AR has no HTML overlay here) */
+  XRQ.arHint = function (sc, text) {
+    var h = document.getElementById('xrq-arhint');
+    var cam = sc.querySelector('[camera]');
+    if (!h && cam) {
+      h = document.createElement('a-entity'); h.setAttribute('id', 'xrq-arhint');
+      h.setAttribute('position', '0 -0.17 -0.75');
+      h.innerHTML = '<a-plane width="0.62" height="0.11" material="color: #0b1220; shader: flat; opacity: 0.82; transparent: true"></a-plane>' +
+        '<a-text align="center" width="0.6" wrap-count="40" color="#e2f3ff" position="0 0 0.002" value=""></a-text>';
+      cam.appendChild(h);
+    }
+    if (!h) { return; }
+    if (!text) { h.setAttribute('visible', false); return; }
+    h.setAttribute('visible', true);
+    var t = h.querySelector('a-text'); if (t) { t.setAttribute('value', text); }
+  };
+  /* bounds of the visible parts only (hidden walls, mirrored floor reflections etc. do not count) */
+  function visibleBox (root) {
+    var box = new THREE.Box3(), tmp = new THREE.Box3();
+    root.updateMatrixWorld(true);
+    root.traverseVisible(function (o) {
+      if (!o.isMesh || !o.geometry) { return; }
+      var mt = o.material;                     /* glows, halos and shadows do not count as size */
+      if (mt && !Array.isArray(mt) && (mt.depthWrite === false || mt.blending === THREE.AdditiveBlending ||
+          (mt.transparent && mt.opacity < 0.6))) { return; }
+      if (!o.geometry.boundingBox) { o.geometry.computeBoundingBox(); }
+      if (o.isInstancedMesh) { tmp.setFromObject(o); } else { tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); }
+      if (isFinite(tmp.min.x)) { box.union(tmp); }
+    });
+    return box;
+  }
+  XRQ.visibleBox = visibleBox;
+
   /* ---------- AR model / lobby / custom ----------------------------------- */
   AFRAME.registerComponent('ar-model', {
     schema: {
@@ -320,6 +421,20 @@
       this.active = false; this.k = 1; this.yaw = 0;
       this.target = new THREE.Vector3(); this.centre = new THREE.Vector3(); this.minY = 0;
       this.onSelect = this.onSelect.bind(this);
+      this.keeper = new XRQ.Anchor(sc); this.scanning = false;
+      if (this.data.mode === 'model' && !IS_QUEST) {                 /* build 34: phone aim ring + anchor */
+        XRQ.wantARFeatures(sc);
+        if (!sc.hasAttribute('ar-hit-test')) {
+          sc.setAttribute('ar-hit-test', { type: 'map', src: XRQ.ringURL(), mapSize: { x: 0.35, y: 0.35 }, enabled: false });
+        }
+        sc.addEventListener('ar-hit-test-achieved', function () {
+          if (self.scanning) { self.found = true; XRQ.arHint(sc, 'Surface found: tap to put the model on the ring'); }
+        });
+        sc.addEventListener('ar-hit-test-select-start', function (e) {
+          if (self.scanning && e.detail && e.detail.position) { self.ringPos = e.detail.position.clone(); self.ringAt = Date.now(); }
+        });
+        sc.addEventListener('ar-hit-test-select', function (e) { self.onHitSelect(e.detail || {}); });
+      }
       sc.addEventListener('enter-vr', function () { if (sc.is('ar-mode')) { self.start(); } });
       sc.addEventListener('exit-vr', function () { self.stop(); });
       var ready = function () { self.buildPanel(); XRQ.maybeResume(sc); };
@@ -349,7 +464,7 @@
                    ['SIZE +', function () { self.resize(1.25); }],
                    ['TURN <', function () { self.rotate(1); }],
                    ['TURN >', function () { self.rotate(-1); }],
-                   ['BRING HERE', function () { self.place(); }]];
+                   [IS_QUEST ? 'BRING HERE' : 'MOVE', function () { self.place(); }]];
         row.forEach(function (r, i) { btn(P, r[0], -0.38 + i * 0.19, 0.1, 0.175, 0.08, '#1e2a44', r[1]); });
         label(P, 'GO TO', 0, 0.015, 0.9, '#94a3b8');
         CHAPTERS.forEach(function (c, i) {
@@ -374,8 +489,7 @@
         var o = root.object3D;
         this.saved = { p: o.position.clone(), r: o.rotation.clone(), s: o.scale.clone() };
         /* model bounds in the root's own coordinates (root is at identity now) */
-        var box = new THREE.Box3().setFromObject(o);
-        box.getCenter(this.centre); this.minY = box.min.y;
+        this.measure();
         this.k = 1;
       }
       if (d.mode === 'lobby' && root) { this.lobbyVis = root.object3D.visible; root.object3D.visible = false; }
@@ -393,9 +507,11 @@
       }
       /* cdn.html (custom) places its own globe; on phones it keeps its HTML buttons */
       var showPanel = !(d.mode === 'custom' && !XRQ.headsetAR(sc));
+      this.phone = d.mode === 'model' && XRQ.phoneAR(sc);
+      if (this.phone) { this.startScan(); }
       var go = function () {
         if (!self.active) { return; }
-        if (d.mode === 'model') { self.place(); }
+        if (d.mode === 'model' && !self.phone) { self.place(); }
         if (self.panel && showPanel) {
           self.panel.object3D.visible = true;
           if (d.mode === 'lobby') { XRQ.faceUser(self.panel, 1.5, 1.3, 0); }
@@ -412,6 +528,10 @@
       if (!this.active) { return; }
       this.active = false;
       XRQ.arModel = false;
+      this.keeper.clear(); this.scanning = false;
+      if (sc.hasAttribute('ar-hit-test')) { sc.setAttribute('ar-hit-test', 'enabled', false); }
+      XRQ.arHint(sc, '');
+      if (this.root) { this.root.object3D.visible = true; }
       if (this.panel) { this.panel.object3D.visible = false; }
       if (this.tapSession) { this.tapSession.removeEventListener('select', this.onSelect); this.tapSession = null; }
       if (d.mode === 'model' && this.root && this.saved) {
@@ -429,10 +549,63 @@
     },
 
     /* ---- model placement ---- */
+    /* model bounds in the root's own (identity) frame, visible parts only */
+    measure: function () {
+      if (!this.root || !this.saved) { return; }
+      var o = this.root.object3D, P = o.position.clone(), R = o.rotation.clone(), S = o.scale.clone(), V = o.visible;
+      o.position.copy(this.saved.p); o.rotation.copy(this.saved.r); o.scale.copy(this.saved.s); o.visible = true;
+      var box = visibleBox(o);
+      if (!box.isEmpty()) { box.getCenter(this.centre); this.minY = box.min.y; }
+      o.position.copy(P); o.rotation.copy(R); o.scale.copy(S); o.visible = V;
+    },
+    /* phone: hide the model, show the ring, wait for a tap */
+    startScan: function () {
+      var sc = this.el;
+      this.keeper.clear();
+      this.scanning = true; this.found = false; this.ringPos = null; this.scanSince = Date.now();
+      if (this.root) { this.root.object3D.visible = false; }
+      if (sc.hasAttribute('ar-hit-test')) { sc.setAttribute('ar-hit-test', 'enabled', true); }
+      XRQ.arHint(sc, 'Point at the floor or a table until the ring appears, then tap');
+    },
+    onHitSelect: function (det) {
+      if (!this.active || !this.scanning) { return; }
+      /* the hit pose's Y axis is the surface normal (measured on a phone in build 13): skip walls */
+      if (det.orientation) {
+        var up = new THREE.Vector3(0, 1, 0).applyQuaternion(det.orientation);
+        if (Math.abs(up.y) < 0.75) { XRQ.arHint(this.el, 'That is a wall. Aim at the floor or a table and tap'); return; }
+      }
+      /* drop it on the ring (where the phone points), not under the finger */
+      var p = (this.ringPos && Date.now() - this.ringAt < 2500) ? this.ringPos : det.position;
+      if (p) { this.placeAt(p); }
+    },
+    placeAt: function (p) {
+      var sc = this.el, cam = sc.camera;
+      this.measure();
+      var head = new THREE.Vector3(); if (cam) { cam.getWorldPosition(head); }
+      var f = new THREE.Vector3(p.x - head.x, 0, p.z - head.z);
+      if (f.lengthSq() < 1e-6) { f.set(0, 0, -1); } f.normalize();
+      this.yaw = Math.atan2(-f.x, -f.z);                 /* far end of the model points away from you */
+      this.target.set(p.x, p.y, p.z);
+      this.apply();
+      this.scanning = false;
+      if (sc.hasAttribute('ar-hit-test')) { sc.setAttribute('ar-hit-test', 'enabled', false); }
+      if (this.root) { this.root.object3D.visible = true; }
+      this.keeper.set(this.target);
+      XRQ.arHint(sc, 'Placed. Tap the model to use it. MOVE on the panel puts it somewhere else');
+      var self = this; clearTimeout(this.hintT);
+      this.hintT = setTimeout(function () { if (!self.scanning) { XRQ.arHint(sc, ''); } }, 4000);
+    },
+    tick: function () {
+      if (!this.active || this.scanning || !this.phone) { return; }
+      var dlt = this.keeper.step();
+      if (dlt && dlt.lengthSq() > 1e-12) { this.target.add(dlt); this.apply(); }
+    },
     place: function () {
       var d = this.data, cam = this.el.camera;
       if (d.mode === 'custom') { var H = window.XRQ_HOOKS; if (H && H.here) { H.here(); } return; }
       if (d.mode !== 'model' || !this.root || !cam) { return; }
+      if (this.phone && this.active) { this.startScan(); return; }      /* phone: MOVE = aim + tap again */
+      this.measure();
       var head = new THREE.Vector3(), f = new THREE.Vector3();
       cam.getWorldPosition(head); cam.getWorldDirection(f);
       f.y = 0; if (f.lengthSq() < 1e-6) { f.set(0, 0, -1); } f.normalize();
@@ -469,6 +642,18 @@
     onSelect: function (ev) {
       var sc = this.el, xr = sc.renderer && sc.renderer.xr;
       if (!ev || !ev.frame || !ev.inputSource || ev.inputSource.targetRayMode !== 'screen') { return; }
+      if (this.scanning) {
+        /* no surface after 8 s: a tap puts it on the floor 1.2 m in front */
+        if (!this.found && Date.now() - this.scanSince > 8000 && sc.camera) {
+          var hd = new THREE.Vector3(), fw = new THREE.Vector3();
+          sc.camera.getWorldPosition(hd); sc.camera.getWorldDirection(fw); fw.y = 0;
+          if (fw.lengthSq() < 1e-6) { fw.set(0, 0, -1); } fw.normalize();
+          this.placeAt(new THREE.Vector3(hd.x + fw.x * 1.2, 0, hd.z + fw.z * 1.2));
+        } else if (!this.found) {
+          XRQ.arHint(sc, 'Still looking for a surface: move the phone slowly over the floor');
+        }
+        return;
+      }
       var ref = xr && xr.getReferenceSpace && xr.getReferenceSpace();
       var pose = ref && ev.frame.getPose(ev.inputSource.targetRaySpace, ref);
       if (!pose) { return; }

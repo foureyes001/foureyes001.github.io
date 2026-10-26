@@ -1381,7 +1381,25 @@ var savedFog = null, placed = false, arScale = 0.35, placedFloorY = 0;
 var xrSelectBound = null, xrSession = null, arHoverTimer = null;
 
 function setLabelScale (k) { labelEls.forEach(function (el) { el.object3D.scale.setScalar(k); }); }
-function globeLift () { return 1.9 * arScale; }
+/* build 34: the globe sits on the ring (its lowest visible point just above the surface).
+   GLOBE_DOWN = centre-to-bottom distance at scale 1, measured once from the real model. */
+var GLOBE_DOWN = 0;
+function measureGlobe () {
+  var o = globeRoot.object3D, s = o.scale.x || 1, b = XRQ.visibleBox ? XRQ.visibleBox(o) : new THREE.Box3().setFromObject(o);
+  if (b.isEmpty()) { return; }
+  var c = new THREE.Vector3(); o.getWorldPosition(c);
+  GLOBE_DOWN = Math.max(0.9, Math.min(1.9, (c.y - b.min.y) / s));
+}
+function globeLift () { return (GLOBE_DOWN || 1.9) * arScale + 0.02; }
+/* build 34: phone AR - a WebXR anchor holds the globe to the real room (no drift) */
+var globeKeeper = null, ringPos = null, ringAt = 0;
+AFRAME.registerComponent('globe-anchor', {
+  tick: function () {
+    if (!globeKeeper || !placed || XRQ.headsetAR(scene)) { return; }
+    var d = globeKeeper.step();
+    if (d && d.lengthSq() > 1e-12) { globeRoot.object3D.position.add(d); placedFloorY += d.y; }
+  }
+});
 
 function placeGlobeAt (x, y, z) {
   placedFloorY = y;
@@ -1396,6 +1414,7 @@ function placeGlobeAt (x, y, z) {
   hintEl.textContent = 'Drag to spin. Pinch to resize. Aim the centre dot at a city and tap.';
   setStatus('placed. Globe radius about ' + (0.975 * arScale).toFixed(2) + ' m');
   if (!XRQ.headsetAR(scene)) {   /* phone: tap + centre dot. Quest: controller laser */
+    if (globeKeeper) { globeKeeper.set(new THREE.Vector3(x, y, z)); }
     bindXRSelect();
     startArHover();
   } else {
@@ -1528,7 +1547,10 @@ function enterAR () {
   reticle.setAttribute('visible', false);
   arRow.style.display = 'flex';
   placed = false;
-  hintEl.textContent = 'Aim at the floor and tap. If nothing is detected, press "Put it in front of me".';
+  if (!GLOBE_DOWN) { measureGlobe(); }
+  if (globeKeeper) { globeKeeper.clear(); }
+  ringPos = null;
+  hintEl.textContent = 'Point at the floor or a table until the ring appears, then tap. If no ring appears, press "Put it in front of me".';
   setStatus('scanning for a floor');
   /* build 12 - Quest passthrough: HTML buttons are invisible in a headset and
      floor hit-testing needs Space Setup, so place the globe in front at once. */
@@ -1562,6 +1584,7 @@ function enterVR () {
 
 function restoreDesktop () {
   arUI.exit();
+  if (globeKeeper) { globeKeeper.clear(); }
   stopArHover();
   ground.setAttribute('visible', true);
   scene.setAttribute('background', 'transparent', false);
@@ -1582,6 +1605,14 @@ function restoreDesktop () {
   setStatus('desktop mode');
 }
 
+/* build 34: phone AR - visible aim ring + anchor keeper (headsets keep their own placement) */
+function initPhoneAR () {
+  if (!window.XRQ || !XRQ.Anchor) { return; }
+  globeKeeper = new XRQ.Anchor(scene);
+  if (!XRQ.isQuest) { scene.setAttribute('ar-hit-test', { src: XRQ.ringURL(), mapSize: { x: 0.35, y: 0.35 } }); }
+  scene.setAttribute('globe-anchor', '');
+}
+if (scene.hasLoaded) { initPhoneAR(); } else { scene.addEventListener('loaded', initPhoneAR); }
 scene.addEventListener('enter-vr', function () {
   if (scene.is('ar-mode')) { enterAR(); } else { enterVR(); }
 });
@@ -1589,6 +1620,9 @@ scene.addEventListener('exit-vr', restoreDesktop);
 scene.addEventListener('ar-hit-test-start',    function () { setStatus('scanning for a surface'); });
 scene.addEventListener('ar-hit-test-achieved', function () { setStatus('surface found, tap to place', 'warn'); });
 
+scene.addEventListener('ar-hit-test-select-start', function (evt) {   /* where the ring was when the tap began */
+  if (!placed && evt.detail && evt.detail.position) { ringPos = evt.detail.position.clone(); ringAt = Date.now(); }
+});
 scene.addEventListener('ar-hit-test-select', function (evt) {
   if (placed || XRQ.headsetAR(scene)) { return; }
   var d = evt.detail || {};
@@ -1604,7 +1638,9 @@ scene.addEventListener('ar-hit-test-select', function (evt) {
     }
   }
 
-  if (d.position) { placeGlobeAt(d.position.x, d.position.y, d.position.z); }
+  /* drop it on the ring (where the phone points), not under the finger */
+  var p = (ringPos && Date.now() - ringAt < 2500) ? ringPos : d.position;
+  if (p) { placeGlobeAt(p.x, p.y, p.z); }
   else { placeInFront(); }
 });
 
@@ -1619,6 +1655,8 @@ Array.prototype.forEach.call(document.querySelectorAll('.xrq-go'), function (b) 
 arRow.addEventListener('beforexrselect', function (e) { e.preventDefault(); });
 document.getElementById('btnReplace').addEventListener('click', function () {
   placed = false;
+  if (globeKeeper) { globeKeeper.clear(); }
+  ringPos = null;
   stopArHover();
   globeRoot.setAttribute('visible', false);
   reticle.setAttribute('visible', false);
