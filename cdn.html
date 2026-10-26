@@ -420,7 +420,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 33</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 34</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -539,7 +539,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 33\n' +
+    'build 34\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -1385,12 +1385,18 @@ function setLabelScale (k) { labelEls.forEach(function (el) { el.object3D.scale.
    GLOBE_DOWN = centre-to-bottom distance at scale 1, measured once from the real model. */
 var GLOBE_DOWN = 0;
 function measureGlobe () {
-  var o = globeRoot.object3D, s = o.scale.x || 1, b = XRQ.visibleBox ? XRQ.visibleBox(o) : new THREE.Box3().setFromObject(o);
+  var o = globeRoot.object3D, s = o.scale.x || 1, v = o.visible;
+  o.visible = true;
+  var b = XRQ.visibleBox ? XRQ.visibleBox(o) : new THREE.Box3().setFromObject(o);
+  o.visible = v;
   if (b.isEmpty()) { return; }
   var c = new THREE.Vector3(); o.getWorldPosition(c);
   GLOBE_DOWN = Math.max(0.9, Math.min(1.9, (c.y - b.min.y) / s));
 }
-function globeLift () { return (GLOBE_DOWN || 1.9) * arScale + 0.02; }
+function globeLift () {                     /* Quest keeps its build-30 height; phones sit on the ring */
+  if (XRQ.headsetAR(scene) || !GLOBE_DOWN) { return 1.9 * arScale; }
+  return GLOBE_DOWN * arScale + 0.02;
+}
 /* build 34: phone AR - a WebXR anchor holds the globe to the real room (no drift) */
 var globeKeeper = null, ringPos = null, ringAt = 0;
 AFRAME.registerComponent('globe-anchor', {
@@ -1955,7 +1961,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 33'
+      'build 34'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */

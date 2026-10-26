@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 33).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 34).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 33';
+  var BUILD = 'build 34';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -328,9 +328,11 @@
   /* ask for hit-test + anchors in AR sessions on phones only (the Quest sessions stay as they were) */
   XRQ.wantARFeatures = function (sc) {
     if (IS_QUEST || !sc) { return; }
-    var w = sc.getAttribute('webxr') || {}, opt = (w.optionalFeatures || []).slice(), changed = false;
-    ['hit-test', 'anchors'].forEach(function (f) { if (opt.indexOf(f) < 0) { opt.push(f); changed = true; } });
-    if (changed) { sc.setAttribute('webxr', 'optionalFeatures', opt); }
+    var w = sc.getAttribute('webxr');                  /* same pattern as A-Frame's own 'anchored' component */
+    if (!w || !Array.isArray(w.optionalFeatures)) { return; }
+    var changed = false;
+    ['hit-test', 'anchors'].forEach(function (f) { if (w.optionalFeatures.indexOf(f) < 0) { w.optionalFeatures.push(f); changed = true; } });
+    if (changed) { sc.setAttribute('webxr', w); }
   };
   /* Keeps an object fixed to the real room: step() returns how far (world metres)
      the anchor moved since the last frame; the caller shifts its object by that. */

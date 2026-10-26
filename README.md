@@ -67,6 +67,19 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 34 (26 Oct 2026) - the whole project in phone AR: aim ring, tap to place, anchored
+- **Phone AR on every page.** The lobby now has an AR button too: the sci-fi corridor becomes a table model (ceiling, neon, walls and reflections hidden), and tapping a gate opens that chapter. Chapters 1 and 2 are table models; chapter 3 is the globe.
+- **Placement:**
+  - A cyan ring follows the floor or table the phone points at.
+  - A tap anywhere drops the model on the ring (not under the finger). Walls are refused.
+  - With no surface after 8 s, a tap puts it on the floor in front.
+  - MOVE on the panel (ch1/ch2/lobby) or "Replace" (ch3) re-places it.
+- **No more drift:** each placed model or globe gets a WebXR anchor, so it stays fixed to the real room while ARCore refines its map. It previously sat at fixed coordinates and slid around.
+- **Sizing:** models are measured from their visible, solid parts only (glows, shadows and the lobby's mirrored floor reflection don't count), so they sit exactly on the surface. The ch3 globe now rests on the ring instead of floating about 0.3 m above it.
+- **Chapter 1 in AR** hides the build 33 ceiling network, so you can see into the model.
+- **Quest unchanged:** these features are requested on phones only. The lobby's flat page now also shows an AR button on the Quest.
+- Stamps read "build 34".
+
 ## Build 33 (25 Oct 2026) - chapter 1: every rod, pipe and conduit connected, dense ceiling services
 - Nothing in chapter 1 stops in mid-air any more:
   - the aisle-tray hangers reach their trays, and the trays run as far as their cables
