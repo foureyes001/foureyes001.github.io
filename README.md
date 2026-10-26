@@ -67,6 +67,14 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 35 (26 Oct 2026) - phone AR: on-screen buttons, wall check on the ring, anchor status
+- **Phone test of build 34:** the panel buttons didn't respond, the 3D panels floated out of reach, and the model sometimes landed against a wall and drifted.
+- **Lobby, chapters 1 and 2 on phones** now use an **on-screen button bar** (WebXR DOM overlay, like chapter 3) instead of 3D panels floating in the room: SIZE -/+, TURN, MOVE, LOBBY / CH1 / CH2 / CH3, EXIT AR. Taps on the bar never reach the scene. The Quest keeps its 3D panels.
+- **Fixed:** while waiting for placement, every tap was swallowed, including panel taps. After MOVE that made the panel look dead.
+- **Fixed:** the wall check looked at the surface under the finger, while the model was placed at the ring. It now checks the ring's own surface, so the model can't land on a wall.
+- **New status line** on the bar ("Looking for a surface / Surface found / Placed | anchor: OK | corrected N cm"), and an "anchor:" line under chapter 3's status. If the phone can't create anchors, it shows the exact reason.
+- Stamps read "build 35".
+
 ## Build 34 (26 Oct 2026) - the whole project in phone AR: aim ring, tap to place, anchored
 - **Phone AR on every page.** The lobby now has an AR button too: the sci-fi corridor becomes a table model (ceiling, neon, walls and reflections hidden), and tapping a gate opens that chapter. Chapters 1 and 2 are table models; chapter 3 is the globe.
 - **Placement:**

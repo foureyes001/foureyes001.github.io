@@ -420,7 +420,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 34</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 35</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -539,7 +539,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 34\n' +
+    'build 35\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -1398,12 +1398,24 @@ function globeLift () {                     /* Quest keeps its build-30 height; 
   return GLOBE_DOWN * arScale + 0.02;
 }
 /* build 34: phone AR - a WebXR anchor holds the globe to the real room (no drift) */
-var globeKeeper = null, ringPos = null, ringAt = 0;
+var globeKeeper = null, ringPos = null, ringAt = 0, ringQ = null, anchorStAt = 0;
 AFRAME.registerComponent('globe-anchor', {
   tick: function () {
     if (!globeKeeper || !placed || XRQ.headsetAR(scene)) { return; }
     var d = globeKeeper.step();
     if (d && d.lengthSq() > 1e-12) { globeRoot.object3D.position.add(d); placedFloorY += d.y; }
+    var now = Date.now();                       /* build 35: show whether the anchor works on this phone */
+    if (now - anchorStAt > 500) {
+      anchorStAt = now;
+      var el = document.getElementById('arAnchorSt');
+      if (!el) {
+        var st = document.getElementById('status');
+        if (st && st.parentNode) { el = document.createElement('div'); el.id = 'arAnchorSt';
+          el.style.cssText = 'font:600 11.5px system-ui,sans-serif;color:#7dd3fc;margin-top:2px'; st.parentNode.insertBefore(el, st.nextSibling); }
+      }
+      if (el) { var as = XRQ.anchorState || 'waiting';
+        el.textContent = 'anchor: ' + (as === 'anchored' ? 'OK' : as) + (globeKeeper.moved > 0.005 ? ' | corrected ' + Math.round(globeKeeper.moved * 100) + ' cm' : ''); }
+    }
   }
 });
 
@@ -1591,6 +1603,7 @@ function enterVR () {
 function restoreDesktop () {
   arUI.exit();
   if (globeKeeper) { globeKeeper.clear(); }
+  var aSt = document.getElementById('arAnchorSt'); if (aSt) { aSt.textContent = ''; }
   stopArHover();
   ground.setAttribute('visible', true);
   scene.setAttribute('background', 'transparent', false);
@@ -1627,16 +1640,21 @@ scene.addEventListener('ar-hit-test-start',    function () { setStatus('scanning
 scene.addEventListener('ar-hit-test-achieved', function () { setStatus('surface found, tap to place', 'warn'); });
 
 scene.addEventListener('ar-hit-test-select-start', function (evt) {   /* where the ring was when the tap began */
-  if (!placed && evt.detail && evt.detail.position) { ringPos = evt.detail.position.clone(); ringAt = Date.now(); }
+  if (!placed && evt.detail && evt.detail.position) {
+    ringPos = evt.detail.position.clone(); ringAt = Date.now();
+    ringQ = evt.detail.orientation ? evt.detail.orientation.clone() : null;   /* build 35: the ring's own surface */
+  }
 });
 scene.addEventListener('ar-hit-test-select', function (evt) {
   if (placed || XRQ.headsetAR(scene)) { return; }
   var d = evt.detail || {};
 
   /* Measured on the vivo T4: the hit pose's Y axis is the surface normal
-     (floor Y=1.00, wall Y=0.00). The WebXR spec does not document this. */
-  if (d.orientation) {
-    var q = new THREE.Quaternion(d.orientation.x, d.orientation.y, d.orientation.z, d.orientation.w);
+     (floor Y=1.00, wall Y=0.00). The WebXR spec does not document this.
+     build 35: check the surface under the RING (where it will be placed), not under the finger. */
+  var useRing = ringPos && Date.now() - ringAt < 2500, ori = (useRing && ringQ) ? ringQ : d.orientation;
+  if (ori) {
+    var q = new THREE.Quaternion(ori.x, ori.y, ori.z, ori.w);
     var up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
     if (Math.abs(up.y) < 0.75) {
       setStatus('that is a wall. Aim lower, or press "Put it in front of me".', 'warn');
@@ -1645,7 +1663,7 @@ scene.addEventListener('ar-hit-test-select', function (evt) {
   }
 
   /* drop it on the ring (where the phone points), not under the finger */
-  var p = (ringPos && Date.now() - ringAt < 2500) ? ringPos : d.position;
+  var p = useRing ? ringPos : d.position;
   if (p) { placeGlobeAt(p.x, p.y, p.z); }
   else { placeInFront(); }
 });
@@ -1961,7 +1979,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 34'
+      'build 35'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */

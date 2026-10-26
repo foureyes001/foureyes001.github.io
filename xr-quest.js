@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 34).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 35).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 34';
+  var BUILD = 'build 35';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -326,12 +326,14 @@
     return RING_URL;
   };
   /* ask for hit-test + anchors in AR sessions on phones only (the Quest sessions stay as they were) */
-  XRQ.wantARFeatures = function (sc) {
+  XRQ.wantARFeatures = function (sc, overlayEl) {
     if (IS_QUEST || !sc) { return; }
     var w = sc.getAttribute('webxr');                  /* same pattern as A-Frame's own 'anchored' component */
     if (!w || !Array.isArray(w.optionalFeatures)) { return; }
-    var changed = false;
-    ['hit-test', 'anchors'].forEach(function (f) { if (w.optionalFeatures.indexOf(f) < 0) { w.optionalFeatures.push(f); changed = true; } });
+    var changed = false, want = ['hit-test', 'anchors'];
+    if (overlayEl) { want.push('dom-overlay'); }
+    want.forEach(function (f) { if (w.optionalFeatures.indexOf(f) < 0) { w.optionalFeatures.push(f); changed = true; } });
+    if (overlayEl && w.overlayElement !== overlayEl) { w.overlayElement = overlayEl; changed = true; }
     if (changed) { sc.setAttribute('webxr', w); }
   };
   /* Keeps an object fixed to the real room: step() returns how far (world metres)
@@ -340,7 +342,7 @@
     this.sc = sc; this.anchor = null; this.want = null; this.busy = false; this.gen = 0;
     this.last = new THREE.Vector3(); this.m = new THREE.Matrix4(); this.q = new THREE.Quaternion();
   };
-  XRQ.Anchor.prototype.set = function (worldPos) { this.clear(); this.want = worldPos.clone(); };
+  XRQ.Anchor.prototype.set = function (worldPos) { this.clear(); this.want = worldPos.clone(); this.moved = 0; XRQ.anchorState = 'creating'; };
   XRQ.Anchor.prototype.clear = function () {
     if (this.anchor && this.anchor.delete) { try { this.anchor.delete(); } catch (e) { /* already gone */ } }
     this.anchor = null; this.want = null; this.gen++;
@@ -373,10 +375,16 @@
     var t = pose.transform.position, d = new THREE.Vector3(t.x - this.last.x, t.y - this.last.y, t.z - this.last.z);
     this.last.set(t.x, t.y, t.z);
     if (par) { par.getWorldQuaternion(this.q); d.applyQuaternion(this.q); }     /* XR space -> world */
+    this.moved = (this.moved || 0) + d.length();
     return d;
   };
   /* small text card that rides 0.7 m in front of the phone camera (phone AR has no HTML overlay here) */
   XRQ.arHint = function (sc, text) {
+    var bar = document.getElementById('xrq-arbar');
+    if (bar && bar.classList.contains('on')) {          /* build 35: phones show it in the on-screen bar */
+      var m = document.getElementById('xrq-armsg'); if (m) { m.textContent = text || ''; }
+      return;
+    }
     var h = document.getElementById('xrq-arhint');
     var cam = sc.querySelector('[camera]');
     if (!h && cam) {
@@ -408,6 +416,49 @@
   }
   XRQ.visibleBox = visibleBox;
 
+  /* build 35: phone AR controls as an on-screen HTML bar (WebXR DOM overlay), like chapter 3.
+     3D panels floating in the room were hard to hit with a screen tap and drifted out of reach. */
+  function buildArBar (comp) {
+    if (document.getElementById('xrq-arbar')) { return document.getElementById('xrq-arbar'); }
+    var css = document.createElement('style');
+    css.textContent =
+      '#xrq-arbar{position:fixed;inset:0;display:none;pointer-events:none;z-index:90;font:600 13px system-ui,sans-serif;color:#e2e8f0}' +
+      '#xrq-arbar.on{display:block}' +
+      '#xrq-arbar .bx{position:absolute;left:8px;right:8px;bottom:10px;pointer-events:auto;background:rgba(11,18,32,.80);' +
+      'border:1px solid rgba(34,211,238,.35);border-radius:12px;padding:8px}' +
+      '#xrq-arbar .st{font-size:12px;color:#7dd3fc;margin:0 2px 2px}' +
+      '#xrq-arbar .msg{font-size:13px;color:#f8fafc;margin:0 2px 6px;min-height:16px}' +
+      '#xrq-arbar .row{display:flex;gap:6px;margin-top:6px}' +
+      '#xrq-arbar button{flex:1;font:700 12.5px system-ui,sans-serif;color:#e2e8f0;background:#1e2a44;border:1px solid #334155;' +
+      'border-radius:8px;padding:10px 4px;min-height:40px}' +
+      '#xrq-arbar button.here{background:#334155;color:#94a3b8}' +
+      '#xrq-arbar button.exit{background:#5b1f2a;border-color:#7f1d1d}';
+    document.head.appendChild(css);
+    var here = currentPage(), bar = document.createElement('div');
+    bar.id = 'xrq-arbar';
+    bar.innerHTML = '<div class="bx"><div class="st" id="xrq-arst"></div><div class="msg" id="xrq-armsg"></div>' +
+      '<div class="row"><button data-a="smaller">SIZE -</button><button data-a="bigger">SIZE +</button>' +
+      '<button data-a="left">TURN &lt;</button><button data-a="right">TURN &gt;</button><button data-a="move">MOVE</button></div>' +
+      '<div class="row">' + CHAPTERS.map(function (c) {
+        return '<button data-go="' + c.href + '"' + (c.href === here ? ' class="here"' : '') + '>' + c.short.replace(/ .*/, '') + '</button>';
+      }).join('') + '<button class="exit" data-a="exit">EXIT AR</button></div></div>';
+    document.body.appendChild(bar);
+    /* taps on the bar must not also reach the AR scene as a "select" */
+    bar.addEventListener('beforexrselect', function (e) { e.preventDefault(); });
+    bar.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('button'); if (!b) { return; }
+      var a = b.getAttribute('data-a'), go = b.getAttribute('data-go'), sc = comp.el;
+      if (go) { if (go !== here) { XRQ.goChapter(go); } return; }
+      if (a === 'smaller') { comp.resize(1 / 1.25); }
+      if (a === 'bigger') { comp.resize(1.25); }
+      if (a === 'left') { comp.rotate(1); }
+      if (a === 'right') { comp.rotate(-1); }
+      if (a === 'move') { comp.startScan(); }
+      if (a === 'exit') { sc.exitVR(); }
+    });
+    return bar;
+  }
+
   /* ---------- AR model / lobby / custom ----------------------------------- */
   AFRAME.registerComponent('ar-model', {
     schema: {
@@ -425,7 +476,8 @@
       this.onSelect = this.onSelect.bind(this);
       this.keeper = new XRQ.Anchor(sc); this.scanning = false;
       if (this.data.mode === 'model' && !IS_QUEST) {                 /* build 34: phone aim ring + anchor */
-        XRQ.wantARFeatures(sc);
+        this.bar = buildArBar(this);                                  /* build 35: on-screen controls */
+        XRQ.wantARFeatures(sc, this.bar);
         if (!sc.hasAttribute('ar-hit-test')) {
           sc.setAttribute('ar-hit-test', { type: 'map', src: XRQ.ringURL(), mapSize: { x: 0.35, y: 0.35 }, enabled: false });
         }
@@ -433,7 +485,10 @@
           if (self.scanning) { self.found = true; XRQ.arHint(sc, 'Surface found: tap to put the model on the ring'); }
         });
         sc.addEventListener('ar-hit-test-select-start', function (e) {
-          if (self.scanning && e.detail && e.detail.position) { self.ringPos = e.detail.position.clone(); self.ringAt = Date.now(); }
+          if (self.scanning && e.detail && e.detail.position) {
+            self.ringPos = e.detail.position.clone(); self.ringAt = Date.now();
+            self.ringQ = e.detail.orientation ? e.detail.orientation.clone() : null;     /* the ring's own surface */
+          }
         });
         sc.addEventListener('ar-hit-test-select', function (e) { self.onHitSelect(e.detail || {}); });
       }
@@ -508,8 +563,9 @@
         if (s && !XRQ.headsetAR(sc) && s.addEventListener) { this.tapSession = s; s.addEventListener('select', this.onSelect); }
       }
       /* cdn.html (custom) places its own globe; on phones it keeps its HTML buttons */
-      var showPanel = !(d.mode === 'custom' && !XRQ.headsetAR(sc));
       this.phone = d.mode === 'model' && XRQ.phoneAR(sc);
+      var showPanel = !(d.mode === 'custom' && !XRQ.headsetAR(sc)) && !this.phone;   /* phones: on-screen bar instead */
+      if (this.phone && this.bar) { this.bar.classList.add('on'); }
       if (this.phone) { this.startScan(); }
       var go = function () {
         if (!self.active) { return; }
@@ -520,7 +576,8 @@
           else { XRQ.faceUser(self.panel, 1.0, 1.0, 0.85); }
         }
         var vm2 = document.getElementById('vrmenu');
-        if (vm2 && d.mode !== 'lobby') { vm2.object3D.visible = true; XRQ.faceUser(vm2, 2.3, 1.7, -0.15); }
+        if (vm2 && d.mode !== 'lobby' && !self.phone) { vm2.object3D.visible = true; XRQ.faceUser(vm2, 2.3, 1.7, -0.15); }
+        if (vm2 && self.phone) { vm2.object3D.visible = false; }
       };
       go();
       setTimeout(go, 600);    /* head pose reaches the camera after the first XR frame */
@@ -531,6 +588,7 @@
       this.active = false;
       XRQ.arModel = false;
       this.keeper.clear(); this.scanning = false;
+      if (this.bar) { this.bar.classList.remove('on'); }
       if (sc.hasAttribute('ar-hit-test')) { sc.setAttribute('ar-hit-test', 'enabled', false); }
       XRQ.arHint(sc, '');
       if (this.root) { this.root.object3D.visible = true; }
@@ -571,13 +629,14 @@
     },
     onHitSelect: function (det) {
       if (!this.active || !this.scanning) { return; }
-      /* the hit pose's Y axis is the surface normal (measured on a phone in build 13): skip walls */
-      if (det.orientation) {
-        var up = new THREE.Vector3(0, 1, 0).applyQuaternion(det.orientation);
-        if (Math.abs(up.y) < 0.75) { XRQ.arHint(this.el, 'That is a wall. Aim at the floor or a table and tap'); return; }
-      }
       /* drop it on the ring (where the phone points), not under the finger */
-      var p = (this.ringPos && Date.now() - this.ringAt < 2500) ? this.ringPos : det.position;
+      var useRing = this.ringPos && Date.now() - this.ringAt < 2500;
+      var p = useRing ? this.ringPos : det.position, q = useRing ? (this.ringQ || det.orientation) : det.orientation;
+      /* the hit pose's Y axis is the surface normal (measured on a phone in build 13): skip walls */
+      if (q) {
+        var up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+        if (Math.abs(up.y) < 0.75) { this.say('That is a wall. Aim at the floor or a table and tap'); return; }
+      }
       if (p) { this.placeAt(p); }
     },
     placeAt: function (p) {
@@ -593,14 +652,38 @@
       if (sc.hasAttribute('ar-hit-test')) { sc.setAttribute('ar-hit-test', 'enabled', false); }
       if (this.root) { this.root.object3D.visible = true; }
       this.keeper.set(this.target);
-      XRQ.arHint(sc, 'Placed. Tap the model to use it. MOVE on the panel puts it somewhere else');
-      var self = this; clearTimeout(this.hintT);
-      this.hintT = setTimeout(function () { if (!self.scanning) { XRQ.arHint(sc, ''); } }, 4000);
+      if (this.bar && this.bar.classList.contains('on')) { this.say('Placed. Walk around it; it should stay put.'); }
+      else {
+        XRQ.arHint(sc, 'Placed. Tap the model to use it. MOVE on the panel puts it somewhere else');
+        var self = this; clearTimeout(this.hintT);
+        this.hintT = setTimeout(function () { if (!self.scanning) { XRQ.arHint(sc, ''); } }, 4000);
+      }
     },
+    say: function (text) { this.msgUntil = Date.now() + 3500; XRQ.arHint(this.el, text); },
     tick: function () {
-      if (!this.active || this.scanning || !this.phone) { return; }
-      var dlt = this.keeper.step();
-      if (dlt && dlt.lengthSq() > 1e-12) { this.target.add(dlt); this.apply(); }
+      if (!this.active || !this.phone) { return; }
+      if (!this.scanning) {
+        var dlt = this.keeper.step();
+        if (dlt && dlt.lengthSq() > 1e-12) { this.target.add(dlt); this.apply(); }
+      }
+      var now = Date.now();
+      if (this.bar && now - (this.stAt || 0) > 400) {           /* status line: what the phone is doing right now */
+        this.stAt = now;
+        var st = document.getElementById('xrq-arst'), txt;
+        if (this.scanning) { txt = this.found ? 'Surface found' : 'Looking for a surface...'; }
+        else {
+          var as = XRQ.anchorState || 'waiting';
+          txt = 'Placed | anchor: ' + (as === 'anchored' ? 'OK' : as) +
+                (this.keeper.moved > 0.005 ? ' | corrected ' + Math.round(this.keeper.moved * 100) + ' cm' : '');
+        }
+        if (st) { st.textContent = txt; }
+        if (now > (this.msgUntil || 0)) {
+          var m = this.scanning ? (this.found ? 'Tap anywhere to put the model on the ring' :
+                  'Point the phone at the floor or a table and move it slowly until the ring appears') :
+                  'Tap a gate or a machine on the model. MOVE puts it somewhere else.';
+          XRQ.arHint(this.el, m);
+        }
+      }
     },
     place: function () {
       var d = this.data, cam = this.el.camera;
@@ -652,7 +735,7 @@
           if (fw.lengthSq() < 1e-6) { fw.set(0, 0, -1); } fw.normalize();
           this.placeAt(new THREE.Vector3(hd.x + fw.x * 1.2, 0, hd.z + fw.z * 1.2));
         } else if (!this.found) {
-          XRQ.arHint(sc, 'Still looking for a surface: move the phone slowly over the floor');
+          this.say('Still looking for a surface: move the phone slowly over the floor');
         }
         return;
       }
