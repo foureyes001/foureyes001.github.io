@@ -34,7 +34,7 @@ function Find-Tool($cfg, $sub, $name) {
   if (-not $cfg -or -not $cfg.androidSdkPath) { return $null }
   $dir = Join-Path $cfg.androidSdkPath $sub
   if (-not (Test-Path $dir)) { return $null }
-  return (Get-ChildItem -Path $dir -Recurse -Filter $name -ErrorAction SilentlyContinue |
+  return (Get-ChildItem -Path $dir -Recurse -File -Filter $name -ErrorAction SilentlyContinue |
           Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName)
 }
 
@@ -55,7 +55,8 @@ function Patch-Gradle {
   $t = [regex]::Replace($t, $SdkRe, '${1}//noinspection ExpiredTargetSdkVersion' + "`r`n" + '${1}${2}${3}32')
   [IO.File]::WriteAllText($app, $t)
   Say 'app\build.gradle: targetSdk set to 32 (with //noinspection ExpiredTargetSdkVersion)'
-  Get-ChildItem -Path $Proj -Recurse -Filter '*.gradle' -ErrorAction SilentlyContinue |
+  # -File: Gradle's own cache FOLDER is called .gradle and also matches '*.gradle' (build 39 fix)
+  Get-ChildItem -Path $Proj -Recurse -File -Filter '*.gradle' -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch '\\(build|\.gradle)\\' } | ForEach-Object {
       $c = [IO.File]::ReadAllText($_.FullName)
       if ($c -match 'jcenter\(\)') {
@@ -97,7 +98,7 @@ function Run-Build {
   & (Join-Path $Proj 'gradlew.bat') assembleRelease --stacktrace
   if ($LASTEXITCODE -ne 0) { Fail 'Gradle build failed - read the red text above (ECONNRESET / timeout = network: just run 1-build.bat again)' }
   $relDir = Join-Path $Proj 'app\build\outputs\apk\release'
-  $built = Get-ChildItem -Path $relDir -Filter '*.apk' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  $built = Get-ChildItem -Path $relDir -File -Filter '*.apk' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $built) { Fail ('no APK found in ' + $relDir) }
   Say ('Gradle output: ' + $built.Name)
   $zipalign  = Find-Tool $cfg 'build-tools' 'zipalign.exe'
