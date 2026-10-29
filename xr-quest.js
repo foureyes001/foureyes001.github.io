@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 38).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 39).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 38';
+  var BUILD = 'build 39';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -1498,6 +1498,70 @@
       }
     }
   });
+  /* ---------- build 39: the installed Quest app starts in VR ------------------
+     Meta's packaged web apps (Bubblewrap, horizonOSAppMode "immersive") must open
+     straight into WebXR. Meta's own test for "running inside the app" is
+     window.getDigitalGoodsService (only defined in the packaged app, never in the
+     Quest Browser tab). Inside the app, every page enters VR on its own; in the
+     browser nothing changes. A-Frame's own 'sessiongranted' hand-over (gates between
+     chapters) runs first; this only steps in when no session arrived. If the headset
+     refuses (no user action yet), a large "Enter VR" button does it with one click.
+     ?app=1 forces app mode, ?app=0 disables it (testing). */
+  XRQ.inApp = (function () {
+    var q = location.search;
+    if (/[?&]app=0/.test(q)) { return false; }
+    if (/[?&]app=1/.test(q)) { return true; }
+    return IS_QUEST && typeof window.getDigitalGoodsService !== 'undefined';
+  })();
+  XRQ.appVR = { tries: 0, prompt: false, last: '' };
+  function appPrompt (sc) {
+    if (document.getElementById('xrq-appvr')) { return; }
+    XRQ.appVR.prompt = true;
+    var box = document.createElement('div');
+    box.id = 'xrq-appvr';
+    box.setAttribute('style', 'position:fixed;inset:0;z-index:310;display:flex;align-items:center;' +
+      'justify-content:center;background:rgba(11,16,32,.80);font-family:system-ui,sans-serif');
+    box.innerHTML = '<button id="xrq-appvr-go" style="font:800 28px system-ui;padding:28px 46px;' +
+      'border-radius:18px;border:none;background:#22d3ee;color:#0b1020;cursor:pointer">Enter VR</button>';
+    document.body.appendChild(box);
+    document.getElementById('xrq-appvr-go').addEventListener('click', function () {
+      box.remove(); XRQ.appVR.prompt = false; appEnter(sc, true);
+    });
+  }
+  function appEnter (sc, fromClick) {
+    if (XRQ.inXR(sc)) { return; }
+    XRQ.appVR.tries++;
+    var p;
+    try { p = sc.enterVR(); } catch (e) { XRQ.appVR.last = 'error: ' + (e && e.message); appPrompt(sc); return; }
+    if (!p || !p.then) { setTimeout(function () { if (!XRQ.inXR(sc)) { appPrompt(sc); } }, 1500); return; }
+    if (p && p.then) {
+      p.then(function () {
+        setTimeout(function () {
+          XRQ.appVR.last = XRQ.inXR(sc) ? 'in VR' : 'not entered';
+          if (!XRQ.inXR(sc) && !fromClick) { appPrompt(sc); }
+        }, 1500);
+      }, function (e) {
+        XRQ.appVR.last = 'refused: ' + (e && e.message);
+        /* a hand-over may have won the race: only ask when still outside VR */
+        setTimeout(function () { if (!XRQ.inXR(sc)) { appPrompt(sc); } }, 1500);
+      });
+    }
+  }
+  if (XRQ.inApp) {
+    document.documentElement.classList.add('in-app');
+    document.addEventListener('DOMContentLoaded', function () {
+      var sc = document.querySelector('a-scene'); if (!sc) { return; }
+      var started = false;
+      var start = function () {
+        if (started) { return; } started = true;
+        /* give a granted session (arrival through a gate) a moment to arrive first */
+        setTimeout(function () { if (!XRQ.inXR(sc)) { appEnter(sc, false); } }, 1200);
+      };
+      if (sc.renderStarted) { start(); } else { sc.addEventListener('renderstart', start); }
+      if (sc.hasLoaded) { start(); } else { sc.addEventListener('loaded', start); }
+    });
+  }
+
   /* ---------- build 37: voice guide -------------------------------------------
      XRQ.say(text) reads a guide text aloud with the browser's built-in speech
      (speechSynthesis: no audio files, no account, works offline on most devices).

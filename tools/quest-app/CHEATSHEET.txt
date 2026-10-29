@@ -9,7 +9,7 @@ press Enter to keep the default it shows. If unsure, ask Claude.
   Application name ..................... Inside the Cloud             (default)
   Short name (max 12) .................. Inside Cloud
   Application ID / package ............. io.github.foureyes001.insidethecloud
-  App mode (Meta) ...................... 2D
+  App mode (Meta) ...................... immersive (build 39; was 2D)
   Meta App ID .......................... leave EMPTY, press Enter
   Starting version code ................ 1                            (default)
   Display mode ......................... standalone                   (default)

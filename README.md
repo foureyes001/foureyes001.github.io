@@ -67,6 +67,16 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 39 (29 Oct 2026) - the Quest app opens straight into VR
+- **Installed app (Quest):** every page enters VR by itself.
+  - The check for "inside the app" is Meta's `window.getDigitalGoodsService`.
+  - If the headset refuses, a large **Enter VR** button appears.
+  - The Quest Browser, desktop and phone are unchanged. Test switches: `?app=1` / `?app=0`.
+- **App package:** mode `immersive` (was 2D), version 2.
+  - `tools/quest-app/package-quest.ps1` regenerates the Android project when its mode differs from `twa-manifest.json`, checks it is immersive, and logs the launcher categories.
+  - `CHEATSHEET.txt` and `QUEST-APP-GUIDE.md` are updated.
+- Stamps read "build 39".
+
 ## Build 38 (29 Oct 2026) - voice speaks a short summary, cards keep the detail
 - **Two levels per guide:** the card on screen keeps its text for reading; the voice speaks a one-sentence summary.
   - Example, ch1 tour step 2: the card says "Your request is handled by one of these racks of 20 to 40 servers. Each rack has two power feeds …"; the voice says "Each rack holds the servers that answer your request."

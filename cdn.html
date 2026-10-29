@@ -423,7 +423,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 38</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 39</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -543,7 +543,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 38\n' +
+    'build 39\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -2027,7 +2027,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 38'
+      'build 39'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */

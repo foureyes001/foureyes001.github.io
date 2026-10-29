@@ -1,4 +1,5 @@
-# Inside the Cloud - package the 2D Quest app with Meta's Bubblewrap (Windows).
+# Inside the Cloud - package the Quest app with Meta's Bubblewrap (Windows).
+# Build 39: app mode "immersive" - the app opens straight into VR (was 2D, a flat window).
 # Run through 1-build.bat and 2-install.bat. You type every password and licence answer.
 param([ValidateSet('build','install')][string]$Step = 'build')
 
@@ -150,7 +151,7 @@ if ($Step -eq 'build') {
   New-Item -ItemType Directory -Force -Path $Proj | Out-Null
   Set-Location $Proj
   if (-not (Test-Path 'twa-manifest.json')) {
-    Say 'Step 2/6: bubblewrap init - answer with CHEATSHEET.txt (2D, package ID, skip App ID, your passwords)' 'Yellow'
+    Say 'Step 2/6: bubblewrap init - answer with CHEATSHEET.txt (immersive, package ID, skip App ID, your passwords)' 'Yellow'
     & $bw init "--manifest=$Manifest" --metaquest
     if (-not (Test-Path 'twa-manifest.json')) { Fail 'init did not create twa-manifest.json' }
   } else { Say 'Step 2/6: project already exists - skipping init' }
@@ -158,7 +159,7 @@ if ($Step -eq 'build') {
   $tm = Get-Content 'twa-manifest.json' -Raw | ConvertFrom-Json
   Say ('packageId = {0}   horizonOSAppMode = {1}' -f $tm.packageId, $tm.horizonOSAppMode)
   if ($tm.packageId -ne $PkgId) { Fail ('package ID is ' + $tm.packageId + ', expected ' + $PkgId + '. Tell Claude before doing anything else.') }
-  if ("$($tm.horizonOSAppMode)" -match 'immersive') { Fail 'app mode is immersive; we want 2D. Tell Claude.' }
+  if ("$($tm.horizonOSAppMode)" -ne 'immersive') { Fail ('app mode is ' + $tm.horizonOSAppMode + '; build 39 needs immersive in project\twa-manifest.json. Tell Claude.') }
 
   $cfg = Get-BwConfig; Use-Jdk $cfg
   Say ('JDK: {0}   Android SDK: {1}' -f $cfg.jdkPath, $cfg.androidSdkPath)
@@ -166,21 +167,31 @@ if ($Step -eq 'build') {
   # Keep Meta's original init settings (Platform SDK + horizonpermissions libraries).
   # Turning the Platform SDK off also drops horizonpermissions, so it stays on (decided 25 Oct).
   # If the generated project lacks it (an earlier script removed it), restore and regenerate.
+  # Build 39: the Android project must also be regenerated when its app mode differs from
+  # twa-manifest.json (2D -> immersive). "bubblewrap update" does that; key and package stay.
+  $ModeRe = 'resValue\s+"string",\s*"horizonOSAppMode",\s*''([^'']*)'''
   $gr = [IO.File]::ReadAllText((Join-Path $Proj 'app\build.gradle'))
-  if ($gr -notmatch 'horizonplatformsdk') {
+  $gm = [regex]::Match($gr, $ModeRe).Groups[1].Value
+  Say ('Android project app mode = ' + $gm + '   twa-manifest = ' + $tm.horizonOSAppMode)
+  if (($gr -notmatch 'horizonplatformsdk') -or ($gm -ne "$($tm.horizonOSAppMode)")) {
     $raw = Get-Content 'twa-manifest.json' -Raw | ConvertFrom-Json
     if (-not $raw.features) { $raw | Add-Member -NotePropertyName features -NotePropertyValue ([pscustomobject]@{}) }
     if (-not $raw.features.PSObject.Properties['horizonPlatformSDK']) {
       $raw.features | Add-Member -NotePropertyName horizonPlatformSDK -NotePropertyValue ([pscustomobject]@{ enabled = $true })
       [IO.File]::WriteAllText((Join-Path $Proj 'twa-manifest.json'), ($raw | ConvertTo-Json -Depth 20))
     }
-    Say 'Restoring Meta''s original project settings (bubblewrap update)' 'Yellow'
+    Say 'Regenerating the Android project from twa-manifest.json (bubblewrap update, needs internet)' 'Yellow'
     & $bw update --skipVersionUpgrade
     if ($LASTEXITCODE -ne 0) { Fail 'bubblewrap update failed - read the message above and tell Claude' }
     $tm = Get-Content 'twa-manifest.json' -Raw | ConvertFrom-Json
     $gr = [IO.File]::ReadAllText((Join-Path $Proj 'app\build.gradle'))
     if ($gr -notmatch 'horizonplatformsdk') { Fail 'Meta libraries still missing after update. Tell Claude.' }
+    $gm = [regex]::Match($gr, $ModeRe).Groups[1].Value
+    if ($gm -ne 'immersive') { Fail ('Android project app mode is still ' + $gm + ' after update. Tell Claude.') }
   }
+  $am = [IO.File]::ReadAllText((Join-Path $Proj 'app\src\main\AndroidManifest.xml'))
+  $cats = ([regex]::Matches($am, 'com\.oculus\.intent\.category\.\w+') | ForEach-Object { $_.Value } | Select-Object -Unique) -join ', '
+  Say ('App mode: immersive   launcher categories: ' + $cats + '   version ' + $tm.appVersionName + ' (' + $tm.appVersionCode + ')')
   Say 'Meta libraries: present (original settings)'
 
   Say 'Step 3/6: edit the Gradle files'

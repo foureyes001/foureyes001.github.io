@@ -4,9 +4,10 @@ Steps marked **YOU** are yours only: accounts, sign-ins, passwords, licences, th
 
 - **Done:**
   - Fonts and GitHub Pages: the site is live at https://foureyes001.github.io.
-  - The 2D app is built (25 Oct 2026).
+  - The 2D app was built (25 Oct 2026) and installed (29 Oct).
+  - **Build 39 (29 Oct): the app is switched to immersive.** It opens straight into VR. Rebuild with `1-build.bat`, then reinstall with `2-install.bat`.
   - Asset links are published at `/.well-known/assetlinks.json`.
-- **App:** package `io.github.foureyes001.insidethecloud`, launcher name "Inside Cloud", 2D mode, sideload only.
+- **App:** package `io.github.foureyes001.insidethecloud`, launcher name "Inside Cloud", **immersive** mode (since build 39; was 2D), version 2, sideload only.
 - Meta's guide: https://developers.meta.com/horizon/documentation/web/pwa-packaging/
 
 ---
@@ -54,13 +55,16 @@ The scripts are in `tools/quest-app/` in this repo. The laptop copy is `C:\Users
   - Meta's page doesn't name supported headsets. The Quest 2 is likely but not confirmed.
   - Whether Bubblewrap requires a service worker. The build worked without one.
 
-## Immersive mode (later, not yet)
-Immersive mode launches straight into VR. It needs:
-1. **A lobby change:** `index.html` enters VR right after loading, **only inside the installed app**. Detect it via the Digital Goods API or `matchMedia('(display-mode: standalone)')`; never do this in a normal tab.
-2. **A test** that VR survives gate travel inside the installed app. So far this has only been seen in the Quest Browser.
-3. **A check** that ch3's VR↔AR switch still has a usable fallback. The "Continue in AR" card is a 2D page element.
-
-To switch: set `horizonOSAppMode` in `project\twa-manifest.json`, run `bubblewrap update`, then `1-build.bat`. Keep the same key and package ID.
+## Immersive mode (build 39, done)
+- **The site:** inside the app every page enters VR by itself. Meta's test for "inside the app" is `window.getDigitalGoodsService`; in the Quest Browser nothing changes. If the headset refuses (no user action yet), a large **Enter VR** button appears.
+- **The app:** `horizonOSAppMode` is `immersive` and the version is 2 in `project\twa-manifest.json`. The 2D original is backed up as `twa-manifest.2d-build32.json`.
+- **`1-build.bat`:** regenerates the Android project (`bubblewrap update --skipVersionUpgrade`, needs internet), then builds and signs. **YOU** type the keystore password. The key and package ID are the same, so `2-install.bat` installs over the 2D app.
+- **Meta:** an immersive app does not launch at all if the asset-links check fails. If the 2D app showed a browser address bar, fix that first.
+- **To test in the app:**
+  - the lobby gates and the chapter buttons keep you in VR
+  - ch3 Switch to AR and Back to VR
+  - Exit VR. If the app closes or shows a blank window, tell Claude.
+- **Going back to 2D:** copy `twa-manifest.2d-build32.json` over `twa-manifest.json` and tell Claude (the script expects immersive).
 
 ## If something goes wrong
 
