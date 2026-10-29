@@ -34,6 +34,7 @@ The scripts are in `tools/quest-app/` in this repo. The laptop copy is `C:\Users
   7. Checks the APK (package, targetSdk 32), reads its SHA-256 fingerprint, and writes `assetlinks.json` (`bubblewrap fingerprint add`).
 - **When it says BUILD DONE:** if the fingerprint changed, send `assetlinks.json` to Claude to publish. It only changes with a new key.
 - **Keep the key safe:** keep `project\android.keystore` and both passwords backed up. **Every update needs the same key and package ID.**
+- **Forgotten password (happened 29 Oct):** `3-new-key.bat` makes a new key, `project\android-2.keystore`, and points `twa-manifest.json` at it. The old key is left untouched. `1-build.bat` then signs with the new key and adds its fingerprint; Claude publishes the new `assetlinks.json`. `2-install.bat` asks before removing the old app, which Android requires when the key changes.
 - Every step is logged to `status.log`.
 
 ## 2. Install on the Quest 2

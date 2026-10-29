@@ -1,7 +1,7 @@
 # Inside the Cloud - package the Quest app with Meta's Bubblewrap (Windows).
 # Build 39: app mode "immersive" - the app opens straight into VR (was 2D, a flat window).
 # Run through 1-build.bat and 2-install.bat. You type every password and licence answer.
-param([ValidateSet('build','install')][string]$Step = 'build')
+param([ValidateSet('build','install','newkey')][string]$Step = 'build')
 
 $ErrorActionPreference = 'Continue'
 $Root     = $PSScriptRoot
@@ -119,6 +119,31 @@ function Run-Build {
 }
 
 if (Test-Path $Log) { Add-Content -Path $Log -Value '' }
+
+# ---------------------------------------------------------------- NEW KEY (build 39)
+# For a forgotten keystore password: a NEW key (project\android-2.keystore). The old
+# android.keystore is not touched. Apps signed with a different key cannot update the old
+# install, so 2-install.bat offers to remove the old app first.
+if ($Step -eq 'newkey') {
+  $cfg = Get-BwConfig; Use-Jdk $cfg
+  $kt = $null
+  if ($cfg -and $cfg.jdkPath) { $kt = Join-Path $cfg.jdkPath 'bin\keytool.exe' }
+  if (-not $kt -or -not (Test-Path $kt)) { Fail ('keytool.exe not found in the JDK: ' + $cfg.jdkPath) }
+  $NewKs = Join-Path $Proj 'android-2.keystore'
+  if (Test-Path $NewKs) { Fail 'project\android-2.keystore already exists - it is your new key. Run 1-build.bat with its password. If that password is lost too, tell Claude.' }
+  Say 'Creating a NEW signing key. Choose a password (at least 6 characters), type it twice. Nothing shows while you type.' 'Yellow'
+  Say 'WRITE THE PASSWORD DOWN NOW and keep project\android-2.keystore backed up. Every future update needs both.' 'Yellow'
+  & $kt -genkeypair -keystore $NewKs -storetype PKCS12 -alias android -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Inside the Cloud, OU=BACSE341, O=Inside the Cloud, C=IN'
+  if ($LASTEXITCODE -ne 0 -or -not (Test-Path $NewKs)) { Fail 'keytool did not create the key (passwords did not match?) - run 3-new-key.bat again' }
+  $tmPath = Join-Path $Proj 'twa-manifest.json'
+  $txt = [IO.File]::ReadAllText($tmPath)
+  $txt2 = [regex]::Replace($txt, '("path"\s*:\s*"[^"]*?)android\.keystore"', '${1}android-2.keystore"')
+  if ($txt2 -eq $txt) { Fail 'could not point twa-manifest.json at the new key - tell Claude' }
+  [IO.File]::WriteAllText($tmPath, $txt2)
+  Say 'NEW KEY READY: project\android-2.keystore (old android.keystore left as it was). Now run 1-build.bat and type the NEW password.' 'Green'
+  Read-Host 'Press Enter to close'
+  exit 0
+}
 
 # ---------------------------------------------------------------- BUILD
 if ($Step -eq 'build') {
@@ -260,8 +285,17 @@ if ($Step -eq 'install') {
   }
   if ($dev -notmatch '(?m)^\S+\s+device\s*$') { Fail 'no authorised headset found' }
   Say 'Installing the app'
-  & $adb install -r $Apk
-  if ($LASTEXITCODE -ne 0) { Fail 'adb install failed - read the message above' }
+  $out = (& $adb install -r $Apk 2>&1 | Out-String); $code = $LASTEXITCODE
+  Write-Host $out
+  if ($code -ne 0 -and $out -match 'UPDATE_INCOMPATIBLE|signatures do not match') {
+    # build 39: the app is now signed with a new key; Android only allows that after removing the old install
+    Say 'The installed Inside Cloud app was signed with the OLD key, so it cannot be updated in place.' 'Yellow'
+    Read-Host 'Press Enter to REMOVE the old Inside Cloud app from the headset and install the new one (close this window to stop)'
+    & $adb uninstall $PkgId
+    $out = (& $adb install $Apk 2>&1 | Out-String); $code = $LASTEXITCODE
+    Write-Host $out
+  }
+  if ($code -ne 0) { Fail 'adb install failed - read the message above' }
   Say 'INSTALLED. On the headset: Library -> Unknown Sources -> Inside the Cloud.' 'Green'
   Read-Host 'Press Enter to close'
   exit 0
