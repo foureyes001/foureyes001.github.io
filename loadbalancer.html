@@ -252,6 +252,7 @@ window.doorGo = function (href) {
 </div>
 <div id="bar-learn" class="tabpanel" data-tab="learn">
   <button id="b-explain">explain the simulation</button>
+  <button id="b-voice" data-voice-toggle>Voice guide: on</button>
   <span class="tabhint">top tabs jump between viewpoints · walk: W A S D / arrows · drag to look · click the balancer,
     an instance, a database or a panel row · the gold portals change chapter</span>
 </div>
@@ -1586,6 +1587,7 @@ window.doorGo = function (href) {
     drawBoard('info', title, String(body).split('\n'), 34);
     infoEl.object3D.position.set(pos.x, Math.max(2.3, pos.y + 2.2), pos.z + 0.4);
     infoEl.setAttribute('visible', true);
+    speak(title.charAt(0) + title.slice(1).toLowerCase() + '. ' + String(body).split('\n').join('. '));
     clearTimeout(openInfo.t); openInfo.t = setTimeout(function () { infoEl.setAttribute('visible', false); }, 8000);
   }
   function algoName () { return ALGOS.filter(function (a) { return a.k === algo; })[0].n; }
@@ -1618,6 +1620,7 @@ window.doorGo = function (href) {
     var e = document.getElementById('explain'); var on = !e.object3D.visible;
     e.object3D.visible = on; if (on && window.XRQ && XRQ.inXR && XRQ.inXR(scene)) { XRQ.faceUser(e, 2.3, 1.7); }
     setStatus(on ? 'explainer open' : 'explainer closed');
+    if (on) { speak(spoken('HOW THIS ROOM WORKS', EXPLAIN)); } else { hush(); }
   }
   function doReset () {
     servers.forEach(function (s, i) { s.state = i < 2 ? 'active' : 'hidden'; s.inFlight = []; s.queue = []; s.cpu = 10; s.launchT = 1; });
@@ -1716,26 +1719,40 @@ window.doorGo = function (href) {
   }
 
   /* ---------------- explanation texts ----------------------------------- */
+  /* build 37: shorter boards (2.7 x 1.5 m, was 3.3 x 2.1) and the same words read aloud */
+  var EXPLAIN = [
+    'A load balancer is one door to many servers.',
+    'Least connections: the least busy one gets it.',
+    'Round robin: take turns, blind to how busy.',
+    'Weighted: bigger servers get a bigger share.',
+    'IP hash: the same user, the same server.',
+    'Scale out above 70% CPU, in below 30%.',
+    'Cooldown off: watch the pool flap.'];
+  var DBEXPLAIN = [
+    '1  Every finished request is saved here.',
+    '2  Writes (gold) go only to the PRIMARY,',
+    '    which copies them to both replicas.',
+    '3  Reads (teal) are shared by the replicas.',
+    '4  Kill a replica: the other takes its reads.',
+    '5  A restored replica resyncs, then rejoins.'];
   function explainTexts () {
-    board('info', 2.2, 1.25); board('explain', 3.3, 2.1); board('dbexplain', 3.3, 2.1, '#fbbf24');
-    drawBoard('explain', 'HOW THIS ROOM WORKS', [
-      'A load balancer is the single door in front of many servers.',
-      'Least connections: each request goes to the idlest instance.',
-      'Round robin: a fixed rotation, blind to how busy each one is.',
-      'Weighted: bigger instances get a bigger share (weights 2-5).',
-      'IP hash: the same user always lands on the same instance.',
-      'Auto-scaling adds an instance above 70% CPU held for 3 s,',
-      'removes one below 30% held for 5 s, waits 10 s in between.',
-      'Turn the cooldown off and watch the pool flap up and down.'], 29);
-    drawBoard('dbexplain', 'WHEN A REQUEST FINISHES', [
-      '1  The result is stored: the database is the record.',
-      '2  WRITE (gold): only the PRIMARY changes data, then it',
-      '    replays the change to both replicas (replication lag).',
-      '3  READ (teal, most requests): a replica answers, in turn.',
-      '4  Kill a replica: its reads fail over to the other one;',
-      '    kill both and the primary serves everything.',
-      '5  Restore: a replica resyncs first, then rejoins.'], 29);
+    board('info', 2.2, 1.25); board('explain', 2.7, 1.5); board('dbexplain', 2.7, 1.5, '#fbbf24');
+    drawBoard('explain', 'HOW THIS ROOM WORKS', EXPLAIN, 29);
+    drawBoard('dbexplain', 'WHEN A REQUEST FINISHES', DBEXPLAIN, 29);
   }
+  /* voice guide (shared helper in xr-quest.js; silent if unavailable) */
+  function speak (t) { if (window.XRQ && XRQ.say) { XRQ.say(t); } }
+  function hush () { if (window.XRQ && XRQ.hush) { XRQ.hush(); } }
+  function spoken (title, lines) {
+    var out = [];
+    lines.forEach(function (l) {                       /* indented line = continuation */
+      if (/^\s{2,}\S/.test(l) && !/^\d/.test(l) && out.length) { out[out.length - 1] += ' ' + l.trim(); }
+      else { out.push(l.replace(/^\d+\s+/, '').trim()); }
+    });
+    return title.charAt(0) + title.slice(1).toLowerCase() + '. ' +
+      out.map(function (t) { return /[.!?]$/.test(t) ? t : t + '.'; }).join(' ');
+  }
+
 
   /* ---------------- boot ------------------------------------------------- */
   var panelQueue = [], pq = 0, lastPanel = 0, lastText = 0, lastScaleCheck = 0;
@@ -1811,6 +1828,7 @@ window.doorGo = function (href) {
     var dbExOn = false;
     document.getElementById('b-dbex').addEventListener('click', function () {
       dbExOn = !dbExOn; document.getElementById('dbexplain').object3D.visible = dbExOn;
+      if (dbExOn) { speak(spoken('WHEN A REQUEST FINISHES', DBEXPLAIN)); } else { hush(); }
       document.getElementById('b-dbex').textContent = dbExOn ? 'hide the explanation' : 'explain the db tier';
     });
     document.getElementById('t-explain').addEventListener('click', toggleExplain);
@@ -1986,6 +2004,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 36</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 37</div>
 </body>
 </html>

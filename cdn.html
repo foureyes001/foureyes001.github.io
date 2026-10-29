@@ -65,12 +65,14 @@
   #status { font-size: 11.5px; color: #34d399; margin-top: 6px; min-height: 1.15em; }
   #status.warn { color: #fbbf24; }
   #status.err { color: #f87171; }
-  #tourbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 12;
-    width: min(560px, 92vw); background: rgba(23,26,31,.94); border: 1px solid rgba(217,165,20,.5);
-    border-radius: 12px; padding: 12px 14px; display: none; color: #e2e8f0; }
-  #tourbar .tstep { color: #fbbf24; font-size: 10.5px; letter-spacing: .16em; font-weight: 800; }
-  #tourbar h3 { margin: 3px 0 5px; font-size: 15px; }
-  #tourbar p { margin: 0 0 9px; font-size: 12.5px; line-height: 1.5; color: #c9ced4; }
+  /* build 37: compact, top-centre under the title bar (top is set by tourPlace) */
+  #tourbar { position: fixed; left: 50%; transform: translateX(-50%); top: 104px; z-index: 12;
+    width: min(440px, 92vw); background: rgba(23,26,31,.92); border: 1px solid rgba(217,165,20,.5);
+    border-radius: 12px; padding: 8px 12px; display: none; color: #e2e8f0; box-sizing: border-box;
+    max-height: 40vh; overflow-y: auto; }
+  #tourbar .tstep { color: #fbbf24; font-size: 10px; letter-spacing: .16em; font-weight: 800; }
+  #tourbar h3 { margin: 2px 0 3px; font-size: 13.5px; }
+  #tourbar p { margin: 0 0 6px; font-size: 12px; line-height: 1.42; color: #c9ced4; }
   #tourbar .trow { display: flex; gap: 8px; justify-content: flex-end; }
   #tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; z-index: 12;
     display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96vw; }
@@ -90,7 +92,8 @@
     #tabbar .tab { text-align: center; font-size: 9px; padding: 7px 2px; letter-spacing: .02em; }
     #tabbar #btnHub { grid-column: auto; }
     #panCache.open, #panView.open, #panLearn.open { bottom: 46px; z-index: 45; max-height: 34vh; }
-    #tourbar { bottom: 50px; width: 94vw; padding: 8px 10px; }
+    #tourbar { width: 94vw; padding: 7px 10px; }
+    #tourbar p { font-size: 11.5px; }
     #stick { bottom: 60px; }
   }
   #routedom { position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 12;
@@ -420,7 +423,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 36</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 37</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -440,6 +443,7 @@ window.doorGo = function (href) {
   <div class="row tabpanel" data-tab="learn" id="panLearn">
     <button id="btnTour">Tutorial: step-by-step</button>
     <button id="btnDiag">Debug</button>
+    <button id="btnVoice" data-voice-toggle>Voice guide: on</button>
   </div>
   <div id="diag" style="display:none; margin-top:7px; font-size:11px; color:#94a3b8;
        white-space:pre-line; max-height:32vh; overflow-y:auto;"></div>
@@ -539,7 +543,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 36\n' +
+    'build 37\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -2023,7 +2027,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 36'
+      'build 37'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */
@@ -2229,39 +2233,58 @@ window.__cdn = {
   USERS: USERS, EDGES: EDGES, ORIGIN: ORIGIN
 };
 /* ---- guided tutorial: performs a sample interaction step by step ---------- */
+/* build 37: these helpers moved inside this scope - outside it they could not see
+   labelsOn / hudOn / cache / stats, so tutorial steps 1, 2 and 6 threw an error */
+function clearCaches () { cache = {}; stats.hits = 0; stats.total = 0; refreshCacheVisuals(); }
+function setLabels (on) { var b = document.getElementById('btnLabels'); if (labelsOn !== on) { b.click(); } }
+function setReadouts (on) { var b = document.getElementById('btnHud'); if (hudOn !== on) { b.click(); } }
+/* voice guide (shared helper in xr-quest.js; silent if unavailable) */
+function tourSay (st) {
+  if (!window.XRQ || !XRQ.say) { return; }
+  if (!st) { XRQ.hush(); return; }
+  var t = st.t.toLowerCase().replace(/^step: /, '');
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  XRQ.say((st.x.toLowerCase().indexOf(t.toLowerCase()) === 0 ? '' : t + '. ') + st.x);
+}
+/* keep the card just under the top bar so the globe and ROUTE readout stay clear */
+function tourPlace (bar) {
+  var ov = document.getElementById('overlay');
+  var r = ov && ov.getBoundingClientRect ? ov.getBoundingClientRect() : null;
+  bar.style.top = Math.round((r && r.height > 0 ? r.bottom : 0) + 8) + 'px';
+}
 var TOUR = [
   { t: 'THE EDGE NETWORK',
-    x: 'Spin the globe: the small bright dots are EDGE sites - servers placed in cities near users. The red block is the ORIGIN, the one place the real content lives. A CDN is simply many copies of content kept close to people.',
+    x: 'Spin the globe: the small bright dots are edge servers in cities near users, and the red block is the origin, where the content really lives. A CDN keeps copies close to people.',
     act: function () { globeRoot.setAttribute('globe-orbit', 'spin', true); setLabels(true); } },
   { t: 'STEP: A USER ASKS (CACHE MISS)',
-    x: 'Watch Vancouver tap for content. The request flies to its nearest edge first. The edge has no copy - a MISS - so it fetches from the origin across the continent, stores a copy, and only then answers the user. Slow path: user, edge, origin, back.',
+    x: 'Vancouver asks for content. Its nearest edge has no copy (a MISS), so it fetches from the far-away origin first. That is the slow path.',
     act: function () { clearCaches(); var u = USERS[4]; request(u); } },
   { t: 'THE EDGE NOW HOLDS A COPY',
-    x: 'See the edge marker turn healthy: it cached the object. How long it keeps it is the TTL - the slider top left. Infinity means never expire; a short TTL means fresher content but more misses.',
+    x: 'The edge now keeps a copy. The TTL slider (top left) sets how long it stays fresh: longer means more hits, shorter means fresher content.',
     act: function () { refreshCacheVisuals(); } },
   { t: 'STEP: THE SAME USER ASKS AGAIN (CACHE HIT)',
-    x: 'Same city, same content, second time: the edge answers straight from its copy - a HIT. Compare the millis in the ROUTE panel: the hit is a fraction of the miss. That gap is the whole point of a CDN.',
+    x: 'Same request again: the edge answers from its copy (a HIT). Compare the milliseconds in the ROUTE panel: the hit is much faster.',
     act: function () { request(USERS[4]); } },
   { t: 'TTL - HOW LONG A COPY COUNTS',
-    x: 'Setting the TTL to 10 seconds: after that the copy is stale and the next request misses again. Real CDNs pick TTLs per content: logos for days, stock prices for seconds.',
+    x: 'TTL set to 10 seconds: after that the copy expires and the next request misses again. Logos keep for days, stock prices for seconds.',
     act: function () { var t = document.getElementById('ttl'); t.value = 10; t.dispatchEvent(new Event('input')); } },
   { t: 'DISTANCE IS LATENCY',
-    x: 'Readouts on: every label shows the simulated round trip. Light in fibre is about 200,000 km/s, so Auckland can never beat Vancouver to a US origin. Caching is the only way to beat geography.',
+    x: 'Each label now shows the round-trip time. Distance means delay, and caching is the only way around it.',
     act: function () { setReadouts(true); } },
   { t: 'YOUR TURN',
-    x: 'Tap any coloured city to launch its request and watch hit or miss. Walk the room with WASD, walk through the teal MAIN HALL portal to return to the entrance hall, or press AR to place the whole network on your desk and tap cities in your room. In the headset this chapter opens in VR; the panel\'s Switch to AR button brings the globe into your room and Back to VR returns.',
+    x: 'Your turn: tap any coloured city and watch for a hit or a miss. The teal MAIN HALL portal takes you back; AR puts the globe on your desk or in your room.',
     act: function () { globeRoot.setAttribute('globe-orbit', 'spin', false); } }
 ];
 var tourI = -1;
 function tourShow () {
   var bar = document.getElementById('tourbar');
-  if (tourI < 0) { bar.style.display = 'none'; return; }
+  if (tourI < 0) { bar.style.display = 'none'; tourSay(null); return; }
   var st = TOUR[tourI];
   document.getElementById('tStep').textContent = 'STEP ' + (tourI + 1) + ' / ' + TOUR.length;
   document.getElementById('tTitle').textContent = st.t;
   document.getElementById('tText').textContent = st.x;
   document.getElementById('tNext').textContent = tourI === TOUR.length - 1 ? 'Finish' : 'Next';
-  bar.style.display = 'block';
+  bar.style.display = 'block'; tourPlace(bar); tourSay(st);
   if (st.act) { try { st.act(); } catch (e) { setStatus('tutorial: ' + e.message, 'warn'); } }
 }
 document.getElementById('btnTour').addEventListener('click', function () {
@@ -2283,9 +2306,6 @@ function paintBoard (id, title, lines, step) {
   g.fillStyle = '#e2e8f0'; g.font = '400 34px system-ui, sans-serif';
   lines.forEach(function (ln, i) { g.fillText(ln, 40, 150 + i * (step || 74)); });
 }
-function clearCaches () { cache = {}; stats.hits = 0; stats.total = 0; refreshCacheVisuals(); }
-function setLabels (on) { var b = document.getElementById('btnLabels'); if (labelsOn !== on) { b.click(); } }
-function setReadouts (on) { var b = document.getElementById('btnHud'); if (hudOn !== on) { b.click(); } }
 
 
 

@@ -67,6 +67,23 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 37 (29 Oct 2026) - voice guide, shorter guide texts, smaller cards
+- **Voice guide (built-in speech, all three chapters):** each guide text is read aloud when it opens; closing it stops the voice.
+  - ch1: tour steps, info spheres, machine cards, scenario briefs.
+  - ch2: both explain boards and the info pop-ups.
+  - ch3: tutorial steps.
+  - Uses the browser's own `speechSynthesis`: no audio files, no account. Where a browser has no speech it stays silent with no error.
+  - **Voice guide on/off** button in each help tab (ch1 HELP & TOUR, ch2 EXPLAIN & HELP, ch3 TUTORIAL & DEBUG). The choice is remembered in this browser; `?voice=0` or `?sound=0` mutes it.
+  - In the headset this makes the ch1 tour and the ch3 tutorial usable: their text cards are 2D and not visible in VR.
+- **Guide texts about 50% shorter**, in plain words. The key numbers are kept: N+1, 2N, under 10 ms, 10 to 15 s, 21 C, 70% / 30%, TTL.
+- **Cards block less of the view, same places:**
+  - ch1 top cards: 560 → 440 px wide, smaller type.
+  - ch1 3D info cards: 1.8 × 1.0 → 1.5 × 0.64 m.
+  - ch2 explain boards: 3.3 × 2.1 → 2.7 × 1.5 m.
+  - ch3 tutorial card: 440 px wide, now under the top bar instead of over the tab bar and the ROUTE readout.
+- **Fix (ch3):** tutorial steps 1, 2 and 6 threw "labelsOn is not defined" (since build 31c), so they did not spin the globe, clear the caches or turn the readouts on. The helper functions moved into the right scope.
+- Stamps read "build 37".
+
 ## Build 36 (26 Oct 2026) - chapter 3: clicking the globe works in the headset
 - **Root cause:** the Quest Browser does not run `window.requestAnimationFrame` while a VR/AR session is active. Chapter 3's packet flights, pulses and flashes used it.
   - The first city click started an animation that never moved, so the request never finished.

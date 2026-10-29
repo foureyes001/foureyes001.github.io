@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 36).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 37).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 36';
+  var BUILD = 'build 37';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -1498,4 +1498,99 @@
       }
     }
   });
+  /* ---------- build 37: voice guide -------------------------------------------
+     XRQ.say(text) reads a guide text aloud with the browser's built-in speech
+     (speechSynthesis: no audio files, no account, works offline on most devices).
+     A new text always replaces the one being read. XRQ.hush() stops it.
+     Off with ?voice=0 or ?sound=0, or the "Voice" button in a help tab
+     (remembered in this browser). Silent, never an error, where speech is missing. */
+  XRQ.voice = (function () {
+    var synth = window.speechSynthesis, UtterC = window.SpeechSynthesisUtterance;
+    var forced = /[?&](voice|sound)=0/.test(location.search);
+    var on = true, pick = null, gen = 0, last = '';
+    try { if (localStorage.getItem('itc-voice') === 'off') { on = false; } } catch (e) { /* storage blocked */ }
+    function ok () { return !!(synth && UtterC) && !forced && on; }
+    function choose () {
+      if (!synth) { return null; }
+      var vs = []; try { vs = synth.getVoices() || []; } catch (e) { vs = []; }
+      var en = vs.filter(function (v) { return /^en([-_]|$)/i.test(v.lang || ''); });
+      if (!en.length) { return null; }
+      function score (v) {
+        var n = (v.name || '') + ' ' + (v.lang || ''), s = 0;
+        if (/natural|neural|online/i.test(n)) { s += 4; }
+        if (/google/i.test(n)) { s += 3; }
+        if (/en[-_](GB|IN|US)/i.test(v.lang || '')) { s += 2; }
+        if (v.localService) { s += 1; }
+        if (/novelty|whisper|bad news|bells|zarvox|bubbles|cellos|trinoids|albert|jester|organ|boing|hysterical|superstar|wobble|deranged|good news/i.test(n)) { s -= 20; }
+        return s;
+      }
+      en.sort(function (a, b) { return score(b) - score(a); });
+      return en[0];
+    }
+    if (synth && 'onvoiceschanged' in synth) {
+      try { synth.addEventListener('voiceschanged', function () { pick = choose(); }); } catch (e) { /* old engines */ }
+    }
+    /* how the short texts should sound (abbreviations, units) */
+    var SAY = [
+      [/\bN\+1\b/g, 'N plus 1'], [/\b2N\b/g, '2 N'], [/\bA\s*\+\s*B\b/g, 'A and B'],
+      [/(\d)\s*C\b/g, '$1 degrees'], [/(\d)\s*kV\b/g, '$1 kilovolts'], [/(\d)\s*ms\b/g, '$1 milliseconds'],
+      [/(\d)\s*s\b/g, '$1 seconds'], [/(\d)U\b/g, '$1 U'], [/24\/7/g, 'around the clock'],
+      [/\bCRACs\b/g, 'cracks'], [/\bCRAC(-?\d)?\b/g, function (m, d) { return 'crack' + (d ? ' ' + d.replace('-', '') : ''); }],
+      [/\bTTL\b/g, 'T T L'], [/\bWASD\b/g, 'W A S D'], [/\bCDN\b/g, 'C D N'],
+      [/\b(HIT|MISS|EDGE|ORIGIN|PRIMARY|WRITE|READ)\b/g, function (m) { return m.toLowerCase(); }],
+      [/%/g, ' percent'], [/\s+-\s+/g, ', '], [/\s{2,}/g, ' ']
+    ];
+    function speakable (t) {
+      var s = String(t || '');
+      SAY.forEach(function (r) { s = s.replace(r[0], r[1]); });
+      return s.trim();
+    }
+    function hush () { gen++; last = ''; if (synth) { try { synth.cancel(); } catch (e) { /* ignore */ } } }
+    function say (text) {
+      if (!ok() || !text) { return false; }
+      var t = speakable(text); if (!t) { return false; }
+      var my = ++gen; last = t;
+      try { synth.cancel(); } catch (e) { /* ignore */ }
+      /* Chrome can drop a speak() issued in the same task as cancel(): wait a beat */
+      setTimeout(function () {
+        if (my !== gen || !ok()) { return; }
+        try {
+          var u = new UtterC(t);
+          if (!pick) { pick = choose(); }
+          if (pick) { u.voice = pick; u.lang = pick.lang; } else { u.lang = 'en-US'; }
+          u.rate = 1; u.pitch = 1; u.volume = 1;
+          XRQ.voiceSpoken = (XRQ.voiceSpoken || 0) + 1; XRQ.voiceLast = t;
+          if (synth.paused) { synth.resume(); }
+          synth.speak(u);
+        } catch (e) { /* speech unavailable: the text is still on screen */ }
+      }, 80);
+      return true;
+    }
+    function label (el) {
+      var l = el.querySelector('[data-voice-label]') || el;
+      l.textContent = (l === el ? 'Voice guide: ' : 'Voice guide · ') + (ok() ? 'on' : 'off');
+      el.setAttribute('aria-pressed', ok() ? 'true' : 'false');
+      if (!synth || forced) { el.disabled = true; el.title = synth ? 'muted by ?voice=0 / ?sound=0' : 'this browser has no speech'; }
+    }
+    function set (v) {
+      on = !!v;
+      try { localStorage.setItem('itc-voice', on ? 'on' : 'off'); } catch (e) { /* storage blocked */ }
+      if (!on) { hush(); }
+      Array.prototype.forEach.call(document.querySelectorAll('[data-voice-toggle]'), label);
+      if (on) { say('Voice guide on.'); }
+    }
+    function wire () {
+      Array.prototype.forEach.call(document.querySelectorAll('[data-voice-toggle]'), function (el) {
+        label(el);
+        if (el.__voiceWired) { return; } el.__voiceWired = true;
+        el.addEventListener('click', function () { set(!on); });
+      });
+    }
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', wire); } else { wire(); }
+    window.addEventListener('pagehide', hush);
+    return { say: say, hush: hush, set: set, isOn: ok, speakable: speakable,
+             state: function () { return !synth ? 'none' : forced ? 'muted' : on ? 'on' : 'off'; } };
+  })();
+  XRQ.say = XRQ.voice.say;
+  XRQ.hush = XRQ.voice.hush;
 })();
