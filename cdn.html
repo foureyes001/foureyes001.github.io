@@ -423,7 +423,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 37</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 38</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -543,7 +543,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 37\n' +
+    'build 38\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -2027,7 +2027,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 37'
+      'build 38'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */
@@ -2242,6 +2242,7 @@ function setReadouts (on) { var b = document.getElementById('btnHud'); if (hudOn
 function tourSay (st) {
   if (!window.XRQ || !XRQ.say) { return; }
   if (!st) { XRQ.hush(); return; }
+  if (st.say) { XRQ.say(st.say); return; }      /* build 38: short spoken summary */
   var t = st.t.toLowerCase().replace(/^step: /, '');
   t = t.charAt(0).toUpperCase() + t.slice(1);
   XRQ.say((st.x.toLowerCase().indexOf(t.toLowerCase()) === 0 ? '' : t + '. ') + st.x);
@@ -2255,24 +2256,31 @@ function tourPlace (bar) {
 var TOUR = [
   { t: 'THE EDGE NETWORK',
     x: 'Spin the globe: the small bright dots are edge servers in cities near users, and the red block is the origin, where the content really lives. A CDN keeps copies close to people.',
+    say: 'Edge servers near users keep copies of content, so it does not have to come from the far-away origin.',
     act: function () { globeRoot.setAttribute('globe-orbit', 'spin', true); setLabels(true); } },
   { t: 'STEP: A USER ASKS (CACHE MISS)',
     x: 'Vancouver asks for content. Its nearest edge has no copy (a MISS), so it fetches from the far-away origin first. That is the slow path.',
+    say: 'The first request is a miss, so the edge has to fetch it from the origin, which is slow.',
     act: function () { clearCaches(); var u = USERS[4]; request(u); } },
   { t: 'THE EDGE NOW HOLDS A COPY',
     x: 'The edge now keeps a copy. The TTL slider (top left) sets how long it stays fresh: longer means more hits, shorter means fresher content.',
+    say: 'The edge now keeps a copy for as long as the TTL allows.',
     act: function () { refreshCacheVisuals(); } },
   { t: 'STEP: THE SAME USER ASKS AGAIN (CACHE HIT)',
     x: 'Same request again: the edge answers from its copy (a HIT). Compare the milliseconds in the ROUTE panel: the hit is much faster.',
+    say: 'The second request is a hit: it is answered from the copy, much faster.',
     act: function () { request(USERS[4]); } },
   { t: 'TTL - HOW LONG A COPY COUNTS',
     x: 'TTL set to 10 seconds: after that the copy expires and the next request misses again. Logos keep for days, stock prices for seconds.',
+    say: 'When the TTL runs out, the copy expires and the next request misses again.',
     act: function () { var t = document.getElementById('ttl'); t.value = 10; t.dispatchEvent(new Event('input')); } },
   { t: 'DISTANCE IS LATENCY',
     x: 'Each label now shows the round-trip time. Distance means delay, and caching is the only way around it.',
+    say: 'The farther away the server, the longer the wait.',
     act: function () { setReadouts(true); } },
   { t: 'YOUR TURN',
     x: 'Your turn: tap any coloured city and watch for a hit or a miss. The teal MAIN HALL portal takes you back; AR puts the globe on your desk or in your room.',
+    say: 'Your turn: tap a city and see whether it is a hit or a miss.',
     act: function () { globeRoot.setAttribute('globe-orbit', 'spin', false); } }
 ];
 var tourI = -1;

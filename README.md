@@ -67,6 +67,17 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 38 (29 Oct 2026) - voice speaks a short summary, cards keep the detail
+- **Two levels per guide:** the card on screen keeps its text for reading; the voice speaks a one-sentence summary.
+  - Example, ch1 tour step 2: the card says "Your request is handled by one of these racks of 20 to 40 servers. Each rack has two power feeds …"; the voice says "Each rack holds the servers that answer your request."
+- **45 summaries:**
+  - ch1: 8 tour steps, 6 info spheres, 3 scenario briefs, the machine cards (CRAC, UPS, rack, utility, ATS, generator) and 5 power lines
+  - ch2: both explain boards and the 4 info pop-ups (load balancer, users, server, database)
+  - ch3: 7 tutorial steps
+- If an item has no summary, the voice reads the full card text, so nothing goes silent.
+- Card texts, sizes and positions are unchanged from build 37.
+- Stamps read "build 38".
+
 ## Build 37 (29 Oct 2026) - voice guide, shorter guide texts, smaller cards
 - **Voice guide (built-in speech, all three chapters):** each guide text is read aloud when it opens; closing it stops the voice.
   - ch1: tour steps, info spheres, machine cards, scenario briefs.

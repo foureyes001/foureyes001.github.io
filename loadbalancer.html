@@ -757,7 +757,8 @@ window.doorGo = function (href) {
     hit.addEventListener('click', function () {
       openInfo('INSTANCE ' + (s.id + 1) + (s.state === 'launching' ? ' (LAUNCHING)' : ''),
         'compute node · 8 vCPU · 32 GB RAM\nin flight ' + s.inFlight.length + '/' + CAP + ' · queued ' + s.queue.length +
-        '\nCPU ' + Math.round(s.cpu) + '% · weight ' + WEIGHTS[s.id] + '\nstate: ' + s.state, s.grp.position);
+        '\nCPU ' + Math.round(s.cpu) + '% · weight ' + WEIGHTS[s.id] + '\nstate: ' + s.state, s.grp.position,
+        'Server ' + (s.id + 1) + ': one machine in the pool, working on ' + s.inFlight.length + ' requests right now.');
     });
   }
   function placeServer (s, angle) {
@@ -1490,7 +1491,8 @@ window.doorGo = function (href) {
     openInfo(k === 'primary' ? 'PRIMARY DATABASE' : 'READ REPLICA ' + u.id,
       k === 'primary' ? 'the single writable copy\nevery gold spark (a write) lands here\nthen streams to both replicas\nops ' + u.ops
         : 'read-only copy of the primary\nserves teal sparks (reads) in rotation\nops ' + u.ops + ' · state ' + u.state + '\nreplication lag ~' + Math.round(u.lagMs) + ' ms',
-      DBP[k]);
+      DBP[k], k === 'primary' ? 'The primary database: every write is saved here first.'
+        : 'A read-only copy of the database that answers reads.');
   }
   function dbSyncButtons () {
     var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
@@ -1582,12 +1584,12 @@ window.doorGo = function (href) {
     (lines || []).forEach(function (ln, i) { txt(g, ln, 44, 132 + i * (size + 14), size, '#e6f6ff', 500); });
     B.t.needsUpdate = true;
   }
-  function openInfo (title, body, pos) {
+  function openInfo (title, body, pos, say) {
     if (!infoEl) { infoEl = document.getElementById('info'); }
     drawBoard('info', title, String(body).split('\n'), 34);
     infoEl.object3D.position.set(pos.x, Math.max(2.3, pos.y + 2.2), pos.z + 0.4);
     infoEl.setAttribute('visible', true);
-    speak(title.charAt(0) + title.slice(1).toLowerCase() + '. ' + String(body).split('\n').join('. '));
+    speak(say || (title.charAt(0) + title.slice(1).toLowerCase() + '. ' + String(body).split('\n').join('. ')));
     clearTimeout(openInfo.t); openInfo.t = setTimeout(function () { infoEl.setAttribute('visible', false); }, 8000);
   }
   function algoName () { return ALGOS.filter(function (a) { return a.k === algo; })[0].n; }
@@ -1620,7 +1622,7 @@ window.doorGo = function (href) {
     var e = document.getElementById('explain'); var on = !e.object3D.visible;
     e.object3D.visible = on; if (on && window.XRQ && XRQ.inXR && XRQ.inXR(scene)) { XRQ.faceUser(e, 2.3, 1.7); }
     setStatus(on ? 'explainer open' : 'explainer closed');
-    if (on) { speak(spoken('HOW THIS ROOM WORKS', EXPLAIN)); } else { hush(); }
+    if (on) { speak(EXPLAIN_SAY); } else { hush(); }
   }
   function doReset () {
     servers.forEach(function (s, i) { s.state = i < 2 ? 'active' : 'hidden'; s.inFlight = []; s.queue = []; s.cpu = 10; s.launchT = 1; });
@@ -1735,6 +1737,9 @@ window.doorGo = function (href) {
     '3  Reads (teal) are shared by the replicas.',
     '4  Kill a replica: the other takes its reads.',
     '5  A restored replica resyncs, then rejoins.'];
+  /* build 38: the voice gives a one-line summary; the board keeps the detail */
+  var EXPLAIN_SAY = 'The load balancer shares requests between servers, and auto-scaling adds or removes servers as traffic changes.';
+  var DBEXPLAIN_SAY = 'Writes go to the primary database, which copies them to the replicas, and the replicas answer the reads.';
   function explainTexts () {
     board('info', 2.2, 1.25); board('explain', 2.7, 1.5); board('dbexplain', 2.7, 1.5, '#fbbf24');
     drawBoard('explain', 'HOW THIS ROOM WORKS', EXPLAIN, 29);
@@ -1780,14 +1785,16 @@ window.doorGo = function (href) {
     zone(PANELS.auto, 40, 110 + 4 * 56, 470, 60, toggleCd);
     zone(PANELS.db, 44, 246, 400, 58, dbToggle);
     zone(PANELS.users, 40, 90, 380, 150, function () {
-      openInfo('USERS (LIVE)', 'people around the world pressing refresh\neach strand of light is a stream of requests\ninto the load balancer\ntraffic ' + rate + ' req/s (TRAFFIC & POOL)', PANELS.users.holder.position);
+      openInfo('USERS (LIVE)', 'people around the world pressing refresh\neach strand of light is a stream of requests\ninto the load balancer\ntraffic ' + rate + ' req/s (TRAFFIC & POOL)', PANELS.users.holder.position,
+        'People around the world sending requests to the load balancer.');
     });
     var lbHit = document.createElement('a-entity');
     lbHit.setAttribute('class', 'clickable'); lbHit.setAttribute('geometry', 'primitive: box; width: 2.1; height: 3.0; depth: 1.0');
     lbHit.setAttribute('material', 'visible: false'); lbHit.setAttribute('position', LBP.x + ' ' + (LBP.y + 1.5) + ' ' + LBP.z);
     document.getElementById('world').appendChild(lbHit);
     lbHit.addEventListener('click', function () {
-      openInfo('LOAD BALANCER', 'single entry point (L4/L7 reverse proxy)\nalgorithm: ' + algoName() + '\npool min 2 / max 8 instances\ncooldown ' + (cooldownOn ? 'on' : 'off'), LBP);
+      openInfo('LOAD BALANCER', 'single entry point (L4/L7 reverse proxy)\nalgorithm: ' + algoName() + '\npool min 2 / max 8 instances\ncooldown ' + (cooldownOn ? 'on' : 'off'), LBP,
+        'The load balancer sends each request to a server, using ' + algoName().toLowerCase() + '.');
     });
     explainTexts();
     drawTeach(); drawAlgos(); drawAutoscale(); drawUsers(0); drawQueue(); drawDb(); drawLbFace();
@@ -1828,7 +1835,7 @@ window.doorGo = function (href) {
     var dbExOn = false;
     document.getElementById('b-dbex').addEventListener('click', function () {
       dbExOn = !dbExOn; document.getElementById('dbexplain').object3D.visible = dbExOn;
-      if (dbExOn) { speak(spoken('WHEN A REQUEST FINISHES', DBEXPLAIN)); } else { hush(); }
+      if (dbExOn) { speak(DBEXPLAIN_SAY); } else { hush(); }
       document.getElementById('b-dbex').textContent = dbExOn ? 'hide the explanation' : 'explain the db tier';
     });
     document.getElementById('t-explain').addEventListener('click', toggleExplain);
@@ -2004,6 +2011,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 37</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 38</div>
 </body>
 </html>

@@ -484,7 +484,7 @@ window.doorGo = function (href) {
     </button>
     <button id="btn-voice" class="btn" type="button" data-voice-toggle>
       <span data-voice-label>Voice guide · on</span>
-      <small>reads the tour and info cards aloud</small>
+      <small>speaks a short summary of each card</small>
     </button>
     <b>Guides</b> (G or MOVE &amp; VIEW) show the teleport rings and info spheres ·
     <b>Drag</b> to look · <b>tap a glowing ring</b> to teleport · <b>tap a cyan sphere</b>
@@ -1186,32 +1186,38 @@ document.addEventListener('DOMContentLoaded', function () {
     {
       id: 'rack', label: 'SERVER RACK', hs: [1.44, 0.95, 1.5], panel: [0, 1.8, -1.5], ps: 1,
       title: 'SERVER RACK - WHERE THE REQUEST LANDS',
-      body: 'Each 42U rack holds 20 to 40 servers that answer your request. Two separate power feeds (A and B) keep it running; cold air goes in the front, hot air out the back.'
+      body: 'Each 42U rack holds 20 to 40 servers that answer your request. Two separate power feeds (A and B) keep it running; cold air goes in the front, hot air out the back.',
+      say: 'Racks hold the servers, and each one has two power feeds.'
     },
     {
       id: 'aisle', label: 'COLD / HOT AISLE', hs: [0, 1.32, 5.25], panel: [0, 2.42, 5.25], ps: 1,
       title: 'COLD AISLE vs HOT AISLE',
-      body: 'Racks face each other so their fronts share a cold aisle fed by floor tiles, and their backs blow hot air into the hot aisles. Keeping the two apart prevents hot spots.'
+      body: 'Racks face each other so their fronts share a cold aisle fed by floor tiles, and their backs blow hot air into the hot aisles. Keeping the two apart prevents hot spots.',
+      say: 'Cold air goes into the front of the racks, hot air comes out the back, and the two are kept apart.'
     },
     {
       id: 'crac', label: 'CRAC UNIT', hs: [-8.32, 0.9, 1.25], panel: [-7.55, 2.78, 1.25], ps: 1,
       title: 'CRAC - COMPUTER ROOM AIR CONDITIONER',
-      body: 'A CRAC pulls in hot air, cools it and blows it under the raised floor. Two units run and a third waits on standby (N+1).'
+      body: 'A CRAC pulls in hot air, cools it and blows it under the raised floor. Two units run and a third waits on standby (N+1).',
+      say: 'This unit cools the hot air. Two run, and one is a spare.'
     },
     {
       id: 'ups', label: 'UPS (2N)', hs: [8.1, 1.02, 1.75], panel: [7.15, 2.72, 0.5], ps: 1,
       title: 'UPS - UNINTERRUPTIBLE POWER SUPPLY',
-      body: 'The UPS keeps batteries charged and takes over in under 10 ms if the grid fails. Two independent systems (2N) can each carry the whole hall.'
+      body: 'The UPS keeps batteries charged and takes over in under 10 ms if the grid fails. Two independent systems (2N) can each carry the whole hall.',
+      say: 'Batteries take over instantly if the grid fails.'
     },
     {
       id: 'gen', label: 'DIESEL GENERATOR', hs: [5.68, 1.3, -10.75], panel: [6.4, 2.32, -8.188], ps: 1.25,
       title: 'DIESEL GENERATOR - THE LONG BACKUP',
-      body: 'If the grid stays down, the diesel generator starts and takes the load within 10 to 15 seconds. Its fuel lasts 24 to 48 hours.'
+      body: 'If the grid stays down, the diesel generator starts and takes the load within 10 to 15 seconds. Its fuel lasts 24 to 48 hours.',
+      say: 'The generator takes over within seconds and runs for a day or two on its fuel.'
     },
     {
       id: 'tray', label: 'CABLE TRAYS', hs: [0.62, 3.3, 10.75], panel: [0, 2.35, 12.375], ps: 1,
       title: 'OVERHEAD CABLE TRAYS - FIBRE AND POWER',
-      body: 'Fibre and copper cables run in trays above the aisle, away from power cables. Backup routes leave by different paths, so one cut cannot isolate the site.'
+      body: 'Fibre and copper cables run in trays above the aisle, away from power cables. Backup routes leave by different paths, so one cut cannot isolate the site.',
+      say: 'Network cables run overhead, with backup routes in case one is cut.'
     }
   ];
 
@@ -2063,14 +2069,17 @@ AFRAME.registerComponent('billboard', {
   /* --- real-life scenario briefs: shown top-centre for exactly 8 s --------- */
   var BRIEFS = {
     A: { tag: 'SCENARIO A - COOLING FAILURE - WHAT HAPPENS IN REAL LIFE',
-         text: 'CRAC-2 has failed. Standby CRAC-3 starts automatically and takes over (N+1), so the servers keep running with 0 ms downtime.' },
+         text: 'CRAC-2 has failed. Standby CRAC-3 starts automatically and takes over (N+1), so the servers keep running with 0 ms downtime.',
+         say: 'One air conditioner failed, and the spare took over with no downtime.' },
     B: { tag: 'SCENARIO B - UTILITY POWER LOSS - WHAT HAPPENS IN REAL LIFE',
-         text: 'The grid has failed. UPS batteries take the load instantly while the generator starts, then the ATS switches to generator power. No server notices.' }
+         text: 'The grid has failed. UPS batteries take the load instantly while the generator starts, then the ATS switches to generator power. No server notices.',
+         say: 'The grid failed, and the batteries, then the generator, kept everything running.' }
   };
 
   BRIEFS.C = {
     tag: 'SCENARIO C - TRAFFIC SURGE - WHAT HAPPENS IN REAL LIFE',
-    text: 'A traffic spike triples the load and heats row A. The CRACs ramp up and the load balancer spreads traffic across both rows, so nothing is dropped.'
+    text: 'A traffic spike triples the load and heats row A. The CRACs ramp up and the load balancer spreads traffic across both rows, so nothing is dropped.',
+         say: 'Traffic tripled, and extra cooling plus load balancing handled it with nothing dropped.'
   };
 
   /* --- builder-focus: pooled highlight rigs (the pulsing red ring that marks the
@@ -2158,28 +2167,36 @@ AFRAME.registerComponent('billboard', {
   /* --- guided tour: step by step through how the data centre works ---------------- */
   var TOUR = [
     { title: 'The hall - "the cloud" is a room', view: [0, 15, 0],
-      body: 'This hall is where the cloud computes: 16 server racks, cooling on the left, power on the right. Every critical part has a backup, so one failure never stops your request.' },
+      body: 'This hall is where the cloud computes: 16 server racks, cooling on the left, power on the right. Every critical part has a backup, so one failure never stops your request.',
+      say: 'This room is the cloud: racks of servers, with cooling and power that all have a backup.' },
     { title: 'Server racks - where requests live', view: [0, 8.1, 0],
       focus: [[-2, 0, 1.5], 0.85],
-      body: 'Your request is handled by one of these racks of 20 to 40 servers. Each rack has two power feeds and takes cold air in the front, hot air out the back.' },
+      body: 'Your request is handled by one of these racks of 20 to 40 servers. Each rack has two power feeds and takes cold air in the front, hot air out the back.',
+      say: 'Each rack holds the servers that answer your request.' },
     { title: 'Cold aisle - chilled air from the floor', view: [0, 10.6, 0],
       focus: [[0, 0, 5.25], 1.1],
-      body: 'Racks face each other to form a cold aisle. Floor tiles push 21 C air into the servers; keeping cold and hot air apart is rule number one.' },
+      body: 'Racks face each other to form a cold aisle. Floor tiles push 21 C air into the servers; keeping cold and hot air apart is rule number one.',
+      say: 'Cold air comes up from the floor into the front of the racks.' },
     { title: 'CRAC units - the air conditioners', view: [-6, 1, 90],
       focus: [[-10.9, 0, 1.25], 1.15],
-      body: 'CRACs cool the hot air and blow it under the floor. Two run, one waits on standby (N+1). Press Scenario A (key C) to watch one fail.' },
+      body: 'CRACs cool the hot air and blow it under the floor. Two run, one waits on standby (N+1). Press Scenario A (key C) to watch one fail.',
+      say: 'These air conditioners cool the room, and a spare waits in case one fails.' },
     { title: 'Hot aisle - where the heat goes', view: [3.2, 7.5, 0],
       focus: [[2, 0, 4.5], 0.85],
-      body: 'Hot exhaust (33 to 44 C) leaves the backs of the racks and returns to the CRACs. Press F to see the airflow.' },
+      body: 'Hot exhaust (33 to 44 C) leaves the backs of the racks and returns to the CRACs. Press F to see the airflow.',
+      say: 'Hot air leaves the back of the racks and flows back to the air conditioners.' },
     { title: 'Utility feed + ATS - the grid connection', view: [6, -2.5, -90],
       focus: [[10.95, 0, -8], 0.95, [10.95, 0, -1.25], 0.8],
-      body: 'Grid power arrives here at 11 kV. The transfer switch (ATS) switches over the instant the grid fails. Press Scenario B (key P) to try it.' },
+      body: 'Grid power arrives here at 11 kV. The transfer switch (ATS) switches over the instant the grid fails. Press Scenario B (key P) to try it.',
+      say: 'Grid power comes in here, and a switch moves to backup the moment it fails.' },
     { title: 'UPS - power that never blinks', view: [6, 2.9, -90],
       focus: [[10.7, 0, 4], 0.9, [10.7, 0, 1.75], 0.9],
-      body: 'Two UPS systems keep the power steady, and their batteries cover the gap with 0 ms interruption until the generator is ready.' },
+      body: 'Two UPS systems keep the power steady, and their batteries cover the gap with 0 ms interruption until the generator is ready.',
+      say: 'Batteries keep the power on, with no gap, until the generator starts.' },
     { title: 'Diesel generator - the last line', view: [4.5, -10.75, -90],
       focus: [[7, 0, -10.75], 1.9],
-      body: 'The diesel generator starts in seconds and can run for days. When the grid returns, power switches back and the batteries recharge.' }
+      body: 'The diesel generator starts in seconds and can run for days. When the grid returns, power switches back and the batteries recharge.',
+      say: 'The diesel generator is the last backup, and it can run for days.' }
   ];
 
   DC.tourOn = false; DC.tourStep = 0;
@@ -2197,7 +2214,7 @@ AFRAME.registerComponent('billboard', {
     if (st) { st.textContent = 'STEP ' + (DC.tourStep + 1) + ' / ' + TOUR.length; }
     if (ti) { ti.textContent = s2.title; }
     if (bd) { bd.textContent = s2.body; }
-    speak(s2.title + '. ' + s2.body);
+    speak(s2.say || (s2.title + '. ' + s2.body));
     var nx = document.getElementById('tour-next');
     if (nx) { nx.innerHTML = DC.tourStep === TOUR.length - 1 ? 'Finish \u2713' : 'Next \u2192'; }
     DC.clearAllFocus();
@@ -2238,38 +2255,45 @@ AFRAME.registerComponent('billboard', {
   }
   var CRAC_DOES = 'Cools hot air from the room and blows it under the raised floor into the cold aisle. Its fans run 24/7.';
   var UPS_DOES = 'Keeps power steady and covers any grid outage instantly from batteries until the generator takes over. ';
+  /* build 38: short spoken summaries (the card keeps the full text) */
+  var CRAC_SAY = 'Cools the room and sends cold air under the floor.';
+  var UPS_SAY = 'Batteries that keep the power on instantly during an outage.';
+  var RACK_SAY = 'Holds the servers that process your request.';
   var RACK_DOES = 'A cabinet of 20 to 40 servers that process your request. It has two power feeds (A+B) and takes cold air in the front, hot air out the back.';
   var UNITS = {
-    crac1: { name: 'CRAC-1', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES,
+    crac1: { name: 'CRAC-1', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES, say: CRAC_SAY,
              status: function () { return cracStatus(0); } },
-    crac2: { name: 'CRAC-2', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES,
+    crac2: { name: 'CRAC-2', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES, say: CRAC_SAY,
              status: function () { return cracStatus(1); } },
-    crac3: { name: 'CRAC-3', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES,
+    crac3: { name: 'CRAC-3', role: 'COOLING - COMPUTER ROOM AIR CONDITIONER', does: CRAC_DOES, say: CRAC_SAY,
              status: function () { return cracStatus(2); } },
     'util-in': { name: 'UTILITY INCOMER + TRANSFORMER', role: 'POWER - GRID ENTRANCE',
       does: 'Where grid power enters the site and is stepped down by transformers. Two feeds (2N) keep one outage from reaching the servers.',
+      say: 'Grid power comes into the building here.',
       status: function () {
         return chainStatus('utility', { live: ['UTILITY LIVE', 'ok'], fail: ['GRID FAILED', 'bad'] });
       } },
     ats: { name: 'ATS - AUTOMATIC TRANSFER SWITCH', role: 'POWER - UTILITY / GENERATOR CHANGEOVER',
       does: 'Switches the building to generator power the instant the grid fails, and back once the grid is stable again.',
+      say: 'Switches to generator power when the grid fails.',
       status: function () {
         return chainStatus('ats', { live: ['CLOSED - NORMAL', 'ok'], fail: ['ISOLATED', 'bad'] });
       } },
     upsA: { name: 'UPS-A (2N SIDE A)', role: 'POWER - UNINTERRUPTIBLE SUPPLY',
-      does: UPS_DOES + 'Side A feeds the A circuit of every rack.',
+      does: UPS_DOES + 'Side A feeds the A circuit of every rack.', say: UPS_SAY,
       status: function () {
         return chainStatus('ups', { ok: ['ONLINE - DOUBLE CONVERSION', 'ok'],
                                     live: ['ON BATTERY - DISCHARGING', 'info'], fail: ['FAULT', 'bad'] });
       } },
     upsB: { name: 'UPS-B (2N SIDE B)', role: 'POWER - UNINTERRUPTIBLE SUPPLY',
-      does: UPS_DOES + 'Side B feeds the B circuit of every rack.',
+      does: UPS_DOES + 'Side B feeds the B circuit of every rack.', say: UPS_SAY,
       status: function () {
         return chainStatus('ups', { ok: ['ONLINE - DOUBLE CONVERSION', 'ok'],
                                     live: ['ON BATTERY - DISCHARGING', 'info'], fail: ['FAULT', 'bad'] });
       } },
     gen: { name: 'GEN-1 - 500 kVA DIESEL', role: 'POWER - BACKUP GENERATOR',
       does: 'Backup power: starts within seconds of a grid failure, reaches full power in about 10 seconds and can run the site for days.',
+      say: 'Backup power that starts within seconds.',
       status: function () {
         if (S.power.chain.gen === 'ok') { return { text: 'RUNNING - CARRYING LOAD', cls: 'ok' }; }
         if (S.B.active && S.B.t >= 3.0) { return { text: 'CRANKING - TAKING LOAD', cls: 'warn' }; }
@@ -2282,26 +2306,31 @@ AFRAME.registerComponent('billboard', {
         var id = row.prefix + '-' + (i < 7 ? '0' : '') + (i + 1);
         UNITS['rack:' + id] = {
           name: 'SERVER RACK ' + id.toUpperCase(),
-          role: 'IT CABINET - 42U, ROW ' + row.prefix, does: RACK_DOES
+          role: 'IT CABINET - 42U, ROW ' + row.prefix, does: RACK_DOES, say: RACK_SAY
         };
       });
     });
     var CHAIN_INFO = {
       utility: ['UTILITY FEEDER', 'POWER PATH - GRID TO ATS',
-        'Carries grid power to the ATS. Red means the grid has failed.'],
+        'Carries grid power to the ATS. Red means the grid has failed.',
+        'Grid power line to the transfer switch.'],
       ats: ['ATS LINK', 'POWER PATH - THROUGH THE TRANSFER SWITCH',
-        'Utility or generator power passes through here on its way to the UPS.'],
+        'Utility or generator power passes through here on its way to the UPS.',
+        'Power line through the transfer switch.'],
       ups: ['UPS LINK', 'POWER PATH - UPS OUTPUT',
-        'Power from the UPS to the overhead busway. Cyan means it is running on battery.'],
+        'Power from the UPS to the overhead busway. Cyan means it is running on battery.',
+        'Power line from the batteries to the racks.'],
       load: ['OVERHEAD BUSWAY', 'POWER PATH - TO THE RACK ROWS',
-        'Overhead power line that feeds two supplies (A+B) into every rack.'],
+        'Overhead power line that feeds two supplies (A+B) into every rack.',
+        'Overhead line that feeds power to every rack.'],
       gen: ['GENERATOR FEEDER', 'POWER PATH - GENERATOR TO ATS',
-        'Brings generator power to the ATS.']
+        'Brings generator power to the ATS.',
+        'Generator power line.']
     };
     Object.keys(CHAIN_INFO).forEach(function (k) {
       var v = CHAIN_INFO[k];
       UNITS['chain:' + k] = {
-        name: v[0], role: v[1], does: v[2],
+        name: v[0], role: v[1], does: v[2], say: v[3],
         status: (function (kk) { return function () {
           var map = kk === 'ups'
             ? { ok: ['ONLINE', 'ok'], live: ['ON BATTERY', 'info'], fail: ['FAULT', 'bad'] }
@@ -2447,7 +2476,7 @@ AFRAME.registerComponent('billboard', {
     DC.openPanel = id;
     p.el.setAttribute('visible', 'true');
     var hs = HOTSPOTS.filter(function (h) { return h.id === id; })[0];
-    if (hs) { speak(capsToSpeech(hs.title) + '. ' + hs.body); }
+    if (hs) { speak(hs.say || (capsToSpeech(hs.title) + '. ' + hs.body)); }
     var s = p.scale, f = (s * 0.82).toFixed(3);
     p.el.setAttribute('animation', {
       property: 'scale', from: f + ' ' + f + ' ' + f, to: s + ' ' + s + ' ' + s,
@@ -2473,7 +2502,7 @@ AFRAME.registerComponent('billboard', {
     var el = document.getElementById('brief'); if (!el) { return; }
     document.getElementById('brief-tag').textContent = b.tag;
     document.getElementById('brief-text').textContent = b.text;
-    speak(b.text);
+    speak(b.say || b.text);
     el.hidden = false;
     var bar = document.getElementById('brief-bar');
     if (bar) { bar.classList.remove('run'); void bar.offsetWidth; bar.classList.add('run'); }
@@ -2504,7 +2533,7 @@ AFRAME.registerComponent('billboard', {
     document.getElementById('unit-role').textContent = u.role;
     document.getElementById('unit-name').textContent = u.name;
     document.getElementById('unit-does').textContent = u.does;
-    speak(capsToSpeech(u.name) + '. ' + u.does);
+    speak(capsToSpeech(u.name) + '. ' + (u.say || u.does));
     card.hidden = false;
     DC.refreshUnitStatus();
     if (DC._unitTimer) { clearInterval(DC._unitTimer); }
@@ -3299,7 +3328,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 37</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 38</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */
