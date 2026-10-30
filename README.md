@@ -67,6 +67,15 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 40 (30 Oct 2026) - phone AR: guided tour in chapters 1 and 2
+- **Phone AR (ch1, ch2):** once the table model is placed, the bottom AR bar shows **"▶ GUIDED TOUR"**. In AR, the tour is the learning mode: one fixed path.
+  - Each step shows a card (step, title, text, Back / Next / End tour) in place of the size and move buttons and speaks the short summary.
+  - A pulsing ring and beam inside the model marks the part being explained; it scales with the model.
+  - **ch1:** the 8 VR tour steps (the red focus rings plus cyan beams). The "Press Scenario …" sentences are left out in AR.
+  - **ch2:** a new 7-step tour along a request: users → load balancer → server pool → algorithms → auto-scaling → queue → database (the primary in gold).
+- **Shared code:** `xr-quest.js` (AR bar tour; `window.XRQ_ARTOUR = { steps, show, clear }`; `XRQ.arMarks`). The tour ends on Exit AR and on MOVE.
+- VR, desktop, Quest, ch3 and the lobby are unchanged. Stamps read "build 40".
+
 ## Build 39 (29 Oct 2026) - the Quest app opens straight into VR
 - **Installed app (Quest):** every page enters VR by itself.
   - The check for "inside the app" is Meta's `window.getDigitalGoodsService`.

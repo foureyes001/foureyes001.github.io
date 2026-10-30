@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 39).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 40).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 39';
+  var BUILD = 'build 40';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -723,6 +723,7 @@
         if (this.scanning) { this.say('Place the model first: aim at the floor or a table and tap'); return; }
         this.tourGo(0); return;
       }
+      if (!(this.tourI >= 0)) { return; }                     /* Back/Next/End only while touring */
       if (t === 'next') { if (this.tourI >= T.steps.length - 1) { this.tourEnd(); } else { this.tourGo(this.tourI + 1); } return; }
       if (t === 'back') { if (this.tourI > 0) { this.tourGo(this.tourI - 1); } return; }
       if (t === 'end') { this.tourEnd(); }
