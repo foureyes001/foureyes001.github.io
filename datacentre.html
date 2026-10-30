@@ -2240,6 +2240,20 @@ AFRAME.registerComponent('billboard', {
     DC.clearAllFocus();
   };
 
+  /* build 40: the same tour on the phone's AR table model (the AR bar in xr-quest.js
+     shows the card and speaks 'say'). No teleport: the red rings live inside the model,
+     so they shrink with it and mark the part being explained. */
+  window.XRQ_ARTOUR = {
+    steps: TOUR.map(function (t) { return { title: t.title, text: t.body, say: t.say }; }),
+    show: function (i) {
+      var s3 = TOUR[i]; DC.clearAllFocus();
+      if (s3 && s3.focus) {
+        for (var f = 0; f < s3.focus.length; f += 2) { DC.setFocus(f / 2, s3.focus[f], s3.focus[f + 1], C.danger); }
+      }
+    },
+    clear: function () { DC.clearAllFocus(); }
+  };
+
 
   /* --- click-a-machine info cards: "what does this unit do?" --------------- */
   function chainStatus(k, map) {

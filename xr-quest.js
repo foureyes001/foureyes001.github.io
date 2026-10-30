@@ -432,14 +432,27 @@
       '#xrq-arbar button{flex:1;font:700 12.5px system-ui,sans-serif;color:#e2e8f0;background:#1e2a44;border:1px solid #334155;' +
       'border-radius:8px;padding:10px 4px;min-height:40px}' +
       '#xrq-arbar button.here{background:#334155;color:#94a3b8}' +
-      '#xrq-arbar button.exit{background:#5b1f2a;border-color:#7f1d1d}';
+      '#xrq-arbar button.exit{background:#5b1f2a;border-color:#7f1d1d}' +
+      /* build 40: guided tour in phone AR */
+      '#xrq-arbar button.tourgo{background:#0e7490;border-color:#22d3ee;color:#ecfeff}' +
+      '#xrq-arbar .tour{display:none}' +
+      '#xrq-arbar.touring .tour{display:block}' +
+      '#xrq-arbar.touring .ctl,#xrq-arbar.touring .msg{display:none!important}' +
+      '#xrq-arbar .tstep{font-size:10.5px;letter-spacing:.14em;color:#fbbf24;margin:0 2px}' +
+      '#xrq-arbar .ttl{font-size:14px;color:#fff;margin:2px 2px 3px}' +
+      '#xrq-arbar .ttx{font:500 12.5px/1.4 system-ui,sans-serif;color:#dbe4f3;margin:0 2px;max-height:26vh;overflow-y:auto}' +
+      '#xrq-arbar button.next{background:#0e7490;border-color:#22d3ee}';
     document.head.appendChild(css);
     var here = currentPage(), bar = document.createElement('div');
     bar.id = 'xrq-arbar';
     bar.innerHTML = '<div class="bx"><div class="st" id="xrq-arst"></div><div class="msg" id="xrq-armsg"></div>' +
-      '<div class="row"><button data-a="smaller">SIZE -</button><button data-a="bigger">SIZE +</button>' +
+      '<div class="tour" id="xrq-artour"><div class="tstep" id="xrq-arts"></div><div class="ttl" id="xrq-artt"></div>' +
+      '<div class="ttx" id="xrq-artx"></div><div class="row"><button data-t="back">&larr; BACK</button>' +
+      '<button class="next" data-t="next" id="xrq-artn">NEXT &rarr;</button><button class="exit" data-t="end">END TOUR</button></div></div>' +
+      '<div class="row ctl" id="xrq-artourrow" style="display:none"><button class="tourgo" data-t="start">&#9654; GUIDED TOUR (learn step by step)</button></div>' +
+      '<div class="row ctl"><button data-a="smaller">SIZE -</button><button data-a="bigger">SIZE +</button>' +
       '<button data-a="left">TURN &lt;</button><button data-a="right">TURN &gt;</button><button data-a="move">MOVE</button></div>' +
-      '<div class="row">' + CHAPTERS.map(function (c) {
+      '<div class="row ctl">' + CHAPTERS.map(function (c) {
         return '<button data-go="' + c.href + '"' + (c.href === here ? ' class="here"' : '') + '>' + c.short.replace(/ .*/, '') + '</button>';
       }).join('') + '<button class="exit" data-a="exit">EXIT AR</button></div></div>';
     document.body.appendChild(bar);
@@ -448,6 +461,8 @@
     bar.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('button'); if (!b) { return; }
       var a = b.getAttribute('data-a'), go = b.getAttribute('data-go'), sc = comp.el;
+      var t = b.getAttribute('data-t');
+      if (t) { comp.tourAct(t); return; }
       if (go) { if (go !== here) { XRQ.goChapter(go); } return; }
       if (a === 'smaller') { comp.resize(1 / 1.25); }
       if (a === 'bigger') { comp.resize(1.25); }
@@ -458,6 +473,37 @@
     });
     return bar;
   }
+
+  /* build 40: pulsing highlight rings inside a model (they scale with it).
+     XRQ.arMarks(rootEl, [{ p: [x, y, z], r: radius, h: beam height }], colour); [] clears. */
+  XRQ.arMarks = function (rootEl, list, colour) {
+    if (!rootEl) { return; }
+    var pool = rootEl.__xrqMarks || (rootEl.__xrqMarks = []);
+    list = list || [];
+    for (var i = 0; i < Math.max(pool.length, list.length); i++) {
+      var m = pool[i], d = list[i];
+      if (!m && d) {
+        m = document.createElement('a-entity');
+        m.innerHTML =
+          '<a-ring radius-inner="0.86" radius-outer="1" rotation="-90 0 0" position="0 0.06 0" ' +
+          'material="shader: flat; side: double; transparent: true; opacity: 0.95" ' +
+          'animation="property: scale; from: 0.85 0.85 0.85; to: 1.18 1.18 1.18; dir: alternate; loop: true; dur: 850; easing: easeInOutSine"></a-ring>' +
+          '<a-cylinder radius="0.05" height="1" position="0 0.5 0" material="shader: flat; transparent: true; opacity: 0.6"></a-cylinder>' +
+          '<a-sphere radius="0.16" position="0 1 0" material="shader: flat" ' +
+          'animation="property: scale; from: 0.7 0.7 0.7; to: 1.4 1.4 1.4; dir: alternate; loop: true; dur: 700"></a-sphere>';
+        rootEl.appendChild(m); pool[i] = m;
+      }
+      if (!m) { continue; }
+      if (!d) { m.setAttribute('visible', false); continue; }
+      var r = d.r || 1, h = d.h || 3, col = d.c || colour || '#22d3ee';
+      m.setAttribute('position', d.p[0] + ' ' + d.p[1] + ' ' + d.p[2]);
+      m.setAttribute('visible', true);
+      var ring = m.querySelector('a-ring'), beam = m.querySelector('a-cylinder'), ball = m.querySelector('a-sphere');
+      if (ring) { ring.setAttribute('radius-inner', (r * 0.86).toFixed(3)); ring.setAttribute('radius-outer', r.toFixed(3)); ring.setAttribute('color', col); }
+      if (beam) { beam.setAttribute('height', h); beam.setAttribute('position', '0 ' + (h / 2) + ' 0'); beam.setAttribute('radius', Math.max(0.04, r * 0.05).toFixed(3)); beam.setAttribute('color', col); }
+      if (ball) { ball.setAttribute('position', '0 ' + h + ' 0'); ball.setAttribute('radius', Math.max(0.12, r * 0.14).toFixed(3)); ball.setAttribute('color', col); }
+    }
+  };
 
   /* ---------- AR model / lobby / custom ----------------------------------- */
   AFRAME.registerComponent('ar-model', {
@@ -587,6 +633,7 @@
       if (!this.active) { return; }
       this.active = false;
       XRQ.arModel = false;
+      this.tourEnd();
       this.keeper.clear(); this.scanning = false;
       if (this.bar) { this.bar.classList.remove('on'); }
       if (sc.hasAttribute('ar-hit-test')) { sc.setAttribute('ar-hit-test', 'enabled', false); }
@@ -621,6 +668,7 @@
     /* phone: hide the model, show the ring, wait for a tap */
     startScan: function () {
       var sc = this.el;
+      this.tourEnd();
       this.keeper.clear();
       this.scanning = true; this.found = false; this.ringPos = null; this.scanSince = Date.now();
       if (this.root) { this.root.object3D.visible = false; }
@@ -660,6 +708,47 @@
       }
     },
     say: function (text) { this.msgUntil = Date.now() + 3500; XRQ.arHint(this.el, text); },
+
+    /* ---- build 40: guided tour in phone AR --------------------------------
+       The page supplies window.XRQ_ARTOUR = { steps: [{ title, text, say }],
+       show(i), clear() }. Only the tour is offered in AR: one fixed path, the
+       model highlights each part, the card shows the text, the voice the summary. */
+    tourAvail: function () {
+      var T = window.XRQ_ARTOUR;
+      return !!(T && T.steps && T.steps.length && this.phone && this.bar);
+    },
+    tourAct: function (t) {
+      var T = window.XRQ_ARTOUR; if (!T) { return; }
+      if (t === 'start') {
+        if (this.scanning) { this.say('Place the model first: aim at the floor or a table and tap'); return; }
+        this.tourGo(0); return;
+      }
+      if (t === 'next') { if (this.tourI >= T.steps.length - 1) { this.tourEnd(); } else { this.tourGo(this.tourI + 1); } return; }
+      if (t === 'back') { if (this.tourI > 0) { this.tourGo(this.tourI - 1); } return; }
+      if (t === 'end') { this.tourEnd(); }
+    },
+    tourGo: function (i) {
+      var T = window.XRQ_ARTOUR; if (!T || !this.bar) { return; }
+      var st = T.steps[i]; if (!st) { return; }
+      this.tourI = i;
+      this.bar.classList.add('touring');
+      var set = function (id, v) { var e = document.getElementById(id); if (e) { e.textContent = v; } };
+      set('xrq-arts', 'STEP ' + (i + 1) + ' / ' + T.steps.length);
+      set('xrq-artt', st.title);
+      set('xrq-artx', st.text);
+      set('xrq-artn', i === T.steps.length - 1 ? 'FINISH \u2713' : 'NEXT \u2192');
+      try { if (T.show) { T.show(i); } } catch (e) { console.warn('AR tour step', i, e); }
+      if (XRQ.say) { XRQ.say(st.say || (st.title + '. ' + st.text)); }
+      XRQ.arTourStep = i;
+    },
+    tourEnd: function () {
+      var T = window.XRQ_ARTOUR;
+      if (this.tourI === undefined || this.tourI < 0) { return; }
+      this.tourI = -1; XRQ.arTourStep = -1;
+      if (this.bar) { this.bar.classList.remove('touring'); }
+      try { if (T && T.clear) { T.clear(); } } catch (e) { /* ignore */ }
+      if (XRQ.hush) { XRQ.hush(); }
+    },
     tick: function () {
       if (!this.active || !this.phone) { return; }
       if (!this.scanning) {
@@ -677,10 +766,13 @@
                 (this.keeper.moved > 0.005 ? ' | corrected ' + Math.round(this.keeper.moved * 100) + ' cm' : '');
         }
         if (st) { st.textContent = txt; }
+        var row = document.getElementById('xrq-artourrow');
+        if (row) { row.style.display = this.tourAvail() && !this.scanning ? 'flex' : 'none'; }
         if (now > (this.msgUntil || 0)) {
           var m = this.scanning ? (this.found ? 'Tap anywhere to put the model on the ring' :
                   'Point the phone at the floor or a table and move it slowly until the ring appears') :
-                  'Tap a gate or a machine on the model. MOVE puts it somewhere else.';
+                  (this.tourAvail() ? 'Press GUIDED TOUR to learn this chapter step by step. MOVE puts the model somewhere else.' :
+                  'Tap a gate or a machine on the model. MOVE puts it somewhere else.');
           XRQ.arHint(this.el, m);
         }
       }
