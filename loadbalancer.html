@@ -758,7 +758,7 @@ window.doorGo = function (href) {
       openInfo('INSTANCE ' + (s.id + 1) + (s.state === 'launching' ? ' (LAUNCHING)' : ''),
         'compute node · 8 vCPU · 32 GB RAM\nin flight ' + s.inFlight.length + '/' + CAP + ' · queued ' + s.queue.length +
         '\nCPU ' + Math.round(s.cpu) + '% · weight ' + WEIGHTS[s.id] + '\nstate: ' + s.state, s.grp.position,
-        'Server ' + (s.id + 1) + ': one machine in the pool, working on ' + s.inFlight.length + ' requests right now.');
+        SAY_SERVER);
     });
   }
   function placeServer (s, angle) {
@@ -1491,8 +1491,7 @@ window.doorGo = function (href) {
     openInfo(k === 'primary' ? 'PRIMARY DATABASE' : 'READ REPLICA ' + u.id,
       k === 'primary' ? 'the single writable copy\nevery gold spark (a write) lands here\nthen streams to both replicas\nops ' + u.ops
         : 'read-only copy of the primary\nserves teal sparks (reads) in rotation\nops ' + u.ops + ' · state ' + u.state + '\nreplication lag ~' + Math.round(u.lagMs) + ' ms',
-      DBP[k], k === 'primary' ? 'The primary database: every write is saved here first.'
-        : 'A read-only copy of the database that answers reads.');
+      DBP[k], k === 'primary' ? SAY_PRIMARY : SAY_REPLICA);
   }
   function dbSyncButtons () {
     var anyDead = DB.reps.some(function (r) { return r.state !== 'live'; });
@@ -1782,8 +1781,16 @@ window.doorGo = function (href) {
   };
 
   /* build 38: the voice gives a one-line summary; the board keeps the detail */
+  /* build 41: fixed lines only - each has a recorded clip (voice/clips.json) */
+  var SAY_SERVER = 'One server in the pool: it works on a few requests at a time.';
+  var SAY_LB = 'The load balancer sends each request to a server, using the chosen algorithm.';
+  var SAY_PRIMARY = 'The primary database: every write is saved here first.';
+  var SAY_REPLICA = 'A read-only copy of the database that answers reads.';
+  var SAY_USERS = 'People around the world sending requests to the load balancer.';
   var EXPLAIN_SAY = 'The load balancer shares requests between servers, and auto-scaling adds or removes servers as traffic changes.';
   var DBEXPLAIN_SAY = 'Writes go to the primary database, which copies them to the replicas, and the replicas answer the reads.';
+  window.XRQ_SAYS = [EXPLAIN_SAY, DBEXPLAIN_SAY, SAY_SERVER, SAY_LB, SAY_PRIMARY, SAY_REPLICA, SAY_USERS]
+    .concat(window.XRQ_ARTOUR.steps.map(function (t) { return t.say; }));
   function explainTexts () {
     board('info', 2.2, 1.25); board('explain', 2.7, 1.5); board('dbexplain', 2.7, 1.5, '#fbbf24');
     drawBoard('explain', 'HOW THIS ROOM WORKS', EXPLAIN, 29);
@@ -1830,7 +1837,7 @@ window.doorGo = function (href) {
     zone(PANELS.db, 44, 246, 400, 58, dbToggle);
     zone(PANELS.users, 40, 90, 380, 150, function () {
       openInfo('USERS (LIVE)', 'people around the world pressing refresh\neach strand of light is a stream of requests\ninto the load balancer\ntraffic ' + rate + ' req/s (TRAFFIC & POOL)', PANELS.users.holder.position,
-        'People around the world sending requests to the load balancer.');
+        SAY_USERS);
     });
     var lbHit = document.createElement('a-entity');
     lbHit.setAttribute('class', 'clickable'); lbHit.setAttribute('geometry', 'primitive: box; width: 2.1; height: 3.0; depth: 1.0');
@@ -1838,7 +1845,7 @@ window.doorGo = function (href) {
     document.getElementById('world').appendChild(lbHit);
     lbHit.addEventListener('click', function () {
       openInfo('LOAD BALANCER', 'single entry point (L4/L7 reverse proxy)\nalgorithm: ' + algoName() + '\npool min 2 / max 8 instances\ncooldown ' + (cooldownOn ? 'on' : 'off'), LBP,
-        'The load balancer sends each request to a server, using ' + algoName().toLowerCase() + '.');
+        SAY_LB);
     });
     explainTexts();
     drawTeach(); drawAlgos(); drawAutoscale(); drawUsers(0); drawQueue(); drawDb(); drawLbFace();
@@ -2055,6 +2062,6 @@ document.querySelectorAll('#tabbar .tab[data-tab]').forEach(function (b) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 40</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 41</div>
 </body>
 </html>

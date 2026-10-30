@@ -423,7 +423,7 @@ window.doorGo = function (href) {
 <div id="routedom" aria-hidden="true">tap a coloured city to fire a request</div>
 <div id="overlay" >
   <h1>Cloud Infrastructure &mdash; <span>CDN &amp; Edge Caching</span></h1>
-  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 40</b></div>
+  <div id="sub">Where the request meets the user &middot; chapter 3 of 3 &middot; <b id="build">build 41</b></div>
   <div id="hint">Drag anywhere to look around the room &middot; drag <b>the globe itself</b> to spin it &middot; tap a coloured city to fire a request &middot; W A S D or the thumb stick walks.</div>
   <div class="row tabpanel" data-tab="cache" id="panCache">
     <button id="btnClear">Clear all caches</button>
@@ -543,7 +543,7 @@ setTimeout(function () {
   d.style.display = 'block';
   d.textContent =
     'STARTUP DID NOT COMPLETE\n' +
-    'build 40\n' +
+    'build 41\n' +
     'AFRAME: ' + (typeof AFRAME === 'undefined' ? 'MISSING' : (AFRAME.version || 'present')) + '\n' +
     'THREE: ' + (typeof THREE === 'undefined' ? 'MISSING' : (THREE.REVISION || 'present')) + '\n' +
     'scene.hasLoaded: ' + (sceneEl ? !!sceneEl.hasLoaded : 'no a-scene') + '\n' +
@@ -1834,7 +1834,8 @@ var arUI = (function () {
   var PW = 0.27, PH = 0.36, CW = 600, CH = 800;        /* panel: metres / canvas px */
   var ui = { on: false, hover: '', panel: null, card: null, dbg: null, zones: {}, timer: null, last: '', pendingHref: '' };
   var BTN = {
-    clear:   [30, 92, 540, 66,  function () { return 'Clear all caches'; }],
+    clear:   [30, 92, 265, 66,  function () { return 'Clear caches'; }],
+    tour:    [305, 92, 265, 66, function () { return tourI >= 0 ? 'Tutorial: stop' : 'Tutorial'; }],
     labels:  [30, 172, 265, 66, function () { return 'Labels: ' + (labelsOn ? 'on' : 'off'); }],
     spin:    [305, 172, 265, 66, function () { return 'Spin: ' + (spinning ? 'on' : 'off'); }],
     hud:     [30, 252, 265, 66, function () { return 'Readouts: ' + (hudOn ? 'on' : 'off'); }],
@@ -1893,6 +1894,7 @@ var arUI = (function () {
   }
   function act (k, ev) {
     if (k === 'clear') { document.getElementById('btnClear').click(); }
+    else if (k === 'tour') { if (tourI >= 0) { tourI = -1; tourShow(); } else { document.getElementById('btnTour').click(); } }
     else if (k === 'labels') { document.getElementById('btnLabels').click(); }
     else if (k === 'spin') { document.getElementById('btnSpin').click(); }
     else if (k === 'hud') { document.getElementById('btnHud').click(); }
@@ -2027,7 +2029,7 @@ var arUI = (function () {
       'coastline rings: ' + coastRings,
       'last console: ' + (lastErr || 'none').slice(0, 40),
       'last switch: ' + (modeSwitch.last ? modeSwitch.last.mode + ' ' + String(modeSwitch.last.result).slice(0, 34) : 'none'),
-      'build 40'
+      'build 41'
     ];
     g.fillStyle = '#cbd5e1'; g.font = '400 24px ui-monospace, Menlo, Consolas, monospace';
     lines.forEach(function (ln, i) { g.fillText(ln, 26, 92 + i * 38); });   /* 12 lines fit */
@@ -2284,15 +2286,24 @@ var TOUR = [
     act: function () { globeRoot.setAttribute('globe-orbit', 'spin', false); } }
 ];
 var tourI = -1;
+/* build 41: every line the voice can say on this page (recorded clips are made from these) */
+window.XRQ_SAYS = TOUR.map(function (t) { return t.say; });
 function tourShow () {
   var bar = document.getElementById('tourbar');
-  if (tourI < 0) { bar.style.display = 'none'; tourSay(null); return; }
+  if (tourI < 0) { bar.style.display = 'none'; tourSay(null); if (window.XRQ && XRQ.vrCard) { XRQ.vrCard.hide('tour'); } return; }
   var st = TOUR[tourI];
   document.getElementById('tStep').textContent = 'STEP ' + (tourI + 1) + ' / ' + TOUR.length;
   document.getElementById('tTitle').textContent = st.t;
   document.getElementById('tText').textContent = st.x;
   document.getElementById('tNext').textContent = tourI === TOUR.length - 1 ? 'Finish' : 'Next';
   bar.style.display = 'block'; tourPlace(bar); tourSay(st);
+  /* build 41: the same step on a 3D card in the headset (HTML is not drawn in VR) */
+  if (window.XRQ && XRQ.vrCard) {
+    XRQ.vrCard.show('tour', { tag: 'TUTORIAL - STEP ' + (tourI + 1) + ' / ' + TOUR.length, title: st.t, text: st.x,
+      side: 0.75, drop: 0.3,                       /* to the right: the globe stays clear */
+      buttons: [{ label: tourI === TOUR.length - 1 ? 'FINISH' : 'NEXT >', fn: function () { document.getElementById('tNext').click(); } },
+                { label: 'END', fn: function () { tourI = -1; tourShow(); } }] });
+  }
   if (st.act) { try { st.act(); } catch (e) { setStatus('tutorial: ' + e.message, 'warn'); } }
 }
 document.getElementById('btnTour').addEventListener('click', function () {

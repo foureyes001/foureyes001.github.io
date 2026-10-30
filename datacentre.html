@@ -2156,6 +2156,9 @@ AFRAME.registerComponent('billboard', {
   /* build 37: voice guide (shared helper in xr-quest.js; silent if unavailable) */
   function speak (t) { if (window.XRQ && XRQ.say) { XRQ.say(t); } }
   function hush () { if (window.XRQ && XRQ.hush) { XRQ.hush(); } }
+  /* build 41: the same cards in VR (HTML is not drawn in a headset) */
+  function vrCard (owner, d) { if (window.XRQ && XRQ.vrCard) { XRQ.vrCard.show(owner, d); } }
+  function vrHide (owner) { if (window.XRQ && XRQ.vrCard) { XRQ.vrCard.hide(owner); } }
   /* ALL-CAPS card titles read better in sentence case; acronyms stay capitals */
   function capsToSpeech (t) {
     return String(t).toLowerCase()
@@ -2215,6 +2218,11 @@ AFRAME.registerComponent('billboard', {
     if (ti) { ti.textContent = s2.title; }
     if (bd) { bd.textContent = s2.body; }
     speak(s2.say || (s2.title + '. ' + s2.body));
+    var last = DC.tourStep === TOUR.length - 1;
+    vrCard('tour', { tag: 'GUIDED TOUR - STEP ' + (DC.tourStep + 1) + ' / ' + TOUR.length, title: s2.title, text: s2.body,
+      buttons: [{ label: '< BACK', fn: function () { DC.tourBack(); } },
+                { label: last ? 'FINISH' : 'NEXT >', fn: function () { DC.tourNext(); } },
+                { label: 'END TOUR', fn: function () { DC.tourEnd(); } }] });
     var nx = document.getElementById('tour-next');
     if (nx) { nx.innerHTML = DC.tourStep === TOUR.length - 1 ? 'Finish \u2713' : 'Next \u2192'; }
     DC.clearAllFocus();
@@ -2235,7 +2243,7 @@ AFRAME.registerComponent('billboard', {
     if (DC.tourOn && DC.tourStep > 0) { DC.tourStep--; DC.tourShow(); }
   };
   DC.tourEnd = function () {
-    DC.tourOn = false; hush();
+    DC.tourOn = false; hush(); vrHide('tour');
     document.getElementById('tourcard').setAttribute('hidden', '');
     DC.clearAllFocus();
   };
@@ -2368,6 +2376,15 @@ AFRAME.registerComponent('billboard', {
     });
   })();
   DC.UNITS = UNITS;
+
+  /* build 41: every line the voice can say on this page (recorded clips are made from these) */
+  window.XRQ_SAYS = [].concat(
+    TOUR.map(function (t) { return t.say; }),
+    HOTSPOTS.map(function (h) { return h.say; }),
+    ['A', 'B', 'C'].map(function (k) { return BRIEFS[k].say; }),
+    Object.keys(UNITS).map(function (k) { return UNITS[k].say; })
+  ).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
+
 
   /* --- M1.3 C : traffic surge -> heat soak -> ramp + balance -------------- */
   var TL_C = [
@@ -2526,6 +2543,7 @@ AFRAME.registerComponent('billboard', {
     document.getElementById('brief-tag').textContent = b.tag;
     document.getElementById('brief-text').textContent = b.text;
     speak(b.say || b.text);
+    vrCard('brief', { tag: b.tag, text: b.text, ttl: 8000 });
     el.hidden = false;
     var bar = document.getElementById('brief-bar');
     if (bar) { bar.classList.remove('run'); void bar.offsetWidth; bar.classList.add('run'); }
@@ -2534,6 +2552,7 @@ AFRAME.registerComponent('billboard', {
     DC.briefTimer = setTimeout(DC.hideBrief, 8000);
   };
   DC.hideBrief = function () {
+    vrHide('brief');
     if (DC.briefTimer) { clearTimeout(DC.briefTimer); DC.briefTimer = null; }
     DC.briefUntil = 0;
     var el = document.getElementById('brief'); if (el) { el.hidden = true; }
@@ -2556,7 +2575,9 @@ AFRAME.registerComponent('billboard', {
     document.getElementById('unit-role').textContent = u.role;
     document.getElementById('unit-name').textContent = u.name;
     document.getElementById('unit-does').textContent = u.does;
-    speak(capsToSpeech(u.name) + '. ' + (u.say || u.does));
+    speak(u.say || u.does);
+    vrCard('unit', { tag: u.role, title: u.name, text: u.does,
+      buttons: [{ label: 'CLOSE', fn: function () { DC.hideUnit(); } }] });
     card.hidden = false;
     DC.refreshUnitStatus();
     if (DC._unitTimer) { clearInterval(DC._unitTimer); }
@@ -2564,6 +2585,7 @@ AFRAME.registerComponent('billboard', {
   };
   DC.hideUnit = function () {
     if (DC.openUnit) { hush(); }
+    vrHide('unit');
     DC.openUnit = null;
     if (DC._unitTimer) { clearInterval(DC._unitTimer); DC._unitTimer = null; }
     var card = document.getElementById('unitcard'); if (card) { card.hidden = true; }
@@ -3351,7 +3373,7 @@ function canvasPainter(w, h) {
   }, { passive: true, capture: true });
 })();
 </script>
-<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 40</div>
+<div id="xrq-build" style="position:fixed;right:8px;bottom:6px;z-index:60;font:600 10px/1 system-ui,sans-serif;color:#94a3b8;opacity:.75;pointer-events:none">build 41</div>
 <script>
 /* build 13: AR model mode. DC.arOn already pauses the tour + teleport; DC.setAR
    is called by Escape and by the old app's Back button, and never existed. */

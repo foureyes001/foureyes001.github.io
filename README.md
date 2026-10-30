@@ -67,6 +67,20 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Cable bundles recoloured to blue / black / fibre-yellow; trays look like galvanised steel.
 - `?look=0` shows the build 19 look for comparison.
 
+## Build 41 (30 Oct 2026) - Quest 2: recorded voice, guide cards in VR
+- **Voice on the Quest:** the Quest Browser has no built-in speech voice, so the build 37–38 voice was silent there.
+  - Every voice line (50) is now a **recorded clip** in `voice/` (`clips.json` maps the exact text to an mp3).
+  - The clips were made offline with **Kokoro TTS** (Apache-2.0, voice `af_heart`).
+  - They play through the same Web Audio context as the footsteps. Built-in speech is only a fallback.
+  - ch2's two pop-ups whose spoken line contained live numbers (server, load balancer) now say a fixed sentence.
+  - ch1 machine cards speak the summary without the machine name.
+- **Guide text in VR:** HTML cards are not drawn in a headset, so `XRQ.vrCard` shows them as a 3D card, low and tilted like a lectern, with laser buttons:
+  - ch1: tour (Back / Next / End tour), scenario briefs (8 s) and machine cards (Close)
+  - ch3: tutorial (Next / End), placed to the right of the globe
+  - A brief over the tour returns to the tour afterwards. Phones and desktop keep their HTML cards.
+- **ch3 in the headset:** the control panel has a **Tutorial** button (next to Clear caches).
+- Stamps read "build 41".
+
 ## Build 40 (30 Oct 2026) - phone AR: guided tour in chapters 1 and 2
 - **Phone AR (ch1, ch2):** once the table model is placed, the bottom AR bar shows **"▶ GUIDED TOUR"**. In AR, the tour is the learning mode: one fixed path.
   - Each step shows a card (step, title, text, Back / Next / End tour) in place of the size and move buttons and speaks the short summary.
@@ -315,3 +329,6 @@ See `QUEST-APP-GUIDE.md` to publish and install on a Quest.
 - Textures from ambientCG (https://ambientcg.com): OfficeCeiling001, SheetMetal002, Tiles043, PaintedPlaster017, Metal009. They are toned and cut to size in `assets/tex/`.
 - Props from Poly Haven (https://polyhaven.com): `korean_fire_extinguisher_01`, `hand_truck`. They are packed into single GLBs with only the colour textures, at 512 px.
 
+
+## Voice credits
+- `voice/*.mp3` (build 41): generated with Kokoro-82M (hexgrad/Kokoro-82M, Apache-2.0) through kokoro-onnx (thewh1teagle/kokoro-onnx, MIT), voice `af_heart`. Loudness normalised with ffmpeg.

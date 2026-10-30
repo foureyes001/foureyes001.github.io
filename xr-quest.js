@@ -1,4 +1,4 @@
-/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 40).
+/* xr-quest.js - shared Meta Quest / phone XR helpers for "Inside the Cloud" (build 41).
    Load with <script src="xr-quest.js"></script> right after vendor/aframe.min.js,
    before <a-scene>, so the components register before the scene is parsed.
 
@@ -24,7 +24,7 @@
   if (typeof AFRAME === 'undefined') { return; }
   var UA = navigator.userAgent || '';
   var IS_QUEST = /OculusBrowser|Quest/i.test(UA);
-  var BUILD = 'build 40';
+  var BUILD = 'build 41';
   var XRQ = window.XRQ = { build: BUILD, isQuest: IS_QUEST, source: 'none', arModel: false,
                            stick: { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } } };
   if (IS_QUEST) { document.documentElement.classList.add('coarse', 'quest'); }
@@ -1550,6 +1550,7 @@
       if (sc.hasLoaded) { addSteps(); } else { sc.addEventListener('loaded', addSteps); }
     });
     return { step: step, whoosh: whoosh, slide: slide, approach: approach, wake: wake, navDelay: navDelay,
+             audio: function () { wake(); return ctx; },          /* build 41: voice clips play here */
              state: function () { return ctx ? ctx.state : (muted ? 'muted' : 'none'); } };
   })();
 
@@ -1655,18 +1656,179 @@
     });
   }
 
+  /* ---------- build 41: guide card in VR -------------------------------------
+     HTML cards (ch1 tour / brief / machine card, ch3 tutorial) are not drawn in a
+     headset. XRQ.vrCard.show(owner, { tag, title, text, buttons: [{label, fn}], ttl })
+     puts the same text on a 3D card 1.4 m in front of you (only while in VR or headset
+     AR; phones and desktop keep their HTML cards). hide(owner) removes it; the card
+     under it (e.g. the tour under a scenario brief) comes back. Buttons are .clickable,
+     so the controller laser presses them. */
+  XRQ.vrCard = (function () {
+    var el = null, stack = [], fns = [], W = 1.12, H = 0.62;
+    function ascii (t) {
+      return String(t || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+        .replace(/[–—]/g, '-').replace(/→/g, '->').replace(/←/g, '<-')
+        .replace(/·/g, '-').replace(/°/g, ' deg').replace(/×/g, 'x').replace(/[^\x20-\x7E]/g, '');
+    }
+    function showing () { var sc = document.querySelector('a-scene'); return !!(sc && XRQ.inXR(sc) && !XRQ.phoneAR(sc)); }
+    function build () {
+      var sc = document.querySelector('a-scene'); if (!sc || el) { return el; }
+      el = document.createElement('a-entity');
+      el.setAttribute('id', 'xrq-vrcard'); el.setAttribute('visible', 'false'); el.setAttribute('xrq-ontop', '');
+      var h = '<a-plane data-ro="1000" width="' + (W + 0.03) + '" height="' + (H + 0.03) + '" position="0 0 -0.004" material="shader: flat; color: #22d3ee; transparent: true; opacity: 0.45"></a-plane>' +
+        '<a-plane data-ro="1001" width="' + W + '" height="' + H + '" material="shader: flat; color: #0b1220; transparent: true; opacity: 0.94"></a-plane>' +
+        '<a-text class="vc-tag" value="" color="#fbbf24" width="0.9" wrap-count="52" anchor="left" baseline="top" position="-0.52 0.27 0.003"></a-text>' +
+        '<a-text class="vc-title" value="" color="#ffffff" width="1.04" wrap-count="34" anchor="left" baseline="top" position="-0.52 0.215 0.003"></a-text>' +
+        '<a-text class="vc-text" value="" color="#dbe4f3" width="1.04" wrap-count="50" anchor="left" baseline="top" position="-0.52 0.12 0.003"></a-text>';
+      for (var i = 0; i < 3; i++) {
+        var x = (-0.37 + i * 0.37).toFixed(2);
+        h += '<a-entity class="vc-btn" data-i="' + i + '" position="' + x + ' -0.235 0.004" visible="false">' +
+          '<a-plane class="vc-hit" data-ro="1002" data-i="' + i + '" width="0.33" height="0.1" material="shader: flat; color: #1e2a44"></a-plane>' +
+          '<a-text value="" color="#e2e8f0" width="0.8" wrap-count="22" align="center" anchor="center" baseline="center" position="0 0 0.003"></a-text></a-entity>';
+      }
+      el.innerHTML = h;
+      sc.appendChild(el);
+      Array.prototype.forEach.call(el.querySelectorAll('.vc-hit'), function (b) {
+        var i = +b.getAttribute('data-i');
+        b.addEventListener('click', function () { var f = fns[i]; if (typeof f === 'function') { f(); } });
+        b.addEventListener('mouseenter', function () { b.setAttribute('material', 'color', '#0e7490'); });
+        b.addEventListener('mouseleave', function () { b.setAttribute('material', 'color', '#1e2a44'); });
+      });
+      sc.addEventListener('enter-vr', function () { setTimeout(render, 300); });
+      sc.addEventListener('exit-vr', function () { if (el) { el.setAttribute('visible', false); } });
+      return el;
+    }
+    function refreshRays () {
+      Array.prototype.forEach.call(document.querySelectorAll('[raycaster]'), function (r) {
+        var rc = r.components && r.components.raycaster; if (rc && rc.refreshObjects) { rc.refreshObjects(); }
+      });
+    }
+    /* low and tilted up like a lectern, so the room (what the guide talks about) stays in view;
+       d.side (m, + = right) moves it aside, d.drop (m below the eyes) sets its height */
+    function place () {
+      var sc = el && el.sceneEl, cam = sc && sc.camera; if (!cam) { return; }
+      var top = stack[stack.length - 1], d = (top && top.d) || {};
+      var head = new THREE.Vector3(), f = new THREE.Vector3();
+      cam.getWorldPosition(head); cam.getWorldDirection(f); f.y = 0;
+      if (f.lengthSq() < 1e-6) { f.set(0, 0, -1); } f.normalize();
+      var right = new THREE.Vector3(-f.z, 0, f.x), dist = 1.15, side = d.side || 0;
+      var drop = d.drop !== undefined ? d.drop : 0.45;
+      el.object3D.position.set(head.x + f.x * dist + right.x * side, head.y - drop, head.z + f.z * dist + right.z * side);
+      el.object3D.lookAt(head.x, head.y, head.z);
+    }
+    function render (noPlace) {
+      if (!el) { return; }
+      var top = stack[stack.length - 1];
+      if (!top || !showing()) { el.setAttribute('visible', false); setClickable(-1); return; }
+      var d = top.d;
+      el.querySelector('.vc-tag').setAttribute('value', ascii(d.tag || ''));
+      el.querySelector('.vc-title').setAttribute('value', ascii(d.title || ''));
+      el.querySelector('.vc-text').setAttribute('position', '-0.52 ' + (d.title ? '0.12' : '0.2') + ' 0.003');
+      el.querySelector('.vc-text').setAttribute('value', ascii(d.text || ''));
+      var bs = d.buttons || [];
+      fns = bs.map(function (b) { return b.fn; });
+      Array.prototype.forEach.call(el.querySelectorAll('.vc-btn'), function (b, i) {
+        var on = !!bs[i];
+        b.setAttribute('visible', on);         /* attribute, not object3D: a new entity applies its attribute on init */
+        if (on) { b.querySelector('a-text').setAttribute('value', ascii(bs[i].label)); }
+      });
+      setClickable(bs.length);
+      el.setAttribute('visible', true);
+      if (!noPlace) { place(); setTimeout(place, 600); }
+    }
+    function setClickable (n) {
+      if (!el) { return; }
+      Array.prototype.forEach.call(el.querySelectorAll('.vc-hit'), function (b, i) {
+        if (i < n) { b.classList.add('clickable'); } else { b.classList.remove('clickable'); }
+      });
+      refreshRays();
+    }
+    function show (owner, d) {
+      build(); if (!el) { return; }
+      stack = stack.filter(function (x) { return x.owner !== owner; });
+      var item = { owner: owner, d: d || {} };
+      stack.push(item);
+      clearTimeout(item.t);
+      if (d && d.ttl) { item.t = setTimeout(function () { hide(owner); }, d.ttl); }
+      /* same owner, same card (e.g. tour step change): keep it where it is unless asked */
+      render(d && d.keepPlace);
+    }
+    function hide (owner) {
+      var before = stack.length;
+      stack = stack.filter(function (x) { if (x.owner === owner) { clearTimeout(x.t); return false; } return true; });
+      if (stack.length !== before) { render(true); }
+    }
+    return { show: show, hide: hide, top: function () { var t = stack[stack.length - 1]; return t ? t.owner : ''; },
+             el: function () { return el; } };
+  })();
+  /* draws its meshes over the room (never hidden inside a wall or rack) */
+  AFRAME.registerComponent('xrq-ontop', {
+    init: function () { this.t = 0; },
+    tick: function (t) {
+      if (t - this.t < 500 || !this.el.object3D.visible) { return; }
+      this.t = t;
+      this.el.object3D.traverse(function (o) {
+        if (!o.material) { return; }
+        var ms = Array.isArray(o.material) ? o.material : [o.material];
+        /* all transparent, so one render list and renderOrder decides: border, card, buttons, text */
+        ms.forEach(function (m) { if (m.depthTest !== false) { m.depthTest = false; m.depthWrite = false; m.transparent = true; m.needsUpdate = true; } });
+        var a = o, ro = 1003;
+        while (a) { if (a.el && a.el.getAttribute && a.el.getAttribute('data-ro')) { ro = +a.el.getAttribute('data-ro'); break; } if (a.el) { break; } a = a.parent; }
+        o.renderOrder = ro;
+      });
+    }
+  });
+
   /* ---------- build 37: voice guide -------------------------------------------
      XRQ.say(text) reads a guide text aloud with the browser's built-in speech
      (speechSynthesis: no audio files, no account, works offline on most devices).
      A new text always replaces the one being read. XRQ.hush() stops it.
      Off with ?voice=0 or ?sound=0, or the "Voice" button in a help tab
-     (remembered in this browser). Silent, never an error, where speech is missing. */
+     (remembered in this browser). Silent, never an error, where speech is missing.
+     build 41: the Quest Browser has no speech voice, so every guide text now has a
+     RECORDED clip (voice/clips.json: exact text -> mp3, made offline with Kokoro TTS).
+     Clips play through the same Web Audio context as the footsteps, which works in the
+     headset. Built-in speech is only the fallback for a text without a clip. */
   XRQ.voice = (function () {
     var synth = window.speechSynthesis, UtterC = window.SpeechSynthesisUtterance;
     var forced = /[?&](voice|sound)=0/.test(location.search);
     var on = true, pick = null, gen = 0, last = '';
     try { if (localStorage.getItem('itc-voice') === 'off') { on = false; } } catch (e) { /* storage blocked */ }
-    function ok () { return !!(synth && UtterC) && !forced && on; }
+    function ok () { return !forced && on; }
+    /* recorded clips */
+    var clips = null, bufs = {}, cur = null;
+    XRQ.voiceLog = [];
+    var clipsReady = (window.fetch ? fetch('voice/clips.json', { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : {}; }) : Promise.resolve({}))
+      .then(function (j) { clips = j || {}; }, function () { clips = {}; });
+    function stopClip () { if (cur) { try { cur.stop(); } catch (e) { /* already ended */ } cur = null; } }
+    function playClip (file, text, my) {
+      var ctx = XRQ.sfx && XRQ.sfx.audio && XRQ.sfx.audio();
+      if (!ctx) { return false; }
+      if (!bufs[file]) {
+        bufs[file] = fetch('voice/' + file).then(function (r) {
+          if (!r.ok) { throw new Error('HTTP ' + r.status); }
+          return r.arrayBuffer();
+        }).then(function (ab) {
+          return new Promise(function (res, rej) { ctx.decodeAudioData(ab, res, rej); });
+        });
+      }
+      bufs[file].then(function (buf) {
+        if (my !== gen || !ok()) { return; }
+        stopClip();
+        var src = ctx.createBufferSource(), g = ctx.createGain();
+        src.buffer = buf; g.gain.value = 1; src.connect(g); g.connect(ctx.destination);
+        src.onended = function () { if (cur === src) { cur = null; } };
+        src.start(); cur = src;
+        XRQ.voiceSpoken = (XRQ.voiceSpoken || 0) + 1; XRQ.voiceLast = text;
+        XRQ.voiceLog.push({ mode: 'clip', text: text });
+      }, function (e) {
+        delete bufs[file];
+        console.warn('voice clip failed:', file, e && e.message);
+        if (my === gen) { speakSynth(text, my); }
+      });
+      return true;
+    }
     function choose () {
       if (!synth) { return null; }
       var vs = []; try { vs = synth.getVoices() || []; } catch (e) { vs = []; }
@@ -1702,12 +1864,24 @@
       SAY.forEach(function (r) { s = s.replace(r[0], r[1]); });
       return s.trim();
     }
-    function hush () { gen++; last = ''; if (synth) { try { synth.cancel(); } catch (e) { /* ignore */ } } }
+    function hush () { gen++; last = ''; stopClip(); if (synth) { try { synth.cancel(); } catch (e) { /* ignore */ } } }
     function say (text) {
       if (!ok() || !text) { return false; }
-      var t = speakable(text); if (!t) { return false; }
-      var my = ++gen; last = t;
-      try { synth.cancel(); } catch (e) { /* ignore */ }
+      var my = ++gen; last = text;
+      stopClip();
+      if (synth) { try { synth.cancel(); } catch (e) { /* ignore */ } }
+      clipsReady.then(function () {
+        if (my !== gen || !ok()) { return; }
+        var f = clips && clips[text];
+        if (f && playClip(f, text, my)) { return; }
+        if (!f) { console.warn('voice: no recorded clip for:', text); }
+        speakSynth(text, my);
+      });
+      return true;
+    }
+    function speakSynth (text, my) {
+      if (!synth || !UtterC) { XRQ.voiceLog.push({ mode: 'none', text: text }); return; }
+      var t = speakable(text); if (!t) { return; }
       /* Chrome can drop a speak() issued in the same task as cancel(): wait a beat */
       setTimeout(function () {
         if (my !== gen || !ok()) { return; }
@@ -1716,18 +1890,18 @@
           if (!pick) { pick = choose(); }
           if (pick) { u.voice = pick; u.lang = pick.lang; } else { u.lang = 'en-US'; }
           u.rate = 1; u.pitch = 1; u.volume = 1;
-          XRQ.voiceSpoken = (XRQ.voiceSpoken || 0) + 1; XRQ.voiceLast = t;
+          XRQ.voiceSpoken = (XRQ.voiceSpoken || 0) + 1; XRQ.voiceLast = text;
+          XRQ.voiceLog.push({ mode: 'synth', text: text });
           if (synth.paused) { synth.resume(); }
           synth.speak(u);
         } catch (e) { /* speech unavailable: the text is still on screen */ }
       }, 80);
-      return true;
     }
     function label (el) {
       var l = el.querySelector('[data-voice-label]') || el;
       l.textContent = (l === el ? 'Voice guide: ' : 'Voice guide · ') + (ok() ? 'on' : 'off');
       el.setAttribute('aria-pressed', ok() ? 'true' : 'false');
-      if (!synth || forced) { el.disabled = true; el.title = synth ? 'muted by ?voice=0 / ?sound=0' : 'this browser has no speech'; }
+      if (forced) { el.disabled = true; el.title = 'muted by ?voice=0 / ?sound=0'; }
     }
     function set (v) {
       on = !!v;
@@ -1746,7 +1920,8 @@
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', wire); } else { wire(); }
     window.addEventListener('pagehide', hush);
     return { say: say, hush: hush, set: set, isOn: ok, speakable: speakable,
-             state: function () { return !synth ? 'none' : forced ? 'muted' : on ? 'on' : 'off'; } };
+             clips: function () { return clips; }, ready: clipsReady,
+             state: function () { return forced ? 'muted' : on ? 'on' : 'off'; } };
   })();
   XRQ.say = XRQ.voice.say;
   XRQ.hush = XRQ.voice.hush;
